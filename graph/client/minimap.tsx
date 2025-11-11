@@ -1,0 +1,208 @@
+import { useRef, useEffect, useState, useCallback, useMemo } from "react"
+import type { GraphNode, GraphLink } from "../type"
+import type { ConnGraphModel } from "../model"
+
+interface MinimapProps {
+  className?: string
+  graphModel: ConnGraphModel
+  transform: {
+    k: number
+    x: number
+    y: number
+  }
+  mainCanvasWidth: number
+  mainCanvasHeight: number
+  miniWidth?: number
+  miniHeight?: number
+  onMinimapClick?: (worldX: number, worldY: number) => void
+}
+
+interface BBox {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+}
+
+export function Minimap({
+  className,
+  graphModel,
+  transform,
+  mainCanvasWidth,
+  mainCanvasHeight,
+  miniWidth = 200,
+  miniHeight = 150,
+  onMinimapClick,
+}: MinimapProps) {
+  const miniRef = useRef<HTMLCanvasElement>(null)
+
+  // useEffect(() => {
+  //   computeBBox()
+  // }, [graphData, computeBBox])
+
+  // // 重绘小地图
+  // useEffect(() => {
+  //   drawMiniMap()
+  // }, [drawMiniMap])
+
+  // // 点击小地图以居中主图到小地图点击位置
+  // const handleMinimapClick = useCallback(
+  //   (ev: React.MouseEvent<HTMLCanvasElement>) => {
+  //     const canvas = miniRef.current
+  //     if (!canvas || !onMinimapClick) return
+
+  //     const rect = canvas.getBoundingClientRect()
+  //     const cx = ev.clientX - rect.left
+  //     const cy = ev.clientY - rect.top
+
+  //     // 计算被点击的 world 坐标（mini -> world）
+  //     const padding = 8
+  //     const mw = canvas.width
+  //     const mh = canvas.height
+  //     const worldW = bbox.maxX - bbox.minX
+  //     const worldH = bbox.maxY - bbox.minY
+  //     const scale = Math.min(
+  //       (mw - 2 * padding) / worldW,
+  //       (mh - 2 * padding) / worldH
+  //     )
+
+  //     const worldX = bbox.minX + (cx - padding) / scale
+  //     const worldY = bbox.minY + (cy - padding) / scale
+
+  //     onMinimapClick(worldX, worldY)
+  //   },
+  //   [bbox, onMinimapClick]
+  // )
+
+  const handleDataChange = () => {
+    const graphData = graphModel.getGraphModelData().graphData
+
+    const bbox = (() => {
+      const nodes = graphData?.nodes || []
+
+      if (!nodes.length) {
+        return { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+      }
+
+      let minX = Infinity,
+        minY = Infinity,
+        maxX = -Infinity,
+        maxY = -Infinity
+
+      nodes.forEach((n) => {
+        const x = n.x !== undefined ? n.x : 0
+        const y = n.y !== undefined ? n.y : 0
+        if (x < minX) minX = x
+        if (y < minY) minY = y
+        if (x > maxX) maxX = x
+        if (y > maxY) maxY = y
+      })
+
+      if (minX === maxX) {
+        minX -= 1
+        maxX += 1
+      }
+      if (minY === maxY) {
+        minY -= 1
+        maxY += 1
+      }
+
+      return { minX, minY, maxX, maxY }
+    })()
+
+    const mini = miniRef.current
+    if (!mini || !graphData) return
+
+    const ctx = mini.getContext("2d")
+    if (!ctx) return
+
+    const mw = mini.width
+    const mh = mini.height
+
+    ctx.clearRect(0, 0, mw, mh)
+
+    const padding = 10
+    const worldW = bbox.maxX - bbox.minX
+    const worldH = bbox.maxY - bbox.minY
+    const scale = Math.min(
+      (mw - 2 * padding) / worldW,
+      (mh - 2 * padding) / worldH
+    )
+
+    // world -> minimap px
+    const worldToMini = (wx: number, wy: number): [number, number] => {
+      const mx = padding + (wx - bbox.minX) * scale
+      const my = padding + (wy - bbox.minY) * scale
+      return [mx, my]
+    }
+
+    // 绘制连线
+    ctx.lineWidth = 1
+    ctx.globalAlpha = 0.6
+    ctx.beginPath()
+    ;(graphData.links || []).forEach((l) => {
+      const s =
+        typeof l.source === "object"
+          ? l.source
+          : graphData.nodes.find((n) => n.id === l.source)
+      const t =
+        typeof l.target === "object"
+          ? l.target
+          : graphData.nodes.find((n) => n.id === l.target)
+      if (!s || !t) return
+      const [sx, sy] = worldToMini(s.x || 0, s.y || 0)
+      const [tx, ty] = worldToMini(t.x || 0, t.y || 0)
+      ctx.moveTo(sx, sy)
+      ctx.lineTo(tx, ty)
+    })
+    ctx.strokeStyle = "rgba(120,120,120,0.5)"
+    ctx.stroke()
+
+    // 绘制节点
+    ctx.globalAlpha = 1
+    ;(graphData.nodes || []).forEach((n) => {
+      const [x, y] = worldToMini(n.x || 0, n.y || 0)
+      ctx.beginPath()
+      ctx.arc(x, y, 2, 0, 2 * Math.PI)
+      ctx.fillStyle = "rgba(51, 153, 255, 0.5)"
+      ctx.fill()
+    })
+
+    // 绘制视口矩形
+    const leftWorld = -transform.x / transform.k
+    const topWorld = -transform.y / transform.k
+    const viewWWorld = mainCanvasWidth / transform.k
+    const viewHWorld = mainCanvasHeight / transform.k
+
+    const [vx, vy] = worldToMini(leftWorld, topWorld)
+    const [vx2, vy2] = worldToMini(
+      leftWorld + viewWWorld,
+      topWorld + viewHWorld
+    )
+    const vw = vx2 - vx
+    const vh = vy2 - vy
+
+    ctx.lineWidth = 2
+    ctx.strokeStyle = "rgba(255,80,30,0.9)"
+    ctx.fillStyle = "rgba(255,80,30,0.08)"
+    ctx.strokeRect(vx, vy, vw, vh)
+    ctx.fillRect(vx, vy, vw, vh)
+  }
+
+  graphModel.events.subscribe("framePost", handleDataChange)
+
+  return (
+    <canvas
+      ref={miniRef}
+      width={miniWidth}
+      height={miniHeight}
+      // onClick={handleMinimapClick}
+      className={className}
+      style={{
+        position: "absolute",
+        right: 12,
+        bottom: 12,
+      }}
+    />
+  )
+}
