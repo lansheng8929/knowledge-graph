@@ -17,6 +17,7 @@ export interface Style {
   bgColor?: string
   strokeWidth?: number
   strokeColor?: string
+  tagColor?: string
   fontSize?: number
   radius?: number
   opacity?: number
@@ -97,6 +98,11 @@ const createDefaultNodeStyle = (
     `--graph-${key}-node-strokeColor-${key2}`,
     "#000"
   ),
+  tagColor: getCachedProperty(
+    computedStyle,
+    `--graph-${key}-node-tagColor-${key2}`,
+    "#000"
+  ),
   radius: parseInt(
     getCachedProperty(computedStyle, `--graph-${key}-node-radius-${key2}`, "4")
   ),
@@ -113,7 +119,15 @@ const createDefaultNodeStyle = (
   ...overrides,
 })
 
-// 生成节点样式
+/**
+ * 通过使用提供的计算 CSS 样式、节点类型、配置和可选的默认覆盖，为每个节点状态（regular、highlighted、selected、hidden 和 root）生成样式，从而创建一个 NodeStyle 对象。
+ *
+ * @param computedStyle - 用于基于节点样式的计算 CSS 样式声明。
+ * @param type - 节点的类型，可以是 NodeType、"default" 或 "unknown"。
+ * @param config - 节点样式的基本配置。
+ * @param defaultOverrides - 可选的部分样式覆盖，应用于所有节点状态。
+ * @returns 包含每个节点状态样式的 NodeStyle 对象。
+ */
 const createNodeStyles = (
   computedStyle: CSSStyleDeclaration,
   type: NodeType | "default" | "unknown",
@@ -149,9 +163,10 @@ export const getDefaultColorOf = (opts: {
   defaultNodeStyle?: Partial<Style>
 }): GraphViewStyle => {
   const container = opts.container || document.body
-  const computedStyle = getComputedStyle(container) // 缓存样式计算
+  // 缓存样式计算
+  const computedStyle = getComputedStyle(container)
 
-  // 默认节点样式覆盖
+  // 自定义默认节点样式覆盖
   const defaultOverrides = opts.defaultNodeStyle || {}
 
   return {

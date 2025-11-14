@@ -1,5 +1,7 @@
 import { ConnGraphEvents } from "./client/events"
-import type { GraphViewModel, LinkId, NodeId, ConnGraphData } from "./type"
+import type { GraphViewModel, LinkId, NodeId } from "./type"
+import { TagManager } from "./tag-manager"
+import { LoadingManager } from "./loading-manager"
 
 export interface Options {
   initData: GraphViewModel
@@ -10,6 +12,8 @@ type ModelComputedCache = GraphViewModel
 export class ConnGraphModel {
   protected cache!: ModelComputedCache
   public events = new ConnGraphEvents()
+  public tagManager = new TagManager(this.events)
+  public loadingManager = new LoadingManager(this.events)
 
   constructor({ initData }: Options) {
     this.cache = initData

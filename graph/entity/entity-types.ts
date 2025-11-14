@@ -1,35 +1,44 @@
+import type ColorTracker from "canvas-color-tracker"
 import { ConnGraphEvents } from "../client/events"
 import type { Style } from "../theme"
 import type { GraphNode, NodeType } from "../type"
+import type { TagManager } from "../tag-manager"
+import type { LoadingManager } from "../loading-manager"
 
 export interface EntityRenderer {
-  renderNodeCanvasObject: (
-    node: GraphNode,
-    ctx: CanvasRenderingContext2D,
-    globalScale: number,
-    style: Style
-  ) => void
-
-  renderNodePointerArea: (
-    node: GraphNode,
-    color: string,
-    ctx: CanvasRenderingContext2D,
-    style: Style
-  ) => void
-
-  renderNodeTools?: (
-    node: GraphNode,
-    ctx: CanvasRenderingContext2D,
+  renderNodeCanvasObject: (props: {
+    node: GraphNode
+    ctx: CanvasRenderingContext2D
     globalScale: number
-  ) => void
+    style: Style
+    colorTracker: ColorTracker
+    tagManager: TagManager
+    loadingManager: LoadingManager
+  }) => void
 
-  registerNodeToolsEvents?: (
-    events: ConnGraphEvents,
-    node: GraphNode,
+  renderNodePointerArea: (props: {
+    node: GraphNode
+    indexColor: string
+    ctx: CanvasRenderingContext2D
+    style: Style
+    globalScale: number
+    colorTracker: ColorTracker
+    tagManager: TagManager
+  }) => void
+
+  renderNodeTools?: (props: {
+    node: GraphNode
+    ctx: CanvasRenderingContext2D
+    globalScale: number
+  }) => void
+
+  registerNodeToolsEvents?: (props: {
+    events: ConnGraphEvents
+    node: GraphNode
     mousePosition: { x: number; y: number }
-  ) => void
+  }) => void
 
-  getCollisionRadius: (node: GraphNode, style: Style) => number
+  getCollisionRadius: (props: { node: GraphNode; style: Style }) => number
 }
 
 export type EntityCommonRenderer = Partial<EntityRenderer>

@@ -115,7 +115,6 @@ export type GraphNodeInfo<D = object> = {
   nodeType?: NodeType
   stateType?: NodeState
   label?: string
-  loading?: boolean
   count?: number
   pageSize?: number
   pageIndex?: number

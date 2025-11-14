@@ -12,10 +12,12 @@ import type { EntityCreator } from "../entity-types"
 import type { DefaultNodeType } from "./default.type"
 
 export const createDefaultEntity: EntityCreator = () => {
+  const imageCache = new Map<string, HTMLImageElement>()
+
   return {
-    renderNodeCanvasObject: (node, ctx, globalScale, style) => {
+    renderNodeCanvasObject: ({ node, ctx, globalScale, style }) => {
       const { x = 0, y = 0 } = node
-      const { label, pageIndex, pageSize, count } =
+      const { label, pageIndex, pageSize, count, icon } =
         (node.data as DefaultNodeType["data"]) ?? {}
 
       const {
@@ -29,13 +31,23 @@ export const createDefaultEntity: EntityCreator = () => {
         light,
       } = style
 
-      if (light) {
-        makeDrawWrapper(ctx).circle(x, y, 5, light)
-      }
-
       makeDrawWrapper(ctx)
         .circle(x, y, radius, bgColor, opacity)
         .stroke(x, y, radius, strokeColor, strokeWidth, opacity)
+
+      if (icon) {
+        const iconPath = icon
+
+        makeDrawWrapper(ctx).drawImg(
+          imageCache,
+          iconPath,
+          x,
+          y,
+          radius,
+          radius,
+          opacity
+        )
+      }
 
       if (globalScale > DEFAULT_NODE_LABEL_SCALE_THRESHOLD) {
         const paginator = getPaginator(pageIndex, pageSize, count)
@@ -51,15 +63,15 @@ export const createDefaultEntity: EntityCreator = () => {
       }
     },
 
-    renderNodePointerArea: (node, color, ctx, style) => {
+    renderNodePointerArea: ({ node, indexColor, ctx, style }) => {
       const { x = 0, y = 0 } = node
       const { strokeColor, strokeWidth, radius = DEFAULT_RADIUS } = style
       makeDrawWrapper(ctx)
         .stroke(x, y, radius, strokeColor, strokeWidth)
-        .circle(x, y, radius, color)
+        .circle(x, y, radius, indexColor)
     },
 
-    getCollisionRadius: (node, style) => {
+    getCollisionRadius: ({ node, style }) => {
       const { radius = DEFAULT_RADIUS } = style
       return radius
     },

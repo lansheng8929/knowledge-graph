@@ -14,7 +14,7 @@ export const createPaginatorEntity: EntityCreator = () => {
   const imageCache = new Map<string, HTMLImageElement>()
 
   return {
-    renderNodeCanvasObject: (node, ctx, globalScale, style) => {
+    renderNodeCanvasObject: ({ node, ctx, globalScale, style }) => {
       const { x = 0, y = 0 } = node
       const {
         pageIndex = 0,
@@ -58,7 +58,7 @@ export const createPaginatorEntity: EntityCreator = () => {
       }
     },
 
-    renderNodePointerArea: (node, color, ctx, style) => {
+    renderNodePointerArea: ({ node, indexColor, ctx, style }) => {
       const { x = 0, y = 0 } = node
       const {
         pageIndex = 0,
@@ -73,11 +73,11 @@ export const createPaginatorEntity: EntityCreator = () => {
       if (!disabled) {
         makeDrawWrapper(ctx)
           .stroke(x, y, radius, strokeColor, strokeWidth)
-          .circle(x, y, radius, color)
+          .circle(x, y, radius, indexColor)
       }
     },
 
-    getCollisionRadius: (node, style) => {
+    getCollisionRadius: ({ node, style }) => {
       const { radius = DEFAULT_RADIUS } = style
       return radius
     },

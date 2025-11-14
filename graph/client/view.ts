@@ -36,6 +36,8 @@ import type {
 } from "../type"
 import type { EntityConfig, NodeRenderProcessorMap } from "../entity"
 
+import ColorTracker from "canvas-color-tracker"
+
 interface GraphModelActions {
   highlightNode(id: NodeId | undefined): void
   selectNode(id: NodeId | undefined): void
@@ -64,13 +66,13 @@ interface GraphViewOptions {
 
 export class ConnGraphView {
   declare options: GraphViewOptions
-  declare canvas: HTMLCanvasElement
   declare container: HTMLElement
   declare forceGraph: ForceGraph
   declare model: ConnGraphModel
   declare style: GraphViewStyle
   declare imageCache: Map<string, HTMLImageElement>
   declare nodeRenderProcessorMap: NodeRenderProcessorMap
+  declare colorTracker: ColorTracker
 
   actions: GraphModelActions = {
     highlightNode: (nodeId: NodeId) => {
@@ -87,6 +89,7 @@ export class ConnGraphView {
     this.model = opts.graphModel
     this.imageCache = new Map()
     this.nodeRenderProcessorMap = nodeRenderProcessorMap()
+    this.colorTracker = new ColorTracker()
 
     this.initStyle()
     this.initView()
@@ -219,12 +222,11 @@ export class ConnGraphView {
 
     const forceGraph = this.forceGraph || new ForceGraph(this.container)
 
-    this.canvas = this.container.querySelector("canvas")!
-
     this.setupForceGraph(forceGraph)
     this.setupEventHandlers(forceGraph)
 
     this.forceGraph = forceGraph
+
     this.refreshByStyle()
   }
 
@@ -290,8 +292,8 @@ export class ConnGraphView {
       .onZoom((zoom) => {
         this.model.events.publish("zoom", zoom)
       })
-      .onRenderFramePost((props) => {
-        this.handleRenderFramePost(props)
+      .onRenderFramePost((ctx, globalScale) => {
+        this.handleRenderFramePost({ ctx, globalScale })
       })
       .showPointerCursor((_node) => !!_node)
   }
@@ -389,7 +391,7 @@ export class ConnGraphView {
       const style = getNodeStyleByStateType(nodeStyle, state)
 
       const processor = this.nodeRenderProcessorMap[nodeType]
-      return processor?.getCollisionRadius?.(node, style) ?? 0
+      return processor?.getCollisionRadius?.({ node, style }) ?? 0
     }
 
     return d3
@@ -506,6 +508,7 @@ export class ConnGraphView {
 
     this.forceGraph
       .backgroundColor(this.style.background)
+      .nodeCanvasObjectMode(() => "replace")
       .nodeCanvasObject(this.renderNode)
       .nodePointerAreaPaint(this.renderNodePointerArea)
       .linkCanvasObject(this.renderLink)
@@ -535,7 +538,15 @@ export class ConnGraphView {
       this.nodeRenderProcessorMap["default"]
 
     // 渲染节点
-    processor?.renderNodeCanvasObject?.(node, ctx, globalScale, style)
+    processor?.renderNodeCanvasObject?.({
+      node,
+      ctx,
+      globalScale,
+      style,
+      colorTracker: this.colorTracker,
+      tagManager: this.model.tagManager,
+      loadingManager: this.model.loadingManager,
+    })
   }
 
   /**
@@ -544,7 +555,8 @@ export class ConnGraphView {
   private renderNodePointerArea = (
     _node: NodeObject,
     color: string,
-    ctx: CanvasRenderingContext2D
+    ctx: CanvasRenderingContext2D,
+    globalScale: number
   ) => {
     if (!_node.id) return
 
@@ -560,7 +572,15 @@ export class ConnGraphView {
       this.nodeRenderProcessorMap[nodeType || "default"] ||
       this.nodeRenderProcessorMap["default"]
 
-    processor?.renderNodePointerArea?.(node, color, ctx, style)
+    processor?.renderNodePointerArea?.({
+      node,
+      indexColor: color,
+      ctx,
+      style,
+      globalScale,
+      colorTracker: this.colorTracker,
+      tagManager: this.model.tagManager,
+    })
   }
 
   /**
@@ -1012,7 +1032,7 @@ export class ConnGraphView {
 
     const processor = this.nodeRenderProcessorMap[node.data.nodeType]
     return (
-      processor?.getCollisionRadius?.(node, style) ??
+      processor?.getCollisionRadius?.({ node, style }) ??
       this.forceGraph.nodeRelSize()
     )
   }

@@ -38,6 +38,50 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     ctx.restore()
     return this
   },
+  textWrap: function (
+    text = "",
+    x: number,
+    y: number,
+    size: number,
+    color: string,
+    opacity = 1,
+    maxWidth: number
+  ) {
+    ctx.save()
+    ctx.globalAlpha = opacity
+    ctx.font = `${size}px Sans-Serif`
+    ctx.textAlign = "center"
+    ctx.textBaseline = "top"
+    ctx.fillStyle = color
+
+    let line = ""
+    let lineHeight = size * 1.2 // 行高
+    let currentY = y
+    for (let i = 0; i < text.length; i++) {
+      const testLine = line + text[i]
+      const metrics = ctx.measureText(testLine)
+      if (metrics.width > maxWidth) {
+        if (line.length > 0) {
+          ctx.fillText(line, x, currentY)
+          currentY += lineHeight
+          line = text[i]
+        } else {
+          // 如果单个字符都超出，强制绘制
+          ctx.fillText(text[i], x, currentY)
+          currentY += lineHeight
+          line = ""
+        }
+      } else {
+        line = testLine
+      }
+    }
+    if (line.length > 0) {
+      ctx.fillText(line, x, currentY)
+    }
+
+    ctx.restore()
+    return this
+  },
   stroke: function (
     x: number,
     y: number,

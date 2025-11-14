@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from "react"
+import { useRef, useEffect, useState, useCallback, useMemo, forwardRef, useImperativeHandle } from "react"
 import type { GraphNode, GraphLink } from "../type"
 import type { ConnGraphModel } from "../model"
 
@@ -24,7 +24,11 @@ interface BBox {
   maxY: number
 }
 
-export function Minimap({
+export interface MinimapRef {
+  exportPreviewImage: () => string | null
+}
+
+export const Minimap = forwardRef<MinimapRef, MinimapProps>(({
   className,
   graphModel,
   transform,
@@ -33,46 +37,16 @@ export function Minimap({
   miniWidth = 200,
   miniHeight = 150,
   onMinimapClick,
-}: MinimapProps) {
+}, ref) => {
   const miniRef = useRef<HTMLCanvasElement>(null)
 
-  // useEffect(() => {
-  //   computeBBox()
-  // }, [graphData, computeBBox])
-
-  // // 重绘小地图
-  // useEffect(() => {
-  //   drawMiniMap()
-  // }, [drawMiniMap])
-
-  // // 点击小地图以居中主图到小地图点击位置
-  // const handleMinimapClick = useCallback(
-  //   (ev: React.MouseEvent<HTMLCanvasElement>) => {
-  //     const canvas = miniRef.current
-  //     if (!canvas || !onMinimapClick) return
-
-  //     const rect = canvas.getBoundingClientRect()
-  //     const cx = ev.clientX - rect.left
-  //     const cy = ev.clientY - rect.top
-
-  //     // 计算被点击的 world 坐标（mini -> world）
-  //     const padding = 8
-  //     const mw = canvas.width
-  //     const mh = canvas.height
-  //     const worldW = bbox.maxX - bbox.minX
-  //     const worldH = bbox.maxY - bbox.minY
-  //     const scale = Math.min(
-  //       (mw - 2 * padding) / worldW,
-  //       (mh - 2 * padding) / worldH
-  //     )
-
-  //     const worldX = bbox.minX + (cx - padding) / scale
-  //     const worldY = bbox.minY + (cy - padding) / scale
-
-  //     onMinimapClick(worldX, worldY)
-  //   },
-  //   [bbox, onMinimapClick]
-  // )
+  useImperativeHandle(ref, () => ({
+    exportPreviewImage: () => {
+      const canvas = miniRef.current
+      if (!canvas) return null
+      return canvas.toDataURL('image/png')
+    }
+  }))
 
   const handleDataChange = () => {
     const graphData = graphModel.getGraphModelData().graphData
@@ -164,7 +138,10 @@ export function Minimap({
       const [x, y] = worldToMini(n.x || 0, n.y || 0)
       ctx.beginPath()
       ctx.arc(x, y, 2, 0, 2 * Math.PI)
-      ctx.fillStyle = "rgba(51, 153, 255, 0.5)"
+      ctx.fillStyle =
+        n.data?.stateType === "root"
+          ? "rgba(255, 165, 0, 0.5)"
+          : "rgba(51, 153, 255, 0.5)"
       ctx.fill()
     })
 
@@ -205,4 +182,6 @@ export function Minimap({
       }}
     />
   )
-}
+})
+
+Minimap.displayName = "Minimap"

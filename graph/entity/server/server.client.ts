@@ -15,7 +15,7 @@ export const createServerEntity: EntityCreator = () => {
   const imageCache = new Map<string, HTMLImageElement>()
 
   return {
-    renderNodeCanvasObject: (node, ctx, globalScale, style) => {
+    renderNodeCanvasObject: ({ node, ctx, globalScale, style }) => {
       const { x = 0, y = 0 } = node
       const { label, ip, account, docType, pageIndex, pageSize, count } =
         (node.data as ServerNodeType["data"]) ?? {}
@@ -73,15 +73,15 @@ export const createServerEntity: EntityCreator = () => {
       }
     },
 
-    renderNodePointerArea: (node, color, ctx, style) => {
+    renderNodePointerArea: ({ node, indexColor, ctx, style }) => {
       const { x = 0, y = 0 } = node
       const { strokeColor, strokeWidth, radius = DEFAULT_RADIUS } = style
       makeDrawWrapper(ctx)
         .stroke(x, y, radius, strokeColor, strokeWidth)
-        .circle(x, y, radius, color)
+        .circle(x, y, radius, indexColor)
     },
 
-    getCollisionRadius: (node, style) => {
+    getCollisionRadius: ({ node, style }) => {
       const { radius = DEFAULT_RADIUS } = style
       return radius
     },

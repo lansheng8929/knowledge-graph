@@ -5,6 +5,7 @@ import type {
   LinkId,
   GraphViewModel,
 } from "../type"
+import type { NodeTag } from "../tag-manager"
 
 // 定义事件类型
 export interface GraphEventMap {
@@ -29,6 +30,21 @@ export interface GraphEventMap {
     globalScale: number
     cache: GraphViewModel
   }
+  tagChange:
+    | {
+        action: "add" | "update"
+        nodeId: NodeId
+        tag: NodeTag
+      }
+    | {
+        action: "remove"
+        nodeId: NodeId
+        tag?: NodeTag
+      }
+    | {
+        action: "clear"
+        nodeIds: NodeId[]
+      }
 }
 
 // 事件订阅器类型
