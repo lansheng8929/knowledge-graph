@@ -67,14 +67,14 @@ export type ConnLinkType = GraphLink<{
   forsecond?: string // '20240326104215'
 }>
 
-/**
- * 程序中使用的图数据模型类型
- */
-export interface GraphViewModel {
+export interface GraphViewModelGraphData {
   graphData: {
     nodes: GraphNode[]
     links: GraphLink[]
   }
+}
+
+export interface GraphViewModelMetaData {
   focusNodes?: NodeId[]
   focusLinks?: LinkId[]
   selectedNodes?: NodeId[]
@@ -82,6 +82,11 @@ export interface GraphViewModel {
   hiddenNodes?: NodeId[]
   hiddenLinks?: LinkId[]
 }
+
+/**
+ * 程序中使用的图数据模型类型
+ */
+export type GraphViewModel = GraphViewModelGraphData & GraphViewModelMetaData
 
 /**
  * 动态图数据模型类型
@@ -106,6 +111,8 @@ export interface GraphNode<D = object> {
   fx?: number
   fy?: number
   data?: GraphNodeInfo<D>
+  __toolIndexColor?: string
+  __indexColor?: string
 }
 
 /**

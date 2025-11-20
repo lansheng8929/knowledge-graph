@@ -4,6 +4,7 @@ import type {
   NodeId,
   LinkId,
   GraphViewModel,
+  GraphViewModelMetaData,
 } from "../type"
 import type { NodeTag } from "../tag-manager"
 
@@ -19,12 +20,16 @@ export interface GraphEventMap {
   selectionChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   hiddenChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   loadMore: GraphNode
+  plusToolClick: GraphNode
   menuOpen: {
     node: GraphNode
     screenPos: { x: number; y: number }
     event: MouseEvent
   }
-  dataChange: { cache: GraphViewModel }
+  dataChange: { graphData: GraphViewModel["graphData"] }
+  metaDataChange: {
+    metaData: GraphViewModelMetaData
+  }
   framePost: {
     ctx: CanvasRenderingContext2D
     globalScale: number

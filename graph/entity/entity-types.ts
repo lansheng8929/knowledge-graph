@@ -24,18 +24,29 @@ export interface EntityRenderer {
     globalScale: number
     colorTracker: ColorTracker
     tagManager: TagManager
+    shadowCtx: CanvasRenderingContext2D
   }) => void
 
   renderNodeTools?: (props: {
     node: GraphNode
+    indexColor: string
     ctx: CanvasRenderingContext2D
+    style: Style
     globalScale: number
+    colorTracker: ColorTracker
+    tagManager: TagManager
+    shadowCtx: CanvasRenderingContext2D
   }) => void
 
-  registerNodeToolsEvents?: (props: {
-    events: ConnGraphEvents
+  renderNodeToolsPointerArea?: (props: {
     node: GraphNode
-    mousePosition: { x: number; y: number }
+    indexColor?: string
+    ctx: CanvasRenderingContext2D
+    style: Style
+    globalScale: number
+    colorTracker: ColorTracker
+    tagManager: TagManager
+    shadowCtx: CanvasRenderingContext2D
   }) => void
 
   getCollisionRadius: (props: { node: GraphNode; style: Style }) => number

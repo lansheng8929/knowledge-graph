@@ -231,6 +231,64 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
 
     return this
   },
+  drawPlusTool: function (
+    color: string,
+    x: number,
+    y: number,
+    radius: number,
+    globalScale: number
+  ) {
+    const plusSize = Math.max(1, Math.min(1.5, globalScale * 0.15))
+    const nodeRadius = radius
+    const plusX = x + nodeRadius
+    const plusY = y - nodeRadius
+
+    const lineWidth = plusSize * 0.35
+    const lineLength = plusSize * 1.8
+
+    ctx.save()
+    ctx.fillStyle = color
+
+    // 横向线条
+    ctx.fillRect(
+      plusX - lineLength / 2,
+      plusY - lineWidth / 2,
+      lineLength,
+      lineWidth
+    )
+
+    // 纵向线条
+    ctx.fillRect(
+      plusX - lineWidth / 2,
+      plusY - lineLength / 2,
+      lineWidth,
+      lineLength
+    )
+
+    ctx.restore()
+    return this
+  },
+  drawPlusToolArea: function (
+    color: string,
+    x: number,
+    y: number,
+    radius: number,
+    globalScale: number
+  ) {
+    const plusSize = Math.max(1, Math.min(1.5, globalScale * 0.15))
+    const nodeRadius = radius
+    const plusX = x + nodeRadius
+    const plusY = y - nodeRadius
+
+    const areaSize = plusSize * 2
+
+    ctx.save()
+    ctx.fillStyle = color
+    ctx.fillRect(plusX - areaSize / 2, plusY - areaSize / 2, areaSize, areaSize)
+    ctx.restore()
+
+    return this
+  },
 })
 
 // 封装为独立的函数

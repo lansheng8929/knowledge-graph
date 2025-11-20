@@ -1,9 +1,11 @@
-import type {
-  EntityCommonRenderer,
-  EntityCreator,
-  EntityRenderer,
-  GraphNode,
-  Style,
+import {
+  DEFAULT_BG_COLOR,
+  DEFAULT_TEXT_COLOR,
+  type EntityCommonRenderer,
+  type EntityCreator,
+  type EntityRenderer,
+  type GraphNode,
+  type Style,
 } from ".."
 import { DEFAULT_FONT_SIZE, DEFAULT_RADIUS } from "../client"
 import { makeDrawWrapper } from "../client/utils"
@@ -18,15 +20,15 @@ export const createEntity = (entityCreator: EntityCreator): EntityRenderer => {
       entityCommonRenderer.beforeRenderNodeCanvasObject?.(props)
       entityInstance.renderNodeCanvasObject(props)
       entityCommonRenderer.afterRenderNodeCanvasObject?.(props)
+      entityCommonRenderer.renderNodeTools?.(props)
     },
     renderNodePointerArea(props) {
       entityInstance.renderNodePointerArea(props)
+      entityCommonRenderer.renderNodePointerArea?.(props)
     },
-    renderNodeTools(props) {
-      entityInstance.renderNodeTools?.(props)
-    },
-    registerNodeToolsEvents(props) {
-      entityInstance.registerNodeToolsEvents?.(props)
+    renderNodeToolsPointerArea(props) {
+      entityInstance.renderNodeToolsPointerArea?.(props)
+      entityCommonRenderer.renderNodeToolsPointerArea?.(props)
     },
     getCollisionRadius(props) {
       return entityInstance.getCollisionRadius(props)
@@ -39,12 +41,7 @@ export const entityCommonRenderer = {
     node,
     style,
     ctx,
-  }: {
-    node: GraphNode
-    ctx: CanvasRenderingContext2D
-    globalScale: number
-    style: Style
-  }) => {
+  }: Parameters<EntityRenderer["renderNodeCanvasObject"]>[0]) => {
     const { x = 0, y = 0 } = node
     const {} = node.data || {}
     const { light, opacity } = style
@@ -58,23 +55,18 @@ export const entityCommonRenderer = {
     node,
     style,
     ctx,
+    globalScale,
     tagManager,
     loadingManager,
-  }: {
-    node: GraphNode
-    ctx: CanvasRenderingContext2D
-    globalScale: number
-    style: Style
-    tagManager: TagManager
-    loadingManager: LoadingManager
-  }) => {
+  }: Parameters<EntityRenderer["renderNodeCanvasObject"]>[0]) => {
     const { x = 0, y = 0 } = node
-    const {} = node.data || {}
+    const { count = 0 } = node.data || {}
     const {
       radius = DEFAULT_RADIUS,
       fontSize = DEFAULT_FONT_SIZE,
       opacity,
       tagColor,
+      textColor = DEFAULT_TEXT_COLOR,
     } = style
 
     const loading = loadingManager.getVisibleLoadingState(node.id)
@@ -96,6 +88,50 @@ export const entityCommonRenderer = {
         tagColor || "#000",
         opacity,
         30
+      )
+    }
+  },
+  renderNodeTools: ({
+    node,
+    ctx,
+    style,
+    globalScale,
+  }: Parameters<EntityRenderer["renderNodeCanvasObject"]>[0]) => {
+    const { x = 0, y = 0 } = node
+    const { count = 0 } = node.data || {}
+    const { radius = DEFAULT_RADIUS, textColor = DEFAULT_TEXT_COLOR } = style
+
+    if (count > 1) {
+      makeDrawWrapper(ctx).drawPlusTool(textColor, x, y, radius, globalScale)
+    }
+  },
+  renderNodePointerArea: ({}: Parameters<
+    EntityRenderer["renderNodePointerArea"]
+  >[0]) => {
+    // 节点自身的指针区域由各实体的 renderNodePointerArea 处理
+  },
+  renderNodeToolsPointerArea: ({
+    node,
+    indexColor,
+    ctx,
+    style,
+    globalScale,
+    colorTracker,
+    shadowCtx,
+  }: Parameters<
+    NonNullable<EntityRenderer["renderNodeToolsPointerArea"]>
+  >[0]) => {
+    const { x = 0, y = 0 } = node
+    const { count = 0 } = node.data || {}
+    const { radius = DEFAULT_RADIUS } = style
+
+    if (indexColor && shadowCtx && count > 1) {
+      makeDrawWrapper(shadowCtx!).drawPlusToolArea(
+        indexColor,
+        x,
+        y,
+        radius,
+        globalScale
       )
     }
   },

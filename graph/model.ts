@@ -1,7 +1,14 @@
 import { ConnGraphEvents } from "./client/events"
-import type { GraphViewModel, LinkId, NodeId } from "./type"
+import type {
+  GraphViewModel,
+  GraphViewModelGraphData,
+  GraphViewModelMetaData,
+  LinkId,
+  NodeId,
+} from "./type"
 import { TagManager } from "./tag-manager"
 import { LoadingManager } from "./loading-manager"
+import ColorTracker from "canvas-color-tracker"
 
 export interface Options {
   initData: GraphViewModel
@@ -14,22 +21,54 @@ export class ConnGraphModel {
   public events = new ConnGraphEvents()
   public tagManager = new TagManager(this.events)
   public loadingManager = new LoadingManager(this.events)
+  public colorTracker: ColorTracker
 
   constructor({ initData }: Options) {
-    this.cache = initData
+    this.cache = {
+      graphData: { nodes: [], links: [] },
+    }
+    this.colorTracker = new ColorTracker()
+
+    this.updateGraphData({
+      graphData: initData.graphData,
+    })
+
+    this.updateMetaData({
+      focusNodes: initData.focusNodes,
+      focusLinks: initData.focusLinks,
+      selectedNodes: initData.selectedNodes,
+      selectedLinks: initData.selectedLinks,
+      hiddenNodes: initData.hiddenNodes,
+      hiddenLinks: initData.hiddenLinks,
+    })
   }
 
-  updateCache({
-    graphData,
+  updateGraphData({ graphData }: GraphViewModelGraphData) {
+    graphData.nodes.forEach((node) => {
+      const indexColor = this.colorTracker.register({
+        type: "PlusTool",
+        d: node,
+      })
+      if (!indexColor) return
+
+      node.__toolIndexColor = indexColor
+    })
+
+    this.cache.graphData = graphData
+
+    this.events.publish("dataChange", {
+      graphData: this.cache.graphData,
+    })
+  }
+
+  updateMetaData({
     focusNodes,
     focusLinks,
     selectedNodes,
     selectedLinks,
     hiddenNodes,
     hiddenLinks,
-  }: GraphViewModel) {
-    this.cache.graphData = graphData
-
+  }: GraphViewModelMetaData) {
     if (focusNodes) {
       this.updeteFoucsNodes(focusNodes || [])
     }
@@ -42,8 +81,15 @@ export class ConnGraphModel {
       this.updateHiddenNodes(hiddenNodes || [])
     }
 
-    this.events.publish("dataChange", {
-      cache: this.cache,
+    this.events.publish("metaDataChange", {
+      metaData: {
+        focusNodes: this.cache.focusNodes,
+        focusLinks: this.cache.focusLinks,
+        selectedNodes: this.cache.selectedNodes,
+        selectedLinks: this.cache.selectedLinks,
+        hiddenNodes: this.cache.hiddenNodes,
+        hiddenLinks: this.cache.hiddenLinks,
+      },
     })
   }
 

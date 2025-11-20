@@ -73,6 +73,10 @@ export class ConnGraphView {
   declare imageCache: Map<string, HTMLImageElement>
   declare nodeRenderProcessorMap: NodeRenderProcessorMap
   declare colorTracker: ColorTracker
+  declare canvas: HTMLCanvasElement | null
+  declare forceGraphShadowCtx: CanvasRenderingContext2D | null
+  declare toolShadowCanvas: HTMLCanvasElement | null
+  declare toolShadowCtx: CanvasRenderingContext2D | null
 
   actions: GraphModelActions = {
     highlightNode: (nodeId: NodeId) => {
@@ -89,7 +93,11 @@ export class ConnGraphView {
     this.model = opts.graphModel
     this.imageCache = new Map()
     this.nodeRenderProcessorMap = nodeRenderProcessorMap()
-    this.colorTracker = new ColorTracker()
+    this.colorTracker = this.model.colorTracker
+    this.canvas = null
+    this.forceGraphShadowCtx = null
+    this.toolShadowCanvas = null
+    this.toolShadowCtx = null
 
     this.initStyle()
     this.initView()
@@ -169,24 +177,43 @@ export class ConnGraphView {
   /**
    * 更新模型数据
    */
-  updateModel(graphViewModel: GraphViewModel) {
+  updateModel(graphViewModel: Partial<GraphViewModel>) {
     this.updateView(graphViewModel)
   }
 
   /**
    * 更新视图
    */
-  updateView(graphViewModel: GraphViewModel) {
+  updateView(graphViewModel: Partial<GraphViewModel>) {
     if (!this.forceGraph) return
 
-    this.forceGraph.graphData(graphViewModel.graphData)
-    const newGraphData =
-      this.forceGraph.graphData() as GraphViewModel["graphData"]
+    if (graphViewModel.graphData) {
+      this.forceGraph.graphData(graphViewModel.graphData)
+      const newGraphData =
+        this.forceGraph.graphData() as GraphViewModel["graphData"]
 
-    this.model.updateCache({
-      ...graphViewModel,
-      graphData: newGraphData,
-    })
+      this.model.updateGraphData({
+        graphData: newGraphData,
+      })
+    }
+
+    if (
+      graphViewModel.focusNodes ||
+      graphViewModel.focusLinks ||
+      graphViewModel.selectedNodes ||
+      graphViewModel.selectedLinks ||
+      graphViewModel.hiddenNodes ||
+      graphViewModel.hiddenLinks
+    ) {
+      this.model.updateMetaData({
+        focusNodes: graphViewModel.focusNodes,
+        focusLinks: graphViewModel.focusLinks,
+        selectedNodes: graphViewModel.selectedNodes,
+        selectedLinks: graphViewModel.selectedLinks,
+        hiddenNodes: graphViewModel.hiddenNodes,
+        hiddenLinks: graphViewModel.hiddenLinks,
+      })
+    }
   }
 
   /**
@@ -224,6 +251,7 @@ export class ConnGraphView {
 
     this.setupForceGraph(forceGraph)
     this.setupEventHandlers(forceGraph)
+    this.setupCanvasClickListener()
 
     this.forceGraph = forceGraph
 
@@ -268,9 +296,9 @@ export class ConnGraphView {
           this.model.events.publish("nodeHover", node)
         }
       })
-      .onNodeClick((_node) => {
+      .onNodeClick((_node, event) => {
         const node = this.model.getNodeById(String(_node.id))
-        this.handleNodeClick(node)
+        this.handleNodeClick(node, event)
       })
       .onNodeRightClick((_node, event) => {
         const node = this.model.getNodeById(String(_node.id))
@@ -289,8 +317,8 @@ export class ConnGraphView {
         actions.selectNode(undefined)
         this.model.events.publish("backgroundClick", undefined)
       })
-      .onZoom((zoom) => {
-        this.model.events.publish("zoom", zoom)
+      .onZoom((transform) => {
+        this.handleCanvasZoom(transform)
       })
       .onRenderFramePost((ctx, globalScale) => {
         this.handleRenderFramePost({ ctx, globalScale })
@@ -298,12 +326,101 @@ export class ConnGraphView {
       .showPointerCursor((_node) => !!_node)
   }
 
+  /**
+   * 设置画布点击监听
+   */
+  private setupCanvasClickListener() {
+    this.canvas = this.container.querySelector("canvas")
+    if (!this.canvas) {
+      console.error("❌ 未找到主 canvas 元素")
+      return
+    }
+
+    // 创建独立的 shadowCanvas 用于工具颜色追踪
+    this.toolShadowCanvas = document.createElement("canvas")
+    this.toolShadowCanvas.width = this.canvas.width
+    this.toolShadowCanvas.height = this.canvas.height
+    this.toolShadowCanvas.style.position = "absolute"
+    this.toolShadowCanvas.style.top = "0"
+    this.toolShadowCanvas.style.left = "0"
+    // this.toolShadowCanvas.style.pointerEvents = "none"
+    // this.toolShadowCanvas.style.opacity = "0.5"
+    // this.toolShadowCanvas.style.zIndex = "999"
+    // this.container.appendChild(this.toolShadowCanvas)
+
+    this.toolShadowCtx = this.toolShadowCanvas.getContext("2d")
+
+    this.canvas.addEventListener("click", (event) => {
+      this.handleCanvasClick(event)
+    })
+    this.canvas.addEventListener("mousemove", (event) => {
+      this.handleCanvasMouseMove(event)
+    })
+  }
+
+  /**
+   * 处理画布点击
+   */
+  private handleCanvasClick(event: MouseEvent) {
+    if (!this.canvas || !this.toolShadowCtx) return
+
+    const rect = this.canvas.getBoundingClientRect()
+
+    const scaleX = this.canvas.width / rect.width
+    const scaleY = this.canvas.height / rect.height
+    const x = (event.clientX - rect.left) * scaleX
+    const y = (event.clientY - rect.top) * scaleY
+
+    const pxColor = this.toolShadowCtx.getImageData(x, y, 1, 1).data
+    const obj = this.colorTracker.lookup([pxColor[0], pxColor[1], pxColor[2]])
+
+    if (obj) {
+      switch (obj.type) {
+        case "PlusTool":
+          this.model.events.publish("plusToolClick", obj.d as GraphNode)
+          event.stopPropagation()
+          break
+        default:
+          console.log("⚠️ 未知类型:", obj.type)
+      }
+    }
+  }
+
+  /**
+   * 处理画布鼠标移动
+   */
+  private handleCanvasMouseMove(event: MouseEvent) {
+    if (!this.canvas || !this.toolShadowCtx) return
+
+    const rect = this.canvas.getBoundingClientRect()
+
+    const scaleX = this.canvas.width / rect.width
+    const scaleY = this.canvas.height / rect.height
+    const x = (event.clientX - rect.left) * scaleX
+    const y = (event.clientY - rect.top) * scaleY
+
+    const pxColor = this.toolShadowCtx.getImageData(x, y, 1, 1).data
+    const obj = this.colorTracker.lookup([pxColor[0], pxColor[1], pxColor[2]])
+
+    if (obj) {
+      switch (obj.type) {
+        case "PlusTool":
+          this.canvas.style.cursor = "pointer"
+          break
+        default:
+          this.canvas.style.cursor = "default"
+      }
+    } else {
+      this.canvas.style.cursor = "default"
+    }
+  }
+
   // ==================== 事件处理方法 ====================
 
   /**
    * 处理节点点击
    */
-  private handleNodeClick(node: GraphNode | undefined) {
+  private handleNodeClick(node: GraphNode | undefined, event?: MouseEvent) {
     if (!node?.data?.nodeType) return
 
     const { nodeType } = node.data
@@ -369,11 +486,70 @@ export class ConnGraphView {
     ctx: CanvasRenderingContext2D
     globalScale: number
   }) {
+    // 清空 toolShadowCanvas
+    if (this.toolShadowCtx && this.toolShadowCanvas) {
+      const transform = ctx.getTransform()
+      this.toolShadowCtx.save()
+      this.toolShadowCtx.setTransform(1, 0, 0, 1, 0, 0)
+      this.toolShadowCtx.clearRect(
+        0,
+        0,
+        this.toolShadowCanvas.width,
+        this.toolShadowCanvas.height
+      )
+      this.toolShadowCtx.restore()
+      this.toolShadowCtx.setTransform(transform)
+
+      // 重新绘制所有节点工具
+      const { graphData } = this.model.getGraphModelData()
+      graphData.nodes.forEach((_node) => {
+        const node = this.model.getNodeById(String(_node.id))
+        if (!node) return
+
+        const { __toolIndexColor } = node
+        const { nodeType } = node.data || {}
+        const nodeStyle = getNodeStyleByType(this.style, nodeType)
+        const state = this.getNodeState(node)
+        const style = getNodeStyleByStateType(nodeStyle, state)
+
+        const processor =
+          this.nodeRenderProcessorMap[nodeType || "default"] ||
+          this.nodeRenderProcessorMap["default"]
+
+        processor?.renderNodeToolsPointerArea?.({
+          node: node,
+          indexColor: __toolIndexColor,
+          ctx: this.toolShadowCtx!,
+          style: style,
+          globalScale: globalScale,
+          colorTracker: this.colorTracker,
+          tagManager: this.model.tagManager,
+          shadowCtx: this.toolShadowCtx!,
+        })
+      })
+    }
+
     this.model.events.publish("framePost", {
       ctx,
       globalScale,
       cache: this.model.getGraphModelData(),
     })
+  }
+
+  private handleCanvasZoom(transform: { k: number; x: number; y: number }) {
+    this.model.events.publish("zoom", transform)
+
+    // 同步 toolShadowCanvas 的变换
+    if (this.toolShadowCtx) {
+      this.toolShadowCtx.setTransform(
+        transform.k,
+        0,
+        0,
+        transform.k,
+        transform.x,
+        transform.y
+      )
+    }
   }
 
   // ==================== 力学相关方法 ====================
@@ -573,13 +749,25 @@ export class ConnGraphView {
       this.nodeRenderProcessorMap["default"]
 
     processor?.renderNodePointerArea?.({
-      node,
+      node: node,
       indexColor: color,
-      ctx,
-      style,
-      globalScale,
+      ctx: ctx,
+      style: style,
+      globalScale: globalScale,
       colorTracker: this.colorTracker,
       tagManager: this.model.tagManager,
+      shadowCtx: ctx,
+    })
+
+    processor?.renderNodeToolsPointerArea?.({
+      node: node,
+      indexColor: color,
+      ctx: ctx,
+      style: style,
+      globalScale: globalScale,
+      colorTracker: this.colorTracker,
+      tagManager: this.model.tagManager,
+      shadowCtx: this.toolShadowCtx!,
     })
   }
 
