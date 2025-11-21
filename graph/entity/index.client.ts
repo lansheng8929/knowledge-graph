@@ -3,7 +3,8 @@
  * 自动导出所有实体的类型和客户端实现
  */
 
-// 导出所有实体的类型定义和客户端实现
+export * from "./entity-registry"
+export * from "./entity-types"
 
 export * from "./bankcard/bankcard.clinet"
 

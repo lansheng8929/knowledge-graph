@@ -1,10 +1,17 @@
-import { useRef, useEffect, useState, useCallback, useMemo, forwardRef, useImperativeHandle } from "react"
-import type { GraphNode, GraphLink } from "../type"
+import {
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+  useEffect,
+  useState,
+} from "react"
 import type { ConnGraphModel } from "../model"
+import type { DefaultGraphDataGenerics, GraphDataGenerics } from "./type"
 
-interface MinimapProps {
+interface MinimapProps<G extends GraphDataGenerics> {
   className?: string
-  graphModel: ConnGraphModel
+  style?: React.CSSProperties
+  graphModel: ConnGraphModel<G>
   transform: {
     k: number
     x: number
@@ -14,7 +21,10 @@ interface MinimapProps {
   mainCanvasHeight: number
   miniWidth?: number
   miniHeight?: number
+  showViewport?: boolean
   onMinimapClick?: (worldX: number, worldY: number) => void
+  // 新增：视口拖拽回调
+  onViewportDrag?: (worldX: number, worldY: number) => void
 }
 
 interface BBox {
@@ -28,25 +38,55 @@ export interface MinimapRef {
   exportPreviewImage: () => string | null
 }
 
-export const Minimap = forwardRef<MinimapRef, MinimapProps>(({
-  className,
-  graphModel,
-  transform,
-  mainCanvasWidth,
-  mainCanvasHeight,
-  miniWidth = 200,
-  miniHeight = 150,
-  onMinimapClick,
-}, ref) => {
+const MinimapInner = <G extends GraphDataGenerics>(
+  {
+    className,
+    style,
+    graphModel,
+    transform,
+    mainCanvasWidth,
+    mainCanvasHeight,
+    miniWidth = 200,
+    miniHeight = 150,
+    showViewport = true,
+    onMinimapClick,
+    onViewportDrag,
+  }: MinimapProps<G>,
+  ref: React.ForwardedRef<MinimapRef>
+) => {
   const miniRef = useRef<HTMLCanvasElement>(null)
+  const bboxRef = useRef<BBox>({ minX: 0, minY: 0, maxX: 0, maxY: 0 })
+  const scaleRef = useRef<number>(1)
+  const paddingRef = useRef<number>(10)
+  const [isDragging, setIsDragging] = useState(false)
 
   useImperativeHandle(ref, () => ({
     exportPreviewImage: () => {
       const canvas = miniRef.current
       if (!canvas) return null
-      return canvas.toDataURL('image/png')
-    }
+      return canvas.toDataURL("image/png")
+    },
   }))
+
+  // world坐标 -> minimap像素坐标
+  const worldToMini = (wx: number, wy: number): [number, number] => {
+    const bbox = bboxRef.current
+    const scale = scaleRef.current
+    const padding = paddingRef.current
+    const mx = padding + (wx - bbox.minX) * scale
+    const my = padding + (wy - bbox.minY) * scale
+    return [mx, my]
+  }
+
+  // minimap像素坐标 -> world坐标
+  const miniToWorld = (mx: number, my: number): [number, number] => {
+    const bbox = bboxRef.current
+    const scale = scaleRef.current
+    const padding = paddingRef.current
+    const wx = bbox.minX + (mx - padding) / scale
+    const wy = bbox.minY + (my - padding) / scale
+    return [wx, wy]
+  }
 
   const handleDataChange = () => {
     const graphData = graphModel.getGraphModelData().graphData
@@ -84,6 +124,8 @@ export const Minimap = forwardRef<MinimapRef, MinimapProps>(({
       return { minX, minY, maxX, maxY }
     })()
 
+    bboxRef.current = bbox
+
     const mini = miniRef.current
     if (!mini || !graphData) return
 
@@ -96,19 +138,14 @@ export const Minimap = forwardRef<MinimapRef, MinimapProps>(({
     ctx.clearRect(0, 0, mw, mh)
 
     const padding = 10
+    paddingRef.current = padding
     const worldW = bbox.maxX - bbox.minX
     const worldH = bbox.maxY - bbox.minY
     const scale = Math.min(
       (mw - 2 * padding) / worldW,
       (mh - 2 * padding) / worldH
     )
-
-    // world -> minimap px
-    const worldToMini = (wx: number, wy: number): [number, number] => {
-      const mx = padding + (wx - bbox.minX) * scale
-      const my = padding + (wy - bbox.minY) * scale
-      return [mx, my]
-    }
+    scaleRef.current = scale
 
     // 绘制连线
     ctx.lineWidth = 1
@@ -146,24 +183,26 @@ export const Minimap = forwardRef<MinimapRef, MinimapProps>(({
     })
 
     // 绘制视口矩形
-    const leftWorld = -transform.x / transform.k
-    const topWorld = -transform.y / transform.k
-    const viewWWorld = mainCanvasWidth / transform.k
-    const viewHWorld = mainCanvasHeight / transform.k
+    if (showViewport) {
+      const leftWorld = -transform.x / transform.k
+      const topWorld = -transform.y / transform.k
+      const viewWWorld = mainCanvasWidth / transform.k
+      const viewHWorld = mainCanvasHeight / transform.k
 
-    const [vx, vy] = worldToMini(leftWorld, topWorld)
-    const [vx2, vy2] = worldToMini(
-      leftWorld + viewWWorld,
-      topWorld + viewHWorld
-    )
-    const vw = vx2 - vx
-    const vh = vy2 - vy
+      const [vx, vy] = worldToMini(leftWorld, topWorld)
+      const [vx2, vy2] = worldToMini(
+        leftWorld + viewWWorld,
+        topWorld + viewHWorld
+      )
+      const vw = vx2 - vx
+      const vh = vy2 - vy
 
-    ctx.lineWidth = 2
-    ctx.strokeStyle = "rgba(255,80,30,0.9)"
-    ctx.fillStyle = "rgba(255,80,30,0.08)"
-    ctx.strokeRect(vx, vy, vw, vh)
-    ctx.fillRect(vx, vy, vw, vh)
+      ctx.lineWidth = 2
+      ctx.strokeStyle = "rgba(255,80,30,0.9)"
+      ctx.fillStyle = "rgba(255,80,30,0.08)"
+      ctx.strokeRect(vx, vy, vw, vh)
+      ctx.fillRect(vx, vy, vw, vh)
+    }
   }
 
   graphModel.events.subscribe("framePost", handleDataChange)
@@ -179,9 +218,16 @@ export const Minimap = forwardRef<MinimapRef, MinimapProps>(({
         position: "absolute",
         right: 12,
         bottom: 12,
+        ...style,
       }}
     />
   )
-})
+}
 
-Minimap.displayName = "Minimap"
+export const Minimap = forwardRef(MinimapInner) as <
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
+>(
+  props: MinimapProps<G> & {
+    ref?: React.ForwardedRef<MinimapRef>
+  }
+) => React.ReactElement

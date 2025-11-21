@@ -1,16 +1,10 @@
 import {
-  DEFAULT_BG_COLOR,
+  DEFAULT_FONT_SIZE,
+  DEFAULT_RADIUS,
   DEFAULT_TEXT_COLOR,
-  type EntityCommonRenderer,
-  type EntityCreator,
-  type EntityRenderer,
-  type GraphNode,
-  type Style,
-} from ".."
-import { DEFAULT_FONT_SIZE, DEFAULT_RADIUS } from "../client"
+} from "../client/constants"
 import { makeDrawWrapper } from "../client/utils"
-import type { LoadingManager } from "../loading-manager"
-import type { TagManager } from "../tag-manager"
+import type { EntityCreator, EntityRenderer } from "./entity-types"
 
 export const createEntity = (entityCreator: EntityCreator): EntityRenderer => {
   const entityInstance = entityCreator()
@@ -122,10 +116,16 @@ export const entityCommonRenderer = {
     NonNullable<EntityRenderer["renderNodeToolsPointerArea"]>
   >[0]) => {
     const { x = 0, y = 0 } = node
-    const { count = 0 } = node.data || {}
+    const { count = 0, pageIndex, pageSize } = node.data || {}
     const { radius = DEFAULT_RADIUS } = style
+    console.log("(pageIndex + 1) * pageSize ", (pageIndex + 1) * pageSize)
 
-    if (indexColor && shadowCtx && count > 1) {
+    const canLoadMore =
+      pageSize !== undefined && pageIndex !== undefined && pageIndex !== -1
+        ? (pageIndex + 1) * pageSize < count
+        : true
+
+    if (indexColor && shadowCtx && count > 1 && canLoadMore) {
       makeDrawWrapper(shadowCtx!).drawPlusToolArea(
         indexColor,
         x,

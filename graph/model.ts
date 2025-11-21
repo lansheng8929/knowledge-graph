@@ -1,29 +1,43 @@
-import { ConnGraphEvents } from "./client/events"
+import { ConnGraphEvents } from "./events"
 import type {
-  GraphViewModel,
-  GraphViewModelGraphData,
-  GraphViewModelMetaData,
   LinkId,
+  LinkState,
+  LinkType,
   NodeId,
+  NodeState,
+  NodeType,
 } from "./type"
 import { TagManager } from "./tag-manager"
 import { LoadingManager } from "./loading-manager"
 import ColorTracker from "canvas-color-tracker"
+import type {
+  DefaultGraphDataGenerics,
+  GraphDataGenerics,
+  GraphViewModel,
+  GraphViewModelGraphData,
+  GraphViewModelMetaData,
+} from "./client/type"
 
-export interface Options {
-  initData: GraphViewModel
+export interface Options<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
+> {
+  initData: GraphViewModel<G>
 }
 
-type ModelComputedCache = GraphViewModel
+type ModelComputedCache<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
+> = GraphViewModel<G>
 
-export class ConnGraphModel {
-  protected cache!: ModelComputedCache
-  public events = new ConnGraphEvents()
+export class ConnGraphModel<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
+> {
+  protected cache!: ModelComputedCache<G>
+  public events = new ConnGraphEvents<G>()
   public tagManager = new TagManager(this.events)
   public loadingManager = new LoadingManager(this.events)
   public colorTracker: ColorTracker
 
-  constructor({ initData }: Options) {
+  constructor({ initData }: Options<G>) {
     this.cache = {
       graphData: { nodes: [], links: [] },
     }
@@ -43,7 +57,7 @@ export class ConnGraphModel {
     })
   }
 
-  updateGraphData({ graphData }: GraphViewModelGraphData) {
+  updateGraphData({ graphData }: GraphViewModelGraphData<G>) {
     graphData.nodes.forEach((node) => {
       const indexColor = this.colorTracker.register({
         type: "PlusTool",
@@ -102,8 +116,10 @@ export class ConnGraphModel {
       if (!node) return
 
       this.cache.graphData.links.forEach((link) => {
-        const source = link.source.id || link.source
-        const target = link.target.id || link.target
+        const source =
+          typeof link.source === "object" ? link.source.id : link.source
+        const target =
+          typeof link.target === "object" ? link.target.id : link.target
 
         if (source === node.id || target === node.id) {
           links.push(link.id)
@@ -131,8 +147,10 @@ export class ConnGraphModel {
         if (!node) return
 
         this.cache.graphData.links.forEach((link) => {
-          const source = link.source.id || link.source
-          const target = link.target.id || link.target
+          const source =
+            typeof link.source === "object" ? link.source.id : link.source
+          const target =
+            typeof link.target === "object" ? link.target.id : link.target
 
           if (source === node.id || target === node.id) {
             links.push(link.id)

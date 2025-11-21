@@ -1,7 +1,5 @@
-import type { EntityConfig, NodeRenderProcessorMap } from "../entity"
-
+import type { EntityCreator } from "../entity/entity-types"
 import * as Entity from "../entity/index.client"
-import { createEntity } from "../entity/common"
 
 export const ACCOUNT_NODE_TYPE = "account"
 
@@ -22,24 +20,27 @@ export const DEFAULT_FONT_SIZE = 4
 export const DEFAULT_NODE_LABEL_SCALE_THRESHOLD = 4
 export const DEFAULT_LINK_LABEL_SCALE_THRESHOLD = 5
 
-// 自带的已设定好的节点（后续可通过外部传入节点定义）
-export const nodeRenderProcessorMap = (): NodeRenderProcessorMap => ({
-  factor: createEntity(Entity.createFactorEntity),
-  case: createEntity(Entity.createCaseEntity),
-  server: createEntity(Entity.createServerEntity),
-  paginator: createEntity(Entity.createPaginatorEntity),
-  relationship: createEntity(Entity.createRelationshipEntity),
-  phone: createEntity(Entity.createPhoneEntity),
-  id_card: createEntity(Entity.createIdcardEntity),
-  bank_card: createEntity(Entity.createBankCardEntity),
-  mac: createEntity(Entity.createMacEntity),
-  user_case: createEntity(Entity.createUserCaseEntity),
-  material: createEntity(Entity.createMaterialEntity),
-  orders: createEntity(Entity.createOrdersEntity),
-  user_account: createEntity(Entity.createUserAccountEntity),
-  ipv4: createEntity(Entity.createIpv4Entity),
-  email: createEntity(Entity.createEmailEntity),
-  default: createEntity(Entity.createDefaultEntity),
-  ipv6: createEntity(Entity.createIpv6Entity),
-  company: createEntity(Entity.createCompanyEntity),
+/**
+ * 获取默认的实体创建器映射
+ * 这些是内置的节点类型，可以通过 EntityRegistry 进行注册
+ */
+export const getDefaultEntityCreators = (): Record<string, EntityCreator> => ({
+  factor: Entity.createFactorEntity,
+  case: Entity.createCaseEntity,
+  server: Entity.createServerEntity,
+  paginator: Entity.createPaginatorEntity,
+  relationship: Entity.createRelationshipEntity,
+  phone: Entity.createPhoneEntity,
+  id_card: Entity.createIdcardEntity,
+  bank_card: Entity.createBankCardEntity,
+  mac: Entity.createMacEntity,
+  user_case: Entity.createUserCaseEntity,
+  material: Entity.createMaterialEntity,
+  orders: Entity.createOrdersEntity,
+  user_account: Entity.createUserAccountEntity,
+  ipv4: Entity.createIpv4Entity,
+  email: Entity.createEmailEntity,
+  default: Entity.createDefaultEntity,
+  ipv6: Entity.createIpv6Entity,
+  company: Entity.createCompanyEntity,
 })

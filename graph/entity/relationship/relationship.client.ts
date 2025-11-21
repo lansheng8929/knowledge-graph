@@ -16,7 +16,7 @@ export const createRelationshipEntity: EntityCreator = () => {
   return {
     renderNodeCanvasObject: ({ node, ctx, globalScale, style }) => {
       const { x = 0, y = 0 } = node
-      const { label } = (node.data as RealationshipNodeType["data"]) ?? {}
+      const { label, type } = (node.data as RealationshipNodeType["data"]) ?? {}
 
       const iconPath = `/api/v1/connValueType-icon?key=${
         type ?? "relationship"

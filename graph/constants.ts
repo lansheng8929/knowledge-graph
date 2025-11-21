@@ -1,5 +1,3 @@
-import type { NodeType } from "./type"
-
 export const ACCOUNT_NODE_TYPE = "account"
 
 export const DEFAULT_BG_COLOR = "#fff"

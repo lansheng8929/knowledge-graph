@@ -3,7 +3,9 @@ export * from "./utils"
 export * from "./constants"
 export * from "./entity"
 export * from "./model"
-
-export * from "./type"
+export * from "./tag-manager"
+export * from "./loading-manager"
+export * from "./events"
+export * from "./image-cache"
 
 export * as d3 from "d3-force"

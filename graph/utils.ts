@@ -1,9 +1,13 @@
-import type { GraphViewModel } from "./type"
+import type {
+  GraphDataGenerics,
+  GraphLink,
+  GraphViewModel,
+} from "./client/type"
 
 // 合并外部图数据到内部图数据
-export const mergeModelGraphData = (
-  prevGraphData: GraphViewModel | undefined,
-  newGraphData: GraphViewModel | undefined
+export const mergeModelGraphData = <G extends GraphDataGenerics>(
+  prevGraphData: GraphViewModel<G> | undefined,
+  newGraphData: GraphViewModel<G> | undefined
 ) => {
   if (!prevGraphData) {
     return prevGraphData
@@ -91,13 +95,14 @@ export const mergeObjects = <T extends object = object>(
 
   if (isMergebleObject(target) && isMergebleObject(source)) {
     Object.keys(source).forEach(function (key: string) {
-      if (isMergebleObject(source[key])) {
-        if (!target[key]) {
-          target[key] = {} as T[keyof T]
+      const typedKey = key as keyof T
+      if (isMergebleObject(source[typedKey])) {
+        if (!target[typedKey]) {
+          target[typedKey] = {} as T[keyof T]
         }
-        mergeObjects(target[key], source[key])
+        mergeObjects(target[typedKey] as object, source[typedKey] as object)
       } else {
-        target[key] = source[key] as T[keyof T]
+        target[typedKey] = source[typedKey] as T[keyof T]
       }
     })
   }
@@ -136,9 +141,9 @@ export const deepClone = <T>(obj: T): T => {
 }
 
 // 以新数据为主合并到原数据：添加新数据、删除原数据中不存在的数据、更新原数据中存在的数据
-export const replaceModelGraphData = (
-  prevGraphData: GraphViewModel | undefined,
-  newGraphData: GraphViewModel | undefined
+export const replaceModelGraphData = <G extends GraphDataGenerics>(
+  prevGraphData: GraphViewModel<G> | undefined,
+  newGraphData: GraphViewModel<G> | undefined
 ) => {
   if (!prevGraphData || !newGraphData) {
     return prevGraphData
@@ -193,13 +198,17 @@ export const replaceModelGraphData = (
       (l) => l.id === link.id
     )
 
-    if (existingLinkIndex !== -1) {
-    } else {
-      // 添加新链接
+    if (existingLinkIndex === -1 && link.source && link.target) {
       prevGraphData.graphData.links.push({
         ...link,
-        source: link.source.id || link.source,
-        target: link.target.id || link.target,
+        source:
+          typeof link.source === "object" && (link.source as GraphLink) !== null
+            ? link.source.id!
+            : link.source!,
+        target:
+          typeof link.target === "object" && (link.target as GraphLink) !== null
+            ? link.target.id!
+            : link.target!,
       })
     }
   })

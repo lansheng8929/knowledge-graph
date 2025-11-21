@@ -1,4 +1,4 @@
-import type { GraphNode } from "../../type"
+import type { GraphNode } from "../../client/type"
 
 export type RealationshipNodeType = GraphNode<{
   name: string

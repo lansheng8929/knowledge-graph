@@ -28,7 +28,8 @@ const entityDir = join(__dirname, kebabName)
 mkdirSync(entityDir, { recursive: true })
 
 // 生成type文件
-const typeContent = `import type { GraphNode } from "../../type"
+const typeContent = `import type { GraphNode } from "../../client/type"
+
 
 export type ${pascalName}NodeType = GraphNode<{
 }>

@@ -1,6 +1,4 @@
-import type ForceGraph from "force-graph"
-import type { EntityConfig, GraphLink, GraphNode } from ".."
-import imageCache from "./image-cache"
+import { imageCache } from "../image-cache"
 
 export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
   circle: function (
@@ -347,43 +345,4 @@ export function mergeObjects<T extends Record<string, any>>(
   }
 
   return result as T
-}
-
-const getGroups = (nodes: GraphNode[]) => {
-  return nodes.reduce((acc, curr) => {
-    const group = curr.group
-    if (!group) return acc
-    if (!acc[group]) acc[group] = []
-    acc[group].push(curr)
-    return acc
-  }, {} as Record<string, typeof nodes>)
-}
-
-const makeGroupForce = (
-  forceGraph: ForceGraph<GraphNode, GraphLink>,
-  groups: Record<string, GraphNode[]>
-) => {
-  // const clusterForce = () => {
-  //   function force(alpha: number) {
-  //     Object.keys(groups).forEach((group) => {
-  //       const nodes = groups[group];
-  //       if (nodes.length === 0) return;
-  //       let sumX = 0,
-  //         sumY = 0;
-  //       nodes.forEach((n) => {
-  //         sumX += n.x || 0;
-  //         sumY += n.y || 0;
-  //       });
-  //       const cx = sumX / nodes.length;
-  //       const cy = sumY / nodes.length;
-  //       nodes.forEach((node: GraphNode) => {
-  //         node.vx = (node.vx ?? 0) + (cx - (node.x ?? 0)) * alpha * 0.1;
-  //         node.vy = (node.vy ?? 0) + (cy - (node.y ?? 0)) * alpha * 0.1;
-  //       });
-  //     });
-  //   }
-  //   force.initialize = (nodes: GraphNode[]) => {};
-  //   return force;
-  // };
-  // forceGraph.d3Force("cluster", clusterForce());
 }

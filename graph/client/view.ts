@@ -9,9 +9,8 @@ import {
   DEFAULT_LINK_LABEL_SCALE_THRESHOLD,
   DEFAULT_STROKE_COLOR,
   MAX_FONT_SIZE,
-  nodeRenderProcessorMap,
 } from "./constants"
-import { ConnGraphModel, type Options } from "../model"
+import { ConnGraphModel } from "../model"
 import {
   getDefaultColorOf,
   getLinkStyleByType,
@@ -19,24 +18,17 @@ import {
   getNodeStyleByType,
   type GraphViewStyle,
   type Style,
-  type LinkStyle,
   getLinkStyleByStateType,
   type LStyle,
 } from "../theme"
 import { linkLabel, nodeLabel } from "./tooltip"
 import { mergeObjects, type RecursivePartial } from "./utils"
-import type {
-  GraphLink,
-  GraphNode,
-  GraphViewModel,
-  LinkId,
-  LinkState,
-  NodeId,
-  NodeState,
-} from "../type"
-import type { EntityConfig, NodeRenderProcessorMap } from "../entity"
+import type { LinkId, LinkState, NodeId, NodeState } from "../type"
+import { EntityRegistry } from "../entity/entity-registry"
 
 import ColorTracker from "canvas-color-tracker"
+import type { NodeRenderProcessorMap } from "../entity/entity-types"
+import type { GraphLink, GraphNode, GraphViewModel } from "./type"
 
 interface GraphModelActions {
   highlightNode(id: NodeId | undefined): void
@@ -60,8 +52,8 @@ interface GraphViewOptions {
   debug?: boolean
   arrowDisplay?: boolean
   customLinkCanvasObject?: CustomLinkCanvasObjectType
-  customEntityConfig?: EntityConfig
   defaultNodeStyle?: Partial<Style>
+  entityRegistry?: EntityRegistry
 }
 
 export class ConnGraphView {
@@ -77,6 +69,7 @@ export class ConnGraphView {
   declare forceGraphShadowCtx: CanvasRenderingContext2D | null
   declare toolShadowCanvas: HTMLCanvasElement | null
   declare toolShadowCtx: CanvasRenderingContext2D | null
+  public entityRegistry: EntityRegistry
 
   actions: GraphModelActions = {
     highlightNode: (nodeId: NodeId) => {
@@ -92,7 +85,8 @@ export class ConnGraphView {
     this.container = opts.container
     this.model = opts.graphModel
     this.imageCache = new Map()
-    this.nodeRenderProcessorMap = nodeRenderProcessorMap()
+    this.entityRegistry = opts.entityRegistry || new EntityRegistry()
+    this.nodeRenderProcessorMap = this.entityRegistry.getAll()
     this.colorTracker = this.model.colorTracker
     this.canvas = null
     this.forceGraphShadowCtx = null
@@ -323,7 +317,9 @@ export class ConnGraphView {
       .onRenderFramePost((ctx, globalScale) => {
         this.handleRenderFramePost({ ctx, globalScale })
       })
-      .showPointerCursor((_node) => !!_node)
+      .showPointerCursor((_node) => {
+        return Boolean(_node)
+      })
   }
 
   /**
@@ -350,12 +346,36 @@ export class ConnGraphView {
 
     this.toolShadowCtx = this.toolShadowCanvas.getContext("2d")
 
-    this.canvas.addEventListener("click", (event) => {
+    this.container.addEventListener("pointerup", (event) => {
       this.handleCanvasClick(event)
     })
-    this.canvas.addEventListener("mousemove", (event) => {
-      this.handleCanvasMouseMove(event)
+    this.container.addEventListener("pointermove", (event) => {
+      this.handleCanvasPointermove(event)
     })
+  }
+
+  /**
+   * 更新鼠标位置缓存
+   */
+  private handleCanvasPointermove(event: MouseEvent) {
+    if (!this.canvas || !this.toolShadowCtx) return
+
+    const rect = this.canvas.getBoundingClientRect()
+    const scaleX = this.canvas.width / rect.width
+    const scaleY = this.canvas.height / rect.height
+    const x = (event.clientX - rect.left) * scaleX
+    const y = (event.clientY - rect.top) * scaleY
+
+    const pxColor = this.toolShadowCtx.getImageData(x, y, 1, 1).data
+    const obj = this.colorTracker.lookup([pxColor[0], pxColor[1], pxColor[2]])
+
+    if (!obj) return (this.canvas.style.cursor = "")
+
+    switch (obj.type) {
+      case "PlusTool":
+        this.canvas.style.cursor = "pointer"
+        break
+    }
   }
 
   /**
@@ -374,44 +394,13 @@ export class ConnGraphView {
     const pxColor = this.toolShadowCtx.getImageData(x, y, 1, 1).data
     const obj = this.colorTracker.lookup([pxColor[0], pxColor[1], pxColor[2]])
 
-    if (obj) {
-      switch (obj.type) {
-        case "PlusTool":
-          this.model.events.publish("plusToolClick", obj.d as GraphNode)
-          event.stopPropagation()
-          break
-        default:
-          console.log("⚠️ 未知类型:", obj.type)
-      }
-    }
-  }
+    if (!obj) return
 
-  /**
-   * 处理画布鼠标移动
-   */
-  private handleCanvasMouseMove(event: MouseEvent) {
-    if (!this.canvas || !this.toolShadowCtx) return
-
-    const rect = this.canvas.getBoundingClientRect()
-
-    const scaleX = this.canvas.width / rect.width
-    const scaleY = this.canvas.height / rect.height
-    const x = (event.clientX - rect.left) * scaleX
-    const y = (event.clientY - rect.top) * scaleY
-
-    const pxColor = this.toolShadowCtx.getImageData(x, y, 1, 1).data
-    const obj = this.colorTracker.lookup([pxColor[0], pxColor[1], pxColor[2]])
-
-    if (obj) {
-      switch (obj.type) {
-        case "PlusTool":
-          this.canvas.style.cursor = "pointer"
-          break
-        default:
-          this.canvas.style.cursor = "default"
-      }
-    } else {
-      this.canvas.style.cursor = "default"
+    switch (obj.type) {
+      case "PlusTool":
+        this.model.events.publish("plusToolClick", obj.d as GraphNode)
+        event.stopPropagation()
+        break
     }
   }
 
@@ -689,8 +678,8 @@ export class ConnGraphView {
       .nodePointerAreaPaint(this.renderNodePointerArea)
       .linkCanvasObject(this.renderLink)
       .linkPointerAreaPaint(this.renderLinkPointerArea)
-      .nodeLabel((node) => nodeLabel(node, this.options.debug))
-      .linkLabel((link) => linkLabel(link, this.options.debug))
+      .nodeLabel((node) => nodeLabel(node as GraphNode, this.options.debug))
+      .linkLabel((link) => linkLabel(link as GraphLink, this.options.debug))
   }
 
   /**

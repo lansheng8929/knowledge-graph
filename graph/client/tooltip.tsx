@@ -1,7 +1,8 @@
+// 必须存在react导入
 import React from "react"
 
 import { renderToStaticMarkup } from "react-dom/server"
-import type { GraphLink, GraphNode, LinkObject, NodeObject } from "../type"
+import type { GraphLink, GraphNode } from "./type"
 
 function ToolTip({ node, debug }: { node: GraphNode; debug: boolean }) {
   return debug ? (
@@ -27,7 +28,7 @@ function ToolTip({ node, debug }: { node: GraphNode; debug: boolean }) {
   ) : null
 }
 
-const nodeLabel = (node: NodeObject, debug?: boolean) =>
+const nodeLabel = (node: GraphNode, debug?: boolean) =>
   renderToStaticMarkup(<ToolTip node={node} debug={debug ?? false} />)
 
 function LinkToolTip({ link, debug }: { link: GraphLink; debug?: boolean }) {
@@ -47,7 +48,7 @@ function LinkToolTip({ link, debug }: { link: GraphLink; debug?: boolean }) {
   ) : null
 }
 
-const linkLabel = (link: LinkObject, debug?: boolean) =>
+const linkLabel = (link: GraphLink, debug?: boolean) =>
   renderToStaticMarkup(<LinkToolTip link={link} debug={debug ?? false} />)
 
 export { nodeLabel, linkLabel }

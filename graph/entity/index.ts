@@ -1,11 +1,9 @@
 /**
  * 默认导出
- * 自动导出所有实体的类型
+ * 自动导出所有实体的类型（服务端安全）
  */
 
-// 导出所有实体的类型定义
-export * from "./entity-types"
-
+// 导出各个实体的类型定义（不包含客户端渲染代码）
 export * from "./bankcard/bankcard.type"
 
 export * from "./case/case.type"

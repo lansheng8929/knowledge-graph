@@ -1,5 +1,5 @@
 import type { NodeId } from "./type"
-import { ConnGraphEvents } from "./client/events"
+import { ConnGraphEvents } from "./events"
 
 export interface NodeLoadingState {
   nodeId: NodeId
