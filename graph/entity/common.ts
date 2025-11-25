@@ -92,10 +92,13 @@ export const entityCommonRenderer = {
     globalScale,
   }: Parameters<EntityRenderer["renderNodeCanvasObject"]>[0]) => {
     const { x = 0, y = 0 } = node
-    const { count = 0 } = node.data || {}
+    const { total, count } = node.data || {}
     const { radius = DEFAULT_RADIUS, textColor = DEFAULT_TEXT_COLOR } = style
 
-    if (count > 1) {
+    const canLoadMore =
+      total !== undefined && count !== undefined && count < total
+
+    if (canLoadMore) {
       makeDrawWrapper(ctx).drawPlusTool(textColor, x, y, radius, globalScale)
     }
   },
@@ -116,16 +119,13 @@ export const entityCommonRenderer = {
     NonNullable<EntityRenderer["renderNodeToolsPointerArea"]>
   >[0]) => {
     const { x = 0, y = 0 } = node
-    const { count = 0, pageIndex, pageSize } = node.data || {}
+    const { total, count } = node.data || {}
     const { radius = DEFAULT_RADIUS } = style
-    console.log("(pageIndex + 1) * pageSize ", (pageIndex + 1) * pageSize)
 
     const canLoadMore =
-      pageSize !== undefined && pageIndex !== undefined && pageIndex !== -1
-        ? (pageIndex + 1) * pageSize < count
-        : true
+      total !== undefined && count !== undefined && count < total
 
-    if (indexColor && shadowCtx && count > 1 && canLoadMore) {
+    if (indexColor && canLoadMore) {
       makeDrawWrapper(shadowCtx!).drawPlusToolArea(
         indexColor,
         x,

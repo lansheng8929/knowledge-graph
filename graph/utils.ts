@@ -24,13 +24,26 @@ export const mergeModelGraphData = <G extends GraphDataGenerics>(
 
       if (existingNode.data && node.data) {
         // 新值覆盖旧值，保留原有的 pageIndex 和 pageSize 如果它们存在
-        existingNode.data = {
-          ...existingNode.data,
-          ...node.data,
-          pageIndex: existingNode.data.pageIndex ?? node.data.pageIndex,
-          pageSize: existingNode.data.pageSize ?? node.data.pageSize,
-        }
+        // existingNode.data = {
+        //   ...existingNode.data,
+        //   ...node.data,
+        //   pageIndex:
+        //     existingNode.data.pageIndex !== undefined
+        //       ? existingNode.data.pageIndex
+        //       : node.data.pageIndex,
+        //   count:
+        //     existingNode.data.count !== undefined
+        //       ? existingNode.data.count
+        //       : node.data.count,
+        //   total:
+        //     existingNode.data.total !== undefined
+        //       ? existingNode.data.total
+        //       : node.data.total,
+        // }
+
+        existingNode.data = node.data
       }
+
       if (existingNode.x === undefined) existingNode.x = node.x
       if (existingNode.y === undefined) existingNode.y = node.y
       if (existingNode.fx === undefined) existingNode.fx = node.fx
@@ -61,16 +74,8 @@ export const mergeModelGraphData = <G extends GraphDataGenerics>(
   return prevGraphData
 }
 
-export const getPaginator = (
-  pageIndex?: number,
-  pageSize?: number,
-  total?: number
-) => {
-  return `(${
-    pageIndex !== undefined && pageSize !== undefined
-      ? Math.min((pageIndex + 1) * pageSize, total || 0) + "/"
-      : ""
-  }${total || 0})`
+export const getPaginator = (count?: number, total?: number) => {
+  return `(${count !== undefined ? count : 0}/${total || 0})`
 }
 
 export type RecursivePartial<T> = {

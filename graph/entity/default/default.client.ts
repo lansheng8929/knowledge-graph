@@ -17,7 +17,7 @@ export const createDefaultEntity: EntityCreator = () => {
   return {
     renderNodeCanvasObject: ({ node, ctx, globalScale, style }) => {
       const { x = 0, y = 0 } = node
-      const { label, pageIndex, pageSize, count, icon } =
+      const { label, count, total, icon } =
         (node.data as DefaultNodeType["data"]) ?? {}
 
       const {
@@ -50,7 +50,7 @@ export const createDefaultEntity: EntityCreator = () => {
       }
 
       if (globalScale > DEFAULT_NODE_LABEL_SCALE_THRESHOLD) {
-        const paginator = getPaginator(pageIndex, pageSize, count)
+        const paginator = getPaginator(count, total)
 
         makeDrawWrapper(ctx).text(
           `${label}${paginator}`,

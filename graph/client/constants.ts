@@ -1,5 +1,6 @@
 import type { EntityCreator } from "../entity/entity-types"
 import * as Entity from "../entity/index.client"
+import type { NodeType } from "../type"
 
 export const ACCOUNT_NODE_TYPE = "account"
 
@@ -24,23 +25,9 @@ export const DEFAULT_LINK_LABEL_SCALE_THRESHOLD = 5
  * 获取默认的实体创建器映射
  * 这些是内置的节点类型，可以通过 EntityRegistry 进行注册
  */
-export const getDefaultEntityCreators = (): Record<string, EntityCreator> => ({
-  factor: Entity.createFactorEntity,
-  case: Entity.createCaseEntity,
-  server: Entity.createServerEntity,
-  paginator: Entity.createPaginatorEntity,
-  relationship: Entity.createRelationshipEntity,
-  phone: Entity.createPhoneEntity,
-  id_card: Entity.createIdcardEntity,
-  bank_card: Entity.createBankCardEntity,
-  mac: Entity.createMacEntity,
-  user_case: Entity.createUserCaseEntity,
-  material: Entity.createMaterialEntity,
-  orders: Entity.createOrdersEntity,
-  user_account: Entity.createUserAccountEntity,
-  ipv4: Entity.createIpv4Entity,
-  email: Entity.createEmailEntity,
+export const getDefaultEntityCreators = (): Record<
+  NodeType,
+  EntityCreator
+> => ({
   default: Entity.createDefaultEntity,
-  ipv6: Entity.createIpv6Entity,
-  company: Entity.createCompanyEntity,
 })

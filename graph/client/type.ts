@@ -14,10 +14,10 @@ export type { LinkObject, NodeObject } from "force-graph"
  * 统一的图数据泛型参数
  */
 export interface GraphDataGenerics {
-  NO?: object
+  NO: object
   NT: string
   NS: string
-  LO?: object
+  LO: object
   LT: string
   LS: string
 }
@@ -38,7 +38,7 @@ export type DefaultGraphDataGenerics = {
  * 程序中的边数据统一类型
  */
 export interface GraphLink<
-  D = object,
+  D extends object = object,
   T extends string = LinkType,
   S extends string = LinkState
 > {
@@ -48,29 +48,6 @@ export interface GraphLink<
   ranking?: number
   data?: GraphLinkInfo<D, T, S>
 }
-
-/** 全要素图谱边类型 */
-export type ConnLinkType = GraphLink<{
-  type?: string // 'doc.alipay'
-  action?: string // '登录'
-  accType?: string // 'alipay'
-  reason?: string
-  // event_time: {
-  //   year: number;
-  //   month: number;
-  //   day: number;
-  //   hour: number;
-  //   minute: number;
-  //   sec: number;
-  //   microsec: number;
-  // };
-  foryear?: string // '2024'
-  formonth?: string // '202403'
-  forhour?: string // '2024032610'
-  forminute?: string // '202403261042'
-  forday?: string // '20240326'
-  forsecond?: string // '20240326104215'
-}>
 
 export interface GraphViewModelGraphData<
   G extends GraphDataGenerics = DefaultGraphDataGenerics
@@ -92,7 +69,7 @@ export type GraphViewModel<
  * 程序中的节点数据统一类型
  */
 export interface GraphNode<
-  D = object,
+  D extends object = object,
   T extends string = NodeType,
   S extends string = NodeState
 > {
@@ -112,16 +89,16 @@ export interface GraphNode<
  * 节点附加信息类型
  */
 export type GraphNodeInfo<
-  D = object,
+  D extends object = object,
   T extends string = NodeType,
   S extends string = NodeState
 > = {
   nodeType?: T
   stateType?: S
   label?: string
-  count?: number
-  pageSize?: number
   pageIndex?: number
+  count?: number
+  total?: number
 } & D
 
 /**

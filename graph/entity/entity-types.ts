@@ -6,75 +6,69 @@ import type { LoadingManager } from "../loading-manager"
 import type { GraphNode } from "../client/type"
 import type { NodeType, NodeState, LinkType } from "../type"
 
-export interface EntityRenderer<
-  T extends string = NodeType,
-  S extends string = NodeState
-> {
-  renderNodeCanvasObject: (props: {
-    node: GraphNode<{
-      nodeType?: T
-      stateType?: S
-    }>
-    ctx: CanvasRenderingContext2D
-    globalScale: number
-    style: Style
-    colorTracker: ColorTracker
-    tagManager: TagManager
-    loadingManager: LoadingManager
-  }) => void
+export interface ManagerProps {
+  tagManager: TagManager
+  loadingManager: LoadingManager
+}
 
-  renderNodePointerArea: (props: {
-    node: GraphNode<{
-      nodeType?: T
-      stateType?: S
-    }>
-    indexColor: string
-    ctx: CanvasRenderingContext2D
-    style: Style
-    globalScale: number
-    colorTracker: ColorTracker
-    tagManager: TagManager
-    shadowCtx: CanvasRenderingContext2D
-  }) => void
+import type { GraphDataGenerics } from "../client"
 
-  renderNodeTools?: (props: {
-    node: GraphNode<{
-      nodeType?: T
-      stateType?: S
-    }>
-    indexColor: string
-    ctx: CanvasRenderingContext2D
-    style: Style
-    globalScale: number
-    colorTracker: ColorTracker
-    tagManager: TagManager
-    shadowCtx: CanvasRenderingContext2D
-  }) => void
+export interface EntityRenderer<G extends GraphDataGenerics> {
+  renderNodeCanvasObject: (
+    props: {
+      node: GraphNode<G["NO"], G["NT"], G["NS"]>
+      ctx: CanvasRenderingContext2D
+      globalScale: number
+      style: Style
+      colorTracker: ColorTracker
+    } & ManagerProps
+  ) => void
 
-  renderNodeToolsPointerArea?: (props: {
-    node: GraphNode<{
-      nodeType?: T
-      stateType?: S
-    }>
-    indexColor?: string
-    ctx: CanvasRenderingContext2D
-    style: Style
-    globalScale: number
-    colorTracker: ColorTracker
-    tagManager: TagManager
-    shadowCtx: CanvasRenderingContext2D
-  }) => void
+  renderNodePointerArea: (
+    props: {
+      node: GraphNode<G["NO"], G["NT"], G["NS"]>
+      indexColor: string
+      ctx: CanvasRenderingContext2D
+      style: Style
+      globalScale: number
+      colorTracker: ColorTracker
+      shadowCtx: CanvasRenderingContext2D
+    } & ManagerProps
+  ) => void
+
+  renderNodeTools?: (
+    props: {
+      node: GraphNode<G["NO"], G["NT"], G["NS"]>
+      indexColor: string
+      ctx: CanvasRenderingContext2D
+      style: Style
+      globalScale: number
+      colorTracker: ColorTracker
+      shadowCtx: CanvasRenderingContext2D
+    } & ManagerProps
+  ) => void
+
+  renderNodeToolsPointerArea?: (
+    props: {
+      node: GraphNode<G["NO"], G["NT"], G["NS"]>
+      indexColor?: string
+      ctx: CanvasRenderingContext2D
+      style: Style
+      globalScale: number
+      colorTracker: ColorTracker
+      shadowCtx: CanvasRenderingContext2D
+    } & ManagerProps
+  ) => void
 
   getCollisionRadius: (props: {
-    node: GraphNode<{
-      nodeType?: T
-      stateType?: S
-    }>
+    node: GraphNode<G["NO"], G["NT"], G["NS"]>
     style: Style
   }) => number
 }
 
-export type EntityCommonRenderer = Partial<EntityRenderer>
+export type EntityCommonRenderer<G extends GraphDataGenerics = any> = Partial<
+  EntityRenderer<G>
+>
 
 export interface EntityStyleConfig {
   radius?: number
@@ -86,15 +80,12 @@ export interface EntityStyleConfig {
   opacity?: number
 }
 
-export type EntityCreator<
-  T extends string = NodeType,
-  S extends string = NodeState
-> = () => EntityRenderer<T, S>
+export type EntityCreator<G extends GraphDataGenerics> = () => EntityRenderer<G>
 
-export type NodeRenderProcessorMap<T extends string = NodeType> = Partial<
-  Record<T, EntityRenderer>
+export type NodeRenderProcessorMap<G extends GraphDataGenerics> = Partial<
+  Record<G["NT"], EntityRenderer<G>>
 >
 
-export type LinkRenderProcessorMap<T extends string = LinkType> = Partial<
-  Record<T, EntityRenderer>
+export type LinkRenderProcessorMap<G extends GraphDataGenerics> = Partial<
+  Record<G["LT"], EntityRenderer<G>>
 >

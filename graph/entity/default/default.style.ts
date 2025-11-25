@@ -1,6 +1,7 @@
+import type { DefaultGraphDataGenerics } from "../../client"
 import type { NodeStyle } from "../../theme"
 
-export const defaultNodeStyle: NodeStyle = {
+export const defaultNodeStyle: NodeStyle<DefaultGraphDataGenerics> = {
   regular: {
     bgColor: "#fff",
     strokeColor: "#000",

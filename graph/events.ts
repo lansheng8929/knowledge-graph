@@ -8,7 +8,6 @@ import type {
   GraphDataGenerics,
   DefaultGraphDataGenerics,
 } from "./client/type"
-
 // 定义事件类型
 export interface GraphEventMap<
   G extends GraphDataGenerics = DefaultGraphDataGenerics

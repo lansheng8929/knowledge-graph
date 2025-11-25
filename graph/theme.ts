@@ -1,15 +1,28 @@
 import type { LinkState, LinkType, NodeState, NodeType } from "./type"
-import { bankcardNodeStyle } from "./entity/bankcard/bankcard.style"
-import { caseNodeStyle } from "./entity/case/case.style"
-import { factorNodeStyle } from "./entity/factor/factor.style"
-import { phoneNodeStyle } from "./entity/phone/phone.style"
-import { serverNodeStyle } from "./entity/server/server.style"
 import { defaultNodeStyle } from "./entity/default/default.style"
+import type { DefaultGraphDataGenerics, GraphDataGenerics } from "./client"
 
-export interface GraphViewStyle {
+/**
+ * 定义图视图的视觉样式配置。
+ *
+ * @template G - 图数据泛型类型,默认为 DefaultGraphDataGenerics
+ *
+ * @property background - 图视图的背景颜色或样式
+ * @property node - 节点类型到其对应样式的映射,需要提供 'unknown' 作为回退样式
+ * @property link - 连接线类型到其对应样式的映射,需要提供 'unknown' 作为回退样式
+ *
+ * @remarks
+ * - node 和 link 属性使用 Partial 记录类型,允许每种类型的样式为可选
+ * - node 和 link 都需要一个 'unknown' 样式作为未识别类型的回退
+ * - G["NT"] 表示从图数据泛型中获取的节点类型判别器
+ * - G["LT"] 表示从图数据泛型中获取的连接线类型判别器
+ */
+export interface GraphViewStyle<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
+> {
   background: string
-  node: Partial<Record<NodeType, NodeStyle>> & { unknown: NodeStyle }
-  link: Partial<Record<LinkType, LinkStyle>> & { unknown: LinkStyle }
+  node: Partial<Record<G["NT"], NodeStyle<G>>>
+  link: Partial<Record<G["LT"], LinkStyle<G>>>
 }
 
 export interface Style {
@@ -23,7 +36,7 @@ export interface Style {
   opacity?: number
   light?: string
 }
-export type NodeStyle = Record<NodeState, Style>
+export type NodeStyle<G extends GraphDataGenerics> = Record<G["NS"], Style>
 
 export interface LStyle {
   color?: string
@@ -31,7 +44,7 @@ export interface LStyle {
   opacity?: number
   light?: string
 }
-export type LinkStyle = Record<LinkState, LStyle>
+export type LinkStyle<G extends GraphDataGenerics> = Record<G["LS"], LStyle>
 
 export const getColorOnContainer = (
   container: HTMLElement,
@@ -42,31 +55,12 @@ export const getColorOnContainer = (
 }
 
 // 节点配置：定义每个类型的特定属性
-const nodeConfigs: Record<NodeType | "unknown", NodeStyle> = {
-  server: defaultNodeStyle,
-  phone: defaultNodeStyle,
-  bank_card: defaultNodeStyle,
-  case: defaultNodeStyle,
-  factor: defaultNodeStyle,
+const nodeConfigs: Record<NodeType, NodeStyle<DefaultGraphDataGenerics>> = {
   default: defaultNodeStyle,
-  unknown: defaultNodeStyle,
-  relationship: defaultNodeStyle,
-  reason: defaultNodeStyle,
-  user_account: defaultNodeStyle,
-  user_case: defaultNodeStyle,
-  id_card: defaultNodeStyle,
-  material: defaultNodeStyle,
-  mac: defaultNodeStyle,
-  orders: defaultNodeStyle,
-  ipv4: defaultNodeStyle,
-  paginator: defaultNodeStyle,
-  email: defaultNodeStyle,
-  ipv6: defaultNodeStyle,
-  company: defaultNodeStyle,
 }
 
 // 辅助函数：从容器获取属性值，支持缓存
-const getCachedProperty = (
+export const getCachedProperty = (
   computedStyle: CSSStyleDeclaration,
   name: string,
   fallback: string
@@ -120,54 +114,52 @@ const createDefaultNodeStyle = (
 })
 
 /**
- * 通过使用提供的计算 CSS 样式、节点类型、配置和可选的默认覆盖，为每个节点状态（regular、highlighted、selected、hidden 和 root）生成样式，从而创建一个 NodeStyle 对象。
+ * 通过使用提供的计算 CSS 样式、节点类型和配置，为每个节点状态（regular、highlighted、selected、hidden 和 root）生成样式，从而创建一个 NodeStyle 对象。
  *
  * @param computedStyle - 用于基于节点样式的计算 CSS 样式声明。
  * @param type - 节点的类型，可以是 NodeType、"default" 或 "unknown"。
  * @param config - 节点样式的基本配置。
- * @param defaultOverrides - 可选的部分样式覆盖，应用于所有节点状态。
  * @returns 包含每个节点状态样式的 NodeStyle 对象。
  */
 const createNodeStyles = (
   computedStyle: CSSStyleDeclaration,
-  type: NodeType | "default" | "unknown",
-  config: NodeStyle,
-  defaultOverrides?: Partial<Style>
-): NodeStyle => {
+  type: NodeType | "default",
+  config: NodeStyle<DefaultGraphDataGenerics>
+): NodeStyle<DefaultGraphDataGenerics> => {
   return {
-    regular: createDefaultNodeStyle(computedStyle, type, "regular", {
-      ...config.regular,
-      ...defaultOverrides,
-    }),
-    highlighted: createDefaultNodeStyle(computedStyle, type, "highlighted", {
-      ...config.highlighted,
-      ...defaultOverrides,
-    }),
-    selected: createDefaultNodeStyle(computedStyle, type, "selected", {
-      ...config.selected,
-      ...defaultOverrides,
-    }),
-    hidden: createDefaultNodeStyle(computedStyle, type, "hidden", {
-      ...config.hidden,
-      ...defaultOverrides,
-    }),
-    root: createDefaultNodeStyle(computedStyle, "server", "root", {
-      ...config.root,
-      ...defaultOverrides,
-    }),
+    regular: createDefaultNodeStyle(
+      computedStyle,
+      type,
+      "regular",
+      config.regular
+    ),
+    highlighted: createDefaultNodeStyle(
+      computedStyle,
+      type,
+      "highlighted",
+      config.highlighted
+    ),
+    selected: createDefaultNodeStyle(
+      computedStyle,
+      type,
+      "selected",
+      config.selected
+    ),
+    hidden: createDefaultNodeStyle(
+      computedStyle,
+      type,
+      "hidden",
+      config.hidden
+    ),
+    root: createDefaultNodeStyle(computedStyle, "server", "root", config.root),
   }
 }
 
-export const getDefaultColorOf = (opts: {
-  container?: HTMLElement
-  defaultNodeStyle?: Partial<Style>
-}): GraphViewStyle => {
-  const container = opts.container || document.body
+export const getDefaultColorOf = <G extends GraphDataGenerics>(
+  container: HTMLElement
+): GraphViewStyle<G> => {
   // 缓存样式计算
   const computedStyle = getComputedStyle(container)
-
-  // 自定义默认节点样式覆盖
-  const defaultOverrides = opts.defaultNodeStyle || {}
 
   return {
     background: getCachedProperty(
@@ -176,111 +168,14 @@ export const getDefaultColorOf = (opts: {
       "#f7f7f7"
     ),
     node: {
-      server: createNodeStyles(
-        computedStyle,
-        "server",
-        nodeConfigs["server"],
-        defaultOverrides
-      ),
-      phone: createNodeStyles(
-        computedStyle,
-        "phone",
-        nodeConfigs["phone"],
-        defaultOverrides
-      ),
-      bank_card: createNodeStyles(
-        computedStyle,
-        "bank_card",
-        nodeConfigs["bank_card"],
-        defaultOverrides
-      ),
-      case: createNodeStyles(
-        computedStyle,
-        "case",
-        nodeConfigs["case"],
-        defaultOverrides
-      ),
-      factor: createNodeStyles(
-        computedStyle,
-        "factor",
-        nodeConfigs["factor"],
-        defaultOverrides
-      ),
       default: createNodeStyles(
         computedStyle,
         "default",
-        nodeConfigs["default"],
-        defaultOverrides
-      ),
-      unknown: createNodeStyles(
-        computedStyle,
-        "unknown",
-        nodeConfigs["unknown"],
-        defaultOverrides
-      ),
-      relationship: createNodeStyles(
-        computedStyle,
-        "relationship",
-        nodeConfigs["relationship"],
-        defaultOverrides
-      ),
-      reason: createNodeStyles(
-        computedStyle,
-        "reason",
-        nodeConfigs["reason"],
-        defaultOverrides
-      ),
-      user_account: createNodeStyles(
-        computedStyle,
-        "user_account",
-        nodeConfigs["user_account"],
-        defaultOverrides
-      ),
-      user_case: createNodeStyles(
-        computedStyle,
-        "user_case",
-        nodeConfigs["user_case"],
-        defaultOverrides
-      ),
-      id_card: createNodeStyles(
-        computedStyle,
-        "id_card",
-        nodeConfigs["id_card"],
-        defaultOverrides
-      ),
-      material: createNodeStyles(
-        computedStyle,
-        "material",
-        nodeConfigs["material"],
-        defaultOverrides
-      ),
-      mac: createNodeStyles(
-        computedStyle,
-        "mac",
-        nodeConfigs["mac"],
-        defaultOverrides
-      ),
-      orders: createNodeStyles(
-        computedStyle,
-        "orders",
-        nodeConfigs["orders"],
-        defaultOverrides
-      ),
-      ipv4: createNodeStyles(
-        computedStyle,
-        "ipv4",
-        nodeConfigs["ipv4"],
-        defaultOverrides
-      ),
-      paginator: createNodeStyles(
-        computedStyle,
-        "paginator",
-        nodeConfigs["paginator"],
-        defaultOverrides
-      ),
-    },
+        nodeConfigs["default"]
+      ) as NodeStyle<G>,
+    } as Partial<Record<G["NT"], NodeStyle<G>>>,
     link: {
-      unknown: {
+      default: {
         regular: {
           color: getCachedProperty(
             computedStyle,
@@ -347,71 +242,58 @@ export const getDefaultColorOf = (opts: {
             )
           ),
         },
-      },
-    },
+      } as LinkStyle<G>,
+    } as Partial<Record<G["LT"], LinkStyle<G>>>,
   }
 }
-
-const getNodeStyle = (v: NodeStyle): NodeStyle => {
+const getNodeStyle = <G extends GraphDataGenerics>(
+  v: NodeStyle<G>
+): NodeStyle<G> => {
   return v
 }
 
-export const getNodeStyleByType = (
-  style: GraphViewStyle,
-  type?: NodeType
-): NodeStyle => {
-  if (!type) return getNodeStyle(style.node.unknown)
-
+export const getNodeStyleByType = <G extends GraphDataGenerics>(
+  style: GraphViewStyle<G>,
+  type?: G["NT"]
+): NodeStyle<G> => {
+  if (!type) return {} as NodeStyle<G>
   const v = style.node[type]
-  if (!v) {
-    const unknownStyle = getNodeStyle(style.node.unknown)
-    return unknownStyle
-  }
-  return getNodeStyle(v)
+  if (v) return getNodeStyle<G>(v)
+  return {} as NodeStyle<G>
 }
 
-export const getNodeStyleByStateType = (
-  style: NodeStyle,
-  type?: NodeState
+export const getNodeStyleByStateType = <G extends GraphDataGenerics>(
+  style: NodeStyle<G>,
+  type?: G["NS"]
 ): Style => {
-  if (!type) return style.regular
-
+  if (!type) return {} as Style
   const v = style[type]
-  if (!v) {
-    return style.regular
-  }
+  if (v) return v
+  return {} as Style
+}
 
+const getLinkStyle = <G extends GraphDataGenerics>(
+  v: LinkStyle<G>
+): LinkStyle<G> => {
   return v
 }
 
-const getLinkStyle = (v: LinkStyle): LinkStyle => {
-  return v
+export const getLinkStyleByType = <G extends GraphDataGenerics>(
+  style: GraphViewStyle<G>,
+  type?: G["LT"]
+): LinkStyle<G> => {
+  if (!type) return {} as LinkStyle<G>
+  const v = style.link[type as G["LT"]]
+  if (v) return getLinkStyle<G>(v)
+  return {} as LinkStyle<G>
 }
 
-export const getLinkStyleByType = (
-  style: GraphViewStyle,
-  type?: LinkType
-): LinkStyle => {
-  if (!type) return getLinkStyle(style.link.unknown)
-
-  const v = style.link[type]
-  if (!v) {
-    const unknownStyle = getLinkStyle(style.link.unknown)
-    return unknownStyle
-  }
-  return getLinkStyle(v)
-}
-
-export const getLinkStyleByStateType = (
-  style: LinkStyle,
-  type?: LinkState
+export const getLinkStyleByStateType = <G extends GraphDataGenerics>(
+  style: LinkStyle<G>,
+  type?: G["LS"]
 ): LStyle => {
-  if (!type) return style.regular
-
+  if (!type) return {} as LStyle
   const v = style[type]
-  if (!v) {
-    return style.regular
-  }
-
-  return v
+  if (v) return v
+  return {} as LStyle
 }

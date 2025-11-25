@@ -6,33 +6,8 @@ export type NodeState =
   | "hidden"
 export type LinkState = "regular" | "highlighted" | "selected" | "hidden"
 
-export type NodeType =
-  | "default"
-  | "relationship"
-  | "case"
-  | "reason"
-  | "factor"
-  | "user_account"
-  | "user_case"
-  | "phone"
-  | "id_card"
-  | "bank_card"
-  | "material"
-  | "mac"
-  | "orders"
-  | "ipv4"
-  | "paginator"
-  | "server"
-  | "email"
-  | "ipv6"
-  | "company"
-export type LinkType =
-  | "default"
-  | "binding"
-  | "access"
-  | "owner"
-  | "transaction"
-  | "friend"
+export type NodeType = "default"
+export type LinkType = "default"
 
 /** 节点ID类型 */
 export type NodeId = string

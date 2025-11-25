@@ -28,7 +28,13 @@ import { EntityRegistry } from "../entity/entity-registry"
 
 import ColorTracker from "canvas-color-tracker"
 import type { NodeRenderProcessorMap } from "../entity/entity-types"
-import type { GraphLink, GraphNode, GraphViewModel } from "./type"
+import type {
+  DefaultGraphDataGenerics,
+  GraphDataGenerics,
+  GraphLink,
+  GraphNode,
+  GraphViewModel,
+} from "./type"
 
 interface GraphModelActions {
   highlightNode(id: NodeId | undefined): void
@@ -39,37 +45,41 @@ export type CustomLinkCanvasObjectType = Parameters<
   ForceGraph["linkCanvasObject"]
 >[0]
 
-export type CustomGraphViewStyle = RecursivePartial<GraphViewStyle>
+export type CustomGraphViewStyle<G extends GraphDataGenerics> =
+  RecursivePartial<GraphViewStyle<G>>
 export type CustomNodeStyle = RecursivePartial<Style>
 
-interface GraphViewOptions {
+interface GraphViewOptions<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
+> {
   container: HTMLElement
-  graphModel: ConnGraphModel
+  graphModel: ConnGraphModel<G>
   width?: number
   height?: number
   backgroundColor?: string
-  style?: CustomGraphViewStyle
+  // 全局自定义style
+  style?: CustomGraphViewStyle<G>
   debug?: boolean
   arrowDisplay?: boolean
   customLinkCanvasObject?: CustomLinkCanvasObjectType
-  defaultNodeStyle?: Partial<Style>
-  entityRegistry?: EntityRegistry
+  entityRegistry?: EntityRegistry<G>
 }
 
-export class ConnGraphView {
-  declare options: GraphViewOptions
+export class ConnGraphView<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
+> {
+  declare options: GraphViewOptions<G>
   declare container: HTMLElement
   declare forceGraph: ForceGraph
-  declare model: ConnGraphModel
-  declare style: GraphViewStyle
-  declare imageCache: Map<string, HTMLImageElement>
-  declare nodeRenderProcessorMap: NodeRenderProcessorMap
+  declare model: ConnGraphModel<G>
+  declare style: GraphViewStyle<G>
+  declare nodeRenderProcessorMap: NodeRenderProcessorMap<G>
   declare colorTracker: ColorTracker
   declare canvas: HTMLCanvasElement | null
   declare forceGraphShadowCtx: CanvasRenderingContext2D | null
   declare toolShadowCanvas: HTMLCanvasElement | null
   declare toolShadowCtx: CanvasRenderingContext2D | null
-  public entityRegistry: EntityRegistry
+  declare entityRegistry: EntityRegistry<G>
 
   actions: GraphModelActions = {
     highlightNode: (nodeId: NodeId) => {
@@ -80,18 +90,18 @@ export class ConnGraphView {
     },
   }
 
-  constructor(opts: GraphViewOptions) {
+  constructor(opts: GraphViewOptions<G>) {
     this.options = opts
     this.container = opts.container
     this.model = opts.graphModel
-    this.imageCache = new Map()
-    this.entityRegistry = opts.entityRegistry || new EntityRegistry()
-    this.nodeRenderProcessorMap = this.entityRegistry.getAll()
     this.colorTracker = this.model.colorTracker
     this.canvas = null
     this.forceGraphShadowCtx = null
     this.toolShadowCanvas = null
     this.toolShadowCtx = null
+
+    this.entityRegistry = opts.entityRegistry || new EntityRegistry()
+    this.nodeRenderProcessorMap = this.entityRegistry.getAll()
 
     this.initStyle()
     this.initView()
@@ -137,7 +147,7 @@ export class ConnGraphView {
    * 获取连线的曲线信息
    */
   private getLinkCurveOffset(
-    link: GraphLink,
+    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
     linkCountMap: Map<string, { total: number; links: Map<string, number> }>
   ): number {
     const sourceId =
@@ -171,20 +181,20 @@ export class ConnGraphView {
   /**
    * 更新模型数据
    */
-  updateModel(graphViewModel: Partial<GraphViewModel>) {
+  updateModel(graphViewModel: Partial<GraphViewModel<G>>) {
     this.updateView(graphViewModel)
   }
 
   /**
    * 更新视图
    */
-  updateView(graphViewModel: Partial<GraphViewModel>) {
+  updateView(graphViewModel: Partial<GraphViewModel<G>>) {
     if (!this.forceGraph) return
 
     if (graphViewModel.graphData) {
       this.forceGraph.graphData(graphViewModel.graphData)
       const newGraphData =
-        this.forceGraph.graphData() as GraphViewModel["graphData"]
+        this.forceGraph.graphData() as GraphViewModel<G>["graphData"]
 
       this.model.updateGraphData({
         graphData: newGraphData,
@@ -213,9 +223,8 @@ export class ConnGraphView {
   /**
    * 更新样式
    */
-  updateStyle(options: Pick<GraphViewOptions, "style" | "defaultNodeStyle">) {
+  updateStyle(options: Pick<GraphViewOptions<G>, "style">) {
     this.options.style = options.style
-    this.options.defaultNodeStyle = options.defaultNodeStyle
 
     this.refreshByStyle()
   }
@@ -226,11 +235,11 @@ export class ConnGraphView {
    * 初始化样式
    */
   protected initStyle() {
-    this.style = mergeObjects(this.style, this.options.style || {})
-    this.style = getDefaultColorOf({
-      container: this.container,
-      defaultNodeStyle: this.options.defaultNodeStyle,
-    })
+    if (this.options.style) {
+      this.style = mergeObjects(this.style, this.options.style || {})
+    } else {
+      this.style = getDefaultColorOf<G>(this.container)
+    }
 
     this.refreshByStyle()
   }
@@ -398,7 +407,10 @@ export class ConnGraphView {
 
     switch (obj.type) {
       case "PlusTool":
-        this.model.events.publish("plusToolClick", obj.d as GraphNode)
+        this.model.events.publish(
+          "plusToolClick",
+          obj.d as GraphNode<G["NO"], G["NT"], G["NS"]>
+        )
         event.stopPropagation()
         break
     }
@@ -409,15 +421,15 @@ export class ConnGraphView {
   /**
    * 处理节点点击
    */
-  private handleNodeClick(node: GraphNode | undefined, event?: MouseEvent) {
+  private handleNodeClick(
+    node: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined,
+    event?: MouseEvent
+  ) {
     if (!node?.data?.nodeType) return
 
     const { nodeType } = node.data
 
     switch (nodeType) {
-      case "paginator":
-        this.model.events.publish("loadMore", node)
-        break
       default:
         this.actions.selectNode(String(node.id))
         this.model.events.publish("nodeClick", node)
@@ -430,7 +442,7 @@ export class ConnGraphView {
    */
   private handleNodeRightClick(
     _node: NodeObject,
-    node: GraphNode | undefined,
+    node: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined,
     event: MouseEvent
   ) {
     if (!node?.data?.nodeType) return
@@ -501,9 +513,9 @@ export class ConnGraphView {
         const state = this.getNodeState(node)
         const style = getNodeStyleByStateType(nodeStyle, state)
 
-        const processor =
-          this.nodeRenderProcessorMap[nodeType || "default"] ||
-          this.nodeRenderProcessorMap["default"]
+        const processor = nodeType
+          ? this.nodeRenderProcessorMap[nodeType]
+          : undefined
 
         processor?.renderNodeToolsPointerArea?.({
           node: node,
@@ -512,8 +524,9 @@ export class ConnGraphView {
           style: style,
           globalScale: globalScale,
           colorTracker: this.colorTracker,
-          tagManager: this.model.tagManager,
           shadowCtx: this.toolShadowCtx!,
+          tagManager: this.model.tagManager,
+          loadingManager: this.model.loadingManager,
         })
       })
     }
@@ -547,7 +560,7 @@ export class ConnGraphView {
    * 创建碰撞力
    */
   private createCollisionForce() {
-    const getCollisionRadius = (node: GraphNode) => {
+    const getCollisionRadius = (node: GraphNode<G["NO"], G["NT"], G["NS"]>) => {
       const { nodeType } = node?.data || {}
       if (!nodeType) return 0
 
@@ -579,8 +592,10 @@ export class ConnGraphView {
   /**
    * 获取节点状态
    */
-  protected getNodeState(node?: GraphNode): NodeState {
-    if (!node) return "regular"
+  protected getNodeState(
+    node?: GraphNode<G["NO"], G["NT"], G["NS"]>
+  ): G["NS"] | undefined {
+    if (!node) return undefined
 
     const nodeId = node.id
     const { stateType } = node.data || {}
@@ -592,14 +607,16 @@ export class ConnGraphView {
     if (selectedNodes?.some((id) => id === nodeId)) return "selected"
     if (hiddenNodes?.some((id) => id === nodeId)) return "hidden"
 
-    return stateType || "regular"
+    return stateType
   }
 
   /**
    * 获取连线状态
    */
-  protected getLinkState(link?: GraphLink): LinkState {
-    if (!link) return "regular"
+  protected getLinkState(
+    link?: GraphLink<G["LO"], G["LT"], G["LS"]>
+  ): G["LS"] | undefined {
+    if (!link) return undefined
 
     const linkId = link.id
     const { stateType } = link.data || {}
@@ -611,7 +628,7 @@ export class ConnGraphView {
     if (selectedLinks?.some((id) => id === linkId)) return "selected"
     if (hiddenLinks?.some((id) => id === linkId)) return "hidden"
 
-    return stateType || "regular"
+    return stateType
   }
 
   // ==================== 样式相关方法 ====================
@@ -660,15 +677,10 @@ export class ConnGraphView {
   refreshByStyle() {
     if (!this.forceGraph) return
 
-    if (this.options.defaultNodeStyle) {
-      this.style = getDefaultColorOf({
-        container: this.container,
-        defaultNodeStyle: this.options.defaultNodeStyle,
-      })
-    }
-
     if (this.options.style) {
-      this.style = mergeObjects(this.style, this.options.style)
+      this.style = mergeObjects(this.style, this.options.style || {})
+    } else {
+      this.style = getDefaultColorOf<G>(this.container)
     }
 
     this.forceGraph
@@ -678,8 +690,15 @@ export class ConnGraphView {
       .nodePointerAreaPaint(this.renderNodePointerArea)
       .linkCanvasObject(this.renderLink)
       .linkPointerAreaPaint(this.renderLinkPointerArea)
-      .nodeLabel((node) => nodeLabel(node as GraphNode, this.options.debug))
-      .linkLabel((link) => linkLabel(link as GraphLink, this.options.debug))
+      .nodeLabel((node) => {
+        const graphNode = this.model.getNodeById(String(node.id))
+        return nodeLabel(graphNode, this.options.debug)
+      })
+      .linkLabel((_link) => {
+        const link = _link as GraphLink<G["LO"], G["LT"], G["LS"]>
+        const graphLink = this.model.getLinkById(String(link.id))
+        return linkLabel(graphLink, this.options.debug)
+      })
   }
 
   /**
@@ -691,16 +710,16 @@ export class ConnGraphView {
     globalScale: number
   ) => {
     if (!_node.id) return
-
     const node = this.model.getNodeById(String(_node.id))
-    if (!node?.data) return
+    if (!node) return
 
+    const { nodeType } = node?.data || {}
     const style = this.getNodeColor(String(node.id), globalScale)
 
     // 获取渲染器
-    const processor =
-      this.nodeRenderProcessorMap[node.data.nodeType || "default"] ||
-      this.nodeRenderProcessorMap["default"]
+    const processor = nodeType
+      ? this.nodeRenderProcessorMap[nodeType]
+      : undefined
 
     // 渲染节点
     processor?.renderNodeCanvasObject?.({
@@ -733,9 +752,9 @@ export class ConnGraphView {
     const state = this.getNodeState(node)
     const style = getNodeStyleByStateType(nodeStyle, state)
 
-    const processor =
-      this.nodeRenderProcessorMap[nodeType || "default"] ||
-      this.nodeRenderProcessorMap["default"]
+    const processor = nodeType
+      ? this.nodeRenderProcessorMap[nodeType]
+      : undefined
 
     processor?.renderNodePointerArea?.({
       node: node,
@@ -744,8 +763,9 @@ export class ConnGraphView {
       style: style,
       globalScale: globalScale,
       colorTracker: this.colorTracker,
-      tagManager: this.model.tagManager,
       shadowCtx: ctx,
+      tagManager: this.model.tagManager,
+      loadingManager: this.model.loadingManager,
     })
 
     processor?.renderNodeToolsPointerArea?.({
@@ -755,8 +775,9 @@ export class ConnGraphView {
       style: style,
       globalScale: globalScale,
       colorTracker: this.colorTracker,
-      tagManager: this.model.tagManager,
       shadowCtx: this.toolShadowCtx!,
+      tagManager: this.model.tagManager,
+      loadingManager: this.model.loadingManager,
     })
   }
 
@@ -769,18 +790,18 @@ export class ConnGraphView {
     ctx: CanvasRenderingContext2D,
     globalScale: number
   ) => {
-    const link = _link as GraphLink
+    const link = _link as GraphLink<G["LO"], G["LT"], G["LS"]>
+    if (typeof link.source !== "object" || typeof link.target !== "object")
+      return
 
-    const start = link.source as NodeObject
-    const end = link.target as NodeObject
-
-    if (typeof start !== "object" || typeof end !== "object") return
+    const start = link.source as GraphNode<G["NO"], G["NT"], G["NS"]>
+    const end = link.target as GraphNode<G["NO"], G["NT"], G["NS"]>
 
     // 计算曲线偏移
     const linkCountMap = this.calculateLinkCurveInfo()
     const curveOffset = this.getLinkCurveOffset(link, linkCountMap)
 
-    const targetNode = end as GraphNode
+    const targetNode = end
     const targetRadius = this.getNodeRadius(targetNode)
 
     // 设置点击区域的宽度（比实际线条宽一些，方便点击）
@@ -845,7 +866,7 @@ export class ConnGraphView {
     ctx: CanvasRenderingContext2D,
     globalScale: number
   ) => {
-    const link = _link as GraphLink
+    const link = _link as GraphLink<G["LO"], G["LT"], G["LS"]>
 
     const start = link.source as NodeObject
     const end = link.target as NodeObject
@@ -916,7 +937,7 @@ export class ConnGraphView {
   private renderLinkLine(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink,
+    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     stroke: string,
@@ -965,7 +986,7 @@ export class ConnGraphView {
   private renderArrow(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink,
+    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     stroke: string,
@@ -1019,7 +1040,7 @@ export class ConnGraphView {
   private renderLinkLight(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink,
+    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     light: string,
@@ -1104,7 +1125,7 @@ export class ConnGraphView {
   private renderLinkLabel(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink,
+    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     opacity?: number,
@@ -1200,14 +1221,14 @@ export class ConnGraphView {
   /**
    * 获取节点半径
    */
-  private getNodeRadius(node: GraphNode): number {
-    if (!node?.data?.nodeType) {
-      return this.forceGraph.nodeRelSize()
-    }
-
+  private getNodeRadius(node: GraphNode<G["NO"], G["NT"], G["NS"]>): number {
+    const nodeType = node?.data?.nodeType
     const style = this.getNodeColor(String(node.id), 1)
+    const processor = nodeType
+      ? this.nodeRenderProcessorMap[nodeType]
+      : undefined
 
-    const processor = this.nodeRenderProcessorMap[node.data.nodeType]
+    // 优先使用节点类型的碰撞半径，否则使用默认半径
     return (
       processor?.getCollisionRadius?.({ node, style }) ??
       this.forceGraph.nodeRelSize()
