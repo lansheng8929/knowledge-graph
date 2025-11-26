@@ -1,11 +1,10 @@
-import type { NodeType } from "../type"
-import type { GraphDataGenerics } from "../client"
 import type {
   EntityCreator,
   EntityRenderer,
   NodeRenderProcessorMap,
 } from "./entity-types"
-import { createEntity as defaultCreateEntity } from "./common"
+import { createEntity as defaultCreateEntity } from "../entity/common"
+import type { GraphDataGenerics } from "./type"
 
 /**
  * 实体注册表

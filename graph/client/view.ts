@@ -24,10 +24,10 @@ import {
 import { linkLabel, nodeLabel } from "./tooltip"
 import { mergeObjects, type RecursivePartial } from "./utils"
 import type { LinkId, LinkState, NodeId, NodeState } from "../type"
-import { EntityRegistry } from "../entity/entity-registry"
+import { EntityRegistry } from "./entity-registry"
 
 import ColorTracker from "canvas-color-tracker"
-import type { NodeRenderProcessorMap } from "../entity/entity-types"
+import type { NodeRenderProcessorMap } from "./entity-types"
 import type {
   DefaultGraphDataGenerics,
   GraphDataGenerics,
@@ -147,7 +147,7 @@ export class ConnGraphView<
    * 获取连线的曲线信息
    */
   private getLinkCurveOffset(
-    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
+    link: GraphLink<G>,
     linkCountMap: Map<string, { total: number; links: Map<string, number> }>
   ): number {
     const sourceId =
@@ -613,9 +613,7 @@ export class ConnGraphView<
   /**
    * 获取连线状态
    */
-  protected getLinkState(
-    link?: GraphLink<G["LO"], G["LT"], G["LS"]>
-  ): G["LS"] | undefined {
+  protected getLinkState(link?: GraphLink<G>): G["LS"] | undefined {
     if (!link) return undefined
 
     const linkId = link.id
@@ -695,7 +693,7 @@ export class ConnGraphView<
         return nodeLabel(graphNode, this.options.debug)
       })
       .linkLabel((_link) => {
-        const link = _link as GraphLink<G["LO"], G["LT"], G["LS"]>
+        const link = _link as GraphLink<G>
         const graphLink = this.model.getLinkById(String(link.id))
         return linkLabel(graphLink, this.options.debug)
       })
@@ -790,7 +788,7 @@ export class ConnGraphView<
     ctx: CanvasRenderingContext2D,
     globalScale: number
   ) => {
-    const link = _link as GraphLink<G["LO"], G["LT"], G["LS"]>
+    const link = _link as GraphLink<G>
     if (typeof link.source !== "object" || typeof link.target !== "object")
       return
 
@@ -866,7 +864,7 @@ export class ConnGraphView<
     ctx: CanvasRenderingContext2D,
     globalScale: number
   ) => {
-    const link = _link as GraphLink<G["LO"], G["LT"], G["LS"]>
+    const link = _link as GraphLink<G>
 
     const start = link.source as NodeObject
     const end = link.target as NodeObject
@@ -937,7 +935,7 @@ export class ConnGraphView<
   private renderLinkLine(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
+    link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     stroke: string,
@@ -986,7 +984,7 @@ export class ConnGraphView<
   private renderArrow(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
+    link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     stroke: string,
@@ -1040,7 +1038,7 @@ export class ConnGraphView<
   private renderLinkLight(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
+    link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     light: string,
@@ -1125,7 +1123,7 @@ export class ConnGraphView<
   private renderLinkLabel(
     start: NodeObject,
     end: NodeObject,
-    link: GraphLink<G["LO"], G["LT"], G["LS"]>,
+    link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     opacity?: number,

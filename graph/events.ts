@@ -15,7 +15,7 @@ export interface GraphEventMap<
   nodeHover: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
   nodeClick: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
   nodeDragEnd: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
-  linkClick: GraphLink<G["LO"], G["LT"], G["LS"]> | undefined
+  linkClick: GraphLink<G> | undefined
   backgroundClick: void
   zoom: { k: number; x: number; y: number }
   focusChange: { nodeIds: NodeId[]; linkIds: LinkId[] }

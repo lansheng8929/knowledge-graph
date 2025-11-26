@@ -1,4 +1,4 @@
-import type { EntityCreator } from "../entity/entity-types"
+import type { EntityCreator } from "./entity-types"
 import * as Entity from "../entity/index.client"
 import type { NodeType } from "../type"
 
@@ -9,7 +9,7 @@ export const DEFAULT_LIGHT_RADIUS = 5
 export const DEFAULT_TEXT_COLOR = "#000"
 export const DEFAULT_OPACITY = 0.8
 export const DEFAULT_STROKE_WIDTH = 1
-export const DEFAULT_STROKE_COLOR = "#000"
+export const DEFAULT_STROKE_COLOR = "#ccc"
 export const DEFAULT_LINE_WIDTH = 1
 export const DEFAULT_FOUCS_LINE_WIDTH = 1
 export const ARROW_SIZE = 10

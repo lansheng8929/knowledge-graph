@@ -5,13 +5,16 @@ import {
   DEFAULT_BG_COLOR,
   DEFAULT_TEXT_COLOR,
   DEFAULT_NODE_LABEL_SCALE_THRESHOLD,
+  type DefaultGraphDataGenerics,
 } from "../../client/"
 import { getPaginator } from "../../utils"
-import type { EntityCreator } from "../entity-types"
+import type { EntityCreator } from "../../client/entity-types"
 
 import type { DefaultNodeType } from "./default.type"
 
-export const createDefaultEntity: EntityCreator = () => {
+export const createDefaultEntity: EntityCreator<
+  DefaultGraphDataGenerics
+> = () => {
   const imageCache = new Map<string, HTMLImageElement>()
 
   return {

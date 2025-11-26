@@ -1,4 +1,3 @@
-import type { LinkObject } from "force-graph"
 import type {
   NodeType,
   NodeState,
@@ -7,8 +6,6 @@ import type {
   LinkState,
   NodeId,
 } from "../type"
-
-export type { LinkObject, NodeObject } from "force-graph"
 
 /**
  * 统一的图数据泛型参数
@@ -38,15 +35,13 @@ export type DefaultGraphDataGenerics = {
  * 程序中的边数据统一类型
  */
 export interface GraphLink<
-  D extends object = object,
-  T extends string = LinkType,
-  S extends string = LinkState
+  G extends GraphDataGenerics = DefaultGraphDataGenerics
 > {
   id: LinkId
-  source: LinkId | NonNullable<LinkObject["source"]>
-  target: LinkId | NonNullable<LinkObject["target"]>
+  source: LinkId | GraphNode<G["NO"], G["NT"], G["NS"]>
+  target: LinkId | GraphNode<G["NO"], G["NT"], G["NS"]>
   ranking?: number
-  data?: GraphLinkInfo<D, T, S>
+  data?: GraphLinkInfo<G["LO"], G["LT"], G["LS"]>
 }
 
 export interface GraphViewModelGraphData<
@@ -54,7 +49,7 @@ export interface GraphViewModelGraphData<
 > {
   graphData: {
     nodes: GraphNode<G["NO"], G["NT"], G["NS"]>[]
-    links: GraphLink<G["LO"], G["LT"], G["LS"]>[]
+    links: GraphLink<G>[]
   }
 }
 

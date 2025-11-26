@@ -3,15 +3,14 @@ import type { Style } from "../theme"
 
 import type { TagManager } from "../tag-manager"
 import type { LoadingManager } from "../loading-manager"
-import type { GraphNode } from "../client/type"
-import type { NodeType, NodeState, LinkType } from "../type"
+import type { GraphNode } from "./type"
 
 export interface ManagerProps {
   tagManager: TagManager
   loadingManager: LoadingManager
 }
 
-import type { GraphDataGenerics } from "../client"
+import type { GraphDataGenerics } from "."
 
 export interface EntityRenderer<G extends GraphDataGenerics> {
   renderNodeCanvasObject: (

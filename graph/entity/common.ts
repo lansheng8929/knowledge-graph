@@ -1,12 +1,15 @@
+import type { DefaultGraphDataGenerics } from "../client"
 import {
   DEFAULT_FONT_SIZE,
   DEFAULT_RADIUS,
   DEFAULT_TEXT_COLOR,
 } from "../client/constants"
 import { makeDrawWrapper } from "../client/utils"
-import type { EntityCreator, EntityRenderer } from "./entity-types"
+import type { EntityCreator, EntityRenderer } from "../client/entity-types"
 
-export const createEntity = (entityCreator: EntityCreator): EntityRenderer => {
+export const createEntity = (
+  entityCreator: EntityCreator<DefaultGraphDataGenerics>
+): EntityRenderer<DefaultGraphDataGenerics> => {
   const entityInstance = entityCreator()
 
   return {
@@ -35,7 +38,9 @@ export const entityCommonRenderer = {
     node,
     style,
     ctx,
-  }: Parameters<EntityRenderer["renderNodeCanvasObject"]>[0]) => {
+  }: Parameters<
+    EntityRenderer<DefaultGraphDataGenerics>["renderNodeCanvasObject"]
+  >[0]) => {
     const { x = 0, y = 0 } = node
     const {} = node.data || {}
     const { light, opacity } = style
@@ -52,7 +57,9 @@ export const entityCommonRenderer = {
     globalScale,
     tagManager,
     loadingManager,
-  }: Parameters<EntityRenderer["renderNodeCanvasObject"]>[0]) => {
+  }: Parameters<
+    EntityRenderer<DefaultGraphDataGenerics>["renderNodeCanvasObject"]
+  >[0]) => {
     const { x = 0, y = 0 } = node
     const { count = 0 } = node.data || {}
     const {
@@ -90,7 +97,9 @@ export const entityCommonRenderer = {
     ctx,
     style,
     globalScale,
-  }: Parameters<EntityRenderer["renderNodeCanvasObject"]>[0]) => {
+  }: Parameters<
+    EntityRenderer<DefaultGraphDataGenerics>["renderNodeCanvasObject"]
+  >[0]) => {
     const { x = 0, y = 0 } = node
     const { total, count } = node.data || {}
     const { radius = DEFAULT_RADIUS, textColor = DEFAULT_TEXT_COLOR } = style
@@ -103,7 +112,7 @@ export const entityCommonRenderer = {
     }
   },
   renderNodePointerArea: ({}: Parameters<
-    EntityRenderer["renderNodePointerArea"]
+    EntityRenderer<DefaultGraphDataGenerics>["renderNodePointerArea"]
   >[0]) => {
     // 节点自身的指针区域由各实体的 renderNodePointerArea 处理
   },
@@ -116,7 +125,9 @@ export const entityCommonRenderer = {
     colorTracker,
     shadowCtx,
   }: Parameters<
-    NonNullable<EntityRenderer["renderNodeToolsPointerArea"]>
+    NonNullable<
+      EntityRenderer<DefaultGraphDataGenerics>["renderNodeToolsPointerArea"]
+    >
   >[0]) => {
     const { x = 0, y = 0 } = node
     const { total, count } = node.data || {}
