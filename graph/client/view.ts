@@ -425,16 +425,9 @@ export class ConnGraphView<
     node: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined,
     event?: MouseEvent
   ) {
-    if (!node?.data?.nodeType) return
-
-    const { nodeType } = node.data
-
-    switch (nodeType) {
-      default:
-        this.actions.selectNode(String(node.id))
-        this.model.events.publish("nodeClick", node)
-        break
-    }
+    if (!node) return
+    this.actions.selectNode(String(node.id))
+    this.model.events.publish("nodeClick", node)
   }
 
   /**

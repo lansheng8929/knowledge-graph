@@ -2,7 +2,7 @@
 import React from "react"
 
 import { renderToStaticMarkup } from "react-dom/server"
-import type { GraphLink, GraphNode } from "./type"
+import type { GraphDataGenerics, GraphLink, GraphNode } from "./type"
 
 function ToolTip<N extends GraphNode>({
   node,
@@ -64,7 +64,12 @@ function LinkToolTip<L extends GraphLink>({
   ) : null
 }
 
-const linkLabel = <L extends GraphLink>(link?: L, debug?: boolean) =>
-  renderToStaticMarkup(<LinkToolTip<L> link={link} debug={debug ?? false} />)
+const linkLabel = <
+  G extends GraphDataGenerics,
+  L extends GraphLink<G> = GraphLink<G>
+>(
+  link?: L,
+  debug?: boolean
+) => renderToStaticMarkup(<LinkToolTip link={link} debug={debug ?? false} />)
 
 export { nodeLabel, linkLabel }
