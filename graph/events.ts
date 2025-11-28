@@ -1,10 +1,10 @@
 import type { NodeId, LinkId } from "./type"
 import type { NodeTag } from "./tag-manager"
+import type { StateInfo } from "./state-manager"
 import type {
   GraphNode,
   GraphLink,
   GraphViewModel,
-  GraphViewModelMetaData,
   GraphDataGenerics,
   DefaultGraphDataGenerics,
 } from "./client/type"
@@ -21,6 +21,7 @@ export interface GraphEventMap<
   focusChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   selectionChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   hiddenChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
+  rootNodesChange: { nodeIds: NodeId[] }
   loadMore: GraphNode<G["NO"], G["NT"], G["NS"]>
   plusToolClick: GraphNode<G["NO"], G["NT"], G["NS"]>
   menuOpen: {
@@ -30,7 +31,7 @@ export interface GraphEventMap<
   }
   dataChange: { graphData: GraphViewModel<G>["graphData"] }
   metaDataChange: {
-    metaData: GraphViewModelMetaData
+    metaData: StateInfo
   }
   framePost: {
     ctx: CanvasRenderingContext2D

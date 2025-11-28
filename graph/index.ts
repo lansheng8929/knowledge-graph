@@ -5,6 +5,7 @@ export * from "./entity"
 export * from "./model"
 export * from "./tag-manager"
 export * from "./loading-manager"
+export * from "./state-manager"
 export * from "./events"
 export * from "./image-cache"
 

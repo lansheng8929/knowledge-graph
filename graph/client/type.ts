@@ -58,7 +58,20 @@ export interface GraphViewModelGraphData<
  */
 export type GraphViewModel<
   G extends GraphDataGenerics = DefaultGraphDataGenerics
-> = GraphViewModelGraphData<G> & GraphViewModelMetaData
+> = GraphViewModelGraphData<G>
+
+/**
+ * 状态配置接口
+ */
+export interface StateConfig {
+  focusNodes?: NodeId[]
+  focusLinks?: LinkId[]
+  selectedNodes?: NodeId[]
+  selectedLinks?: LinkId[]
+  hiddenNodes?: NodeId[]
+  hiddenLinks?: LinkId[]
+  rootNodes?: NodeId[]
+}
 
 /**
  * 程序中的节点数据统一类型
@@ -110,12 +123,3 @@ export type GraphLinkInfo<
   color?: string
   lineWidth?: number
 } & D
-
-export interface GraphViewModelMetaData {
-  focusNodes?: NodeId[]
-  focusLinks?: LinkId[]
-  selectedNodes?: NodeId[]
-  selectedLinks?: LinkId[]
-  hiddenNodes?: NodeId[]
-  hiddenLinks?: LinkId[]
-}

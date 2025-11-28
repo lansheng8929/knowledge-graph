@@ -9,13 +9,14 @@ import type {
 } from "./type"
 import { TagManager } from "./tag-manager"
 import { LoadingManager } from "./loading-manager"
+import { StateManager } from "./state-manager"
 import ColorTracker from "canvas-color-tracker"
 import type {
   DefaultGraphDataGenerics,
   GraphDataGenerics,
   GraphViewModel,
   GraphViewModelGraphData,
-  GraphViewModelMetaData,
+  StateConfig,
 } from "./client/type"
 
 export interface Options<
@@ -35,6 +36,7 @@ export class ConnGraphModel<
   public events = new ConnGraphEvents<G>()
   public tagManager = new TagManager(this.events)
   public loadingManager = new LoadingManager(this.events)
+  public stateManager: StateManager<G>
   public colorTracker: ColorTracker
 
   constructor({ initData }: Options<G>) {
@@ -42,18 +44,10 @@ export class ConnGraphModel<
       graphData: { nodes: [], links: [] },
     }
     this.colorTracker = new ColorTracker()
+    this.stateManager = new StateManager<G>(this.events)
 
     this.updateGraphData({
       graphData: initData.graphData,
-    })
-
-    this.updateMetaData({
-      focusNodes: initData.focusNodes,
-      focusLinks: initData.focusLinks,
-      selectedNodes: initData.selectedNodes,
-      selectedLinks: initData.selectedLinks,
-      hiddenNodes: initData.hiddenNodes,
-      hiddenLinks: initData.hiddenLinks,
     })
   }
 
@@ -75,38 +69,18 @@ export class ConnGraphModel<
     })
   }
 
-  updateMetaData({
-    focusNodes,
-    focusLinks,
-    selectedNodes,
-    selectedLinks,
-    hiddenNodes,
-    hiddenLinks,
-  }: GraphViewModelMetaData) {
-    if (focusNodes) {
-      this.updeteFoucsNodes(focusNodes || [])
-    }
-
-    if (selectedNodes) {
-      this.updateSelectedNodes(selectedNodes || [], selectedLinks || [])
-    }
-
-    if (hiddenNodes) {
-      this.updateHiddenNodes(hiddenNodes || [])
-    }
-
-    this.events.publish("metaDataChange", {
-      metaData: {
-        focusNodes: this.cache.focusNodes,
-        focusLinks: this.cache.focusLinks,
-        selectedNodes: this.cache.selectedNodes,
-        selectedLinks: this.cache.selectedLinks,
-        hiddenNodes: this.cache.hiddenNodes,
-        hiddenLinks: this.cache.hiddenLinks,
-      },
-    })
+  /**
+   * 更新元数据（焦点、选中、隐藏状态）
+   * @deprecated 请使用 stateManager 代替
+   */
+  updateMetaData(config: StateConfig) {
+    this.stateManager.updateState(config)
   }
 
+  /**
+   * 更新焦点节点，自动关联相关连线和目标节点
+   * @deprecated 请使用 stateManager.setFocusNodes 代替
+   */
   updeteFoucsNodes(nodeIds: NodeId[]) {
     const nodes: NodeId[] = [...nodeIds]
     const links: LinkId[] = []
@@ -130,13 +104,13 @@ export class ConnGraphModel<
       })
     })
 
-    this.cache.focusNodes = [...new Set(nodes)]
-    this.cache.focusLinks = [...new Set(links)]
-
-    // 发布焦点变化事件
-    this.events.publish("focusChange", { nodeIds: nodes, linkIds: links })
+    this.stateManager.setFocusNodes([...new Set(nodes)], [...new Set(links)])
   }
 
+  /**
+   * 更新选中节点，自动关联相关连线和目标节点
+   * @deprecated 请使用 stateManager.setSelectedNodes 代替
+   */
   updateSelectedNodes(nodeIds: NodeId[], linkIds?: LinkId[]) {
     const nodes: NodeId[] = [...nodeIds]
     const links: LinkId[] = []
@@ -164,26 +138,26 @@ export class ConnGraphModel<
       links.push(...linkIds)
     }
 
-    this.cache.selectedNodes = [...new Set(nodes)]
-    this.cache.selectedLinks = [...new Set(links)]
-
-    // 发布选择变化事件
-    this.events.publish("selectionChange", { nodeIds: nodes, linkIds: links })
+    this.stateManager.setSelectedNodes([...new Set(nodes)], [...new Set(links)])
   }
 
+  /**
+   * 更新隐藏节点
+   * @deprecated 请使用 stateManager.setHiddenNodes 代替
+   */
+  /**
+   * 更新隐藏节点
+   * @deprecated 请使用 stateManager.setHiddenNodes 代替
+   */
   updateHiddenNodes(nodeIds: NodeId[]) {
-    const nodes: NodeId[] = [...nodeIds]
-    const links: LinkId[] = []
-
-    this.cache.hiddenNodes = [...new Set(nodes)]
-    this.cache.hiddenLinks = [...new Set(links)]
-
-    // 发布隐藏状态变化事件
-    this.events.publish("hiddenChange", { nodeIds: nodes, linkIds: links })
+    this.stateManager.setHiddenNodes(nodeIds)
   }
 
   getGraphModelData() {
-    return this.cache
+    return {
+      ...this.cache,
+      ...this.stateManager.getState(),
+    }
   }
 
   getLinkById(id: LinkId) {

@@ -1,12 +1,13 @@
 import type { EntityCreator } from "./entity-types"
 import * as Entity from "../entity/index.client"
 import type { NodeType } from "../type"
+import type { DefaultGraphDataGenerics } from "./type"
 
 export const ACCOUNT_NODE_TYPE = "account"
 
 export const DEFAULT_BG_COLOR = "#fff"
 export const DEFAULT_LIGHT_RADIUS = 5
-export const DEFAULT_TEXT_COLOR = "#000"
+export const DEFAULT_TEXT_COLOR = "#2c2c2c"
 export const DEFAULT_OPACITY = 0.8
 export const DEFAULT_STROKE_WIDTH = 1
 export const DEFAULT_STROKE_COLOR = "#ccc"
@@ -17,7 +18,7 @@ export const MAX_FONT_SIZE = 2
 export const DEFAULT_BORDER_WIDTH = 1.5
 export const DEFAULT_FOCUS_BORDER_WIDTH = 4
 export const DEFAULT_RADIUS = 4
-export const DEFAULT_FONT_SIZE = 4
+export const DEFAULT_FONT_SIZE = 2
 export const DEFAULT_NODE_LABEL_SCALE_THRESHOLD = 4
 export const DEFAULT_LINK_LABEL_SCALE_THRESHOLD = 5
 
@@ -27,7 +28,7 @@ export const DEFAULT_LINK_LABEL_SCALE_THRESHOLD = 5
  */
 export const getDefaultEntityCreators = (): Record<
   NodeType,
-  EntityCreator
+  EntityCreator<DefaultGraphDataGenerics>
 > => ({
   default: Entity.createDefaultEntity,
 })

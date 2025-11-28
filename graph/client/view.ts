@@ -83,10 +83,10 @@ export class ConnGraphView<
 
   actions: GraphModelActions = {
     highlightNode: (nodeId: NodeId) => {
-      this.model.updeteFoucsNodes(nodeId ? [nodeId] : [])
+      this.model.stateManager.setFocusNodes(nodeId ? [nodeId] : [])
     },
     selectNode: (nodeId: NodeId) => {
-      this.model.updateSelectedNodes(nodeId ? [nodeId] : [])
+      this.model.stateManager.setSelectedNodes(nodeId ? [nodeId] : [])
     },
   }
 
@@ -198,24 +198,6 @@ export class ConnGraphView<
 
       this.model.updateGraphData({
         graphData: newGraphData,
-      })
-    }
-
-    if (
-      graphViewModel.focusNodes ||
-      graphViewModel.focusLinks ||
-      graphViewModel.selectedNodes ||
-      graphViewModel.selectedLinks ||
-      graphViewModel.hiddenNodes ||
-      graphViewModel.hiddenLinks
-    ) {
-      this.model.updateMetaData({
-        focusNodes: graphViewModel.focusNodes,
-        focusLinks: graphViewModel.focusLinks,
-        selectedNodes: graphViewModel.selectedNodes,
-        selectedLinks: graphViewModel.selectedLinks,
-        hiddenNodes: graphViewModel.hiddenNodes,
-        hiddenLinks: graphViewModel.hiddenLinks,
       })
     }
   }
@@ -593,12 +575,10 @@ export class ConnGraphView<
     const nodeId = node.id
     const { stateType } = node.data || {}
 
-    const { focusNodes, selectedNodes, hiddenNodes } =
-      this.model.getGraphModelData()
-
-    if (focusNodes?.some((id) => id === nodeId)) return "highlighted"
-    if (selectedNodes?.some((id) => id === nodeId)) return "selected"
-    if (hiddenNodes?.some((id) => id === nodeId)) return "hidden"
+    if (this.model.stateManager.isFocused(nodeId)) return "highlighted"
+    if (this.model.stateManager.isSelected(nodeId)) return "selected"
+    if (this.model.stateManager.isHidden(nodeId)) return "hidden"
+    if (this.model.stateManager.isRootNode(nodeId)) return "root"
 
     return stateType
   }
@@ -612,12 +592,13 @@ export class ConnGraphView<
     const linkId = link.id
     const { stateType } = link.data || {}
 
-    const { focusLinks, selectedLinks, hiddenLinks } =
-      this.model.getGraphModelData()
+    const focusLinks = this.model.stateManager.getFocusLinks()
+    const selectedLinks = this.model.stateManager.getSelectedLinks()
+    const hiddenLinks = this.model.stateManager.getHiddenLinks()
 
-    if (focusLinks?.some((id) => id === linkId)) return "highlighted"
-    if (selectedLinks?.some((id) => id === linkId)) return "selected"
-    if (hiddenLinks?.some((id) => id === linkId)) return "hidden"
+    if (focusLinks.some((id) => id === linkId)) return "highlighted"
+    if (selectedLinks.some((id) => id === linkId)) return "selected"
+    if (hiddenLinks.some((id) => id === linkId)) return "hidden"
 
     return stateType
   }
@@ -935,10 +916,10 @@ export class ConnGraphView<
     opacity?: number,
     curveOffset: number = 0
   ) {
-    const { focusLinks } = this.model.getGraphModelData()
+    const focusLinks = this.model.stateManager.getFocusLinks()
 
     const lineWidth = link.data?.lineWidth ?? DEFAULT_LINE_WIDTH
-    const focusMultiplier = focusLinks?.some((id) => id === link.id)
+    const focusMultiplier = focusLinks.some((id) => id === link.id)
       ? DEFAULT_FOUCS_LINE_WIDTH
       : 1
 
