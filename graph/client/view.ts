@@ -63,6 +63,12 @@ interface GraphViewOptions<
   arrowDisplay?: boolean
   customLinkCanvasObject?: CustomLinkCanvasObjectType
   entityRegistry?: EntityRegistry<G>
+  // d3力配置函数
+  setupD3Force?: (
+    this: ConnGraphView<G>,
+    forceGraph: ForceGraph,
+    d3: typeof import("d3-force")
+  ) => void
 }
 
 export class ConnGraphView<
@@ -179,6 +185,13 @@ export class ConnGraphView<
   // ==================== 公共方法 ====================
 
   /**
+   * 更新 d3 力配置
+   */
+  updateD3Force(setupFn: (d3: typeof import("d3-force")) => void) {
+    setupFn(d3)
+  }
+
+  /**
    * 更新模型数据
    */
   updateModel(graphViewModel: Partial<GraphViewModel<G>>) {
@@ -234,7 +247,11 @@ export class ConnGraphView<
 
     const forceGraph = this.forceGraph || new ForceGraph(this.container)
 
-    this.setupForceGraph(forceGraph)
+    const { graphData } = this.model.getGraphModelData()
+    forceGraph.graphData(graphData)
+
+    this.setupOptions(forceGraph)
+    this.setupForceGraph(forceGraph, d3)
     this.setupEventHandlers(forceGraph)
     this.setupCanvasClickListener()
 
@@ -246,20 +263,28 @@ export class ConnGraphView<
   /**
    * 设置力导图配置
    */
-  private setupForceGraph(forceGraph: ForceGraph) {
+  private setupForceGraph(
+    forceGraph: ForceGraph,
+    d3: typeof import("d3-force")
+  ) {
+    // 如果外部提供了自定义配置函数，优先使用
+    if (this.options.setupD3Force) {
+      this.options.setupD3Force.call(this, forceGraph, d3)
+      return
+    }
+
+    // 默认配置
+    // forceGraph
+    // .d3Force("radial", d3.forceRadial(100, 0, 0).strength(0.1))
+    // .d3Force("collision", this.createCollisionForce())
+    // .d3Force("charge", d3.forceManyBody().strength(-20))
+    // .d3Force("link", d3.forceLink().distance(50).strength(0.5))
+  }
+
+  private setupOptions(forceGraph: ForceGraph) {
     const { options } = this
-    const { graphData } = this.model.getGraphModelData()
 
     forceGraph
-      .graphData(graphData)
-      .d3Force("x", null)
-      .d3Force("y", null)
-      .d3Force("center", null)
-      .d3Force("radial", d3.forceRadial(100, 0, 0).strength(0.1))
-      .d3Force("collision", this.createCollisionForce())
-      .d3Force("charge", d3.forceManyBody().strength(-20))
-      .d3Force("link", d3.forceLink().distance(50).strength(0.5))
-
       .zoom(5)
       .width(options.width ?? this.container.clientWidth)
       .height(options.height ?? this.container.clientHeight)
@@ -283,6 +308,12 @@ export class ConnGraphView<
       })
       .onNodeClick((_node, event) => {
         const node = this.model.getNodeById(String(_node.id))
+
+        // if (node) {
+        //   const style = this.getNodeColor(node.id)
+        //   console.log("节点样式：", style)
+        // }
+
         this.handleNodeClick(node, event)
       })
       .onNodeRightClick((_node, event) => {
@@ -484,9 +515,7 @@ export class ConnGraphView<
 
         const { __toolIndexColor } = node
         const { nodeType } = node.data || {}
-        const nodeStyle = getNodeStyleByType(this.style, nodeType)
-        const state = this.getNodeState(node)
-        const style = getNodeStyleByStateType(nodeStyle, state)
+        const style = this.getNodeColor(node.id, globalScale)
 
         const processor = nodeType
           ? this.nodeRenderProcessorMap[nodeType]
@@ -529,37 +558,19 @@ export class ConnGraphView<
     }
   }
 
-  // ==================== 力学相关方法 ====================
+  // ==================== 工具相关方法 ====================
 
-  /**
-   * 创建碰撞力
-   */
-  private createCollisionForce() {
-    const getCollisionRadius = (node: GraphNode<G["NO"], G["NT"], G["NS"]>) => {
-      const { nodeType } = node?.data || {}
-      if (!nodeType) return 0
+  public getCollisionRadius = <G extends GraphDataGenerics>(
+    node: GraphNode<G["NO"], G["NT"], G["NS"]>,
+    gobalScale?: number
+  ) => {
+    const { nodeType } = node?.data || {}
+    if (!nodeType) return 0
 
-      const nodeStyle = getNodeStyleByType(this.style, nodeType)
-      const state = this.getNodeState(node)
-      const style = getNodeStyleByStateType(nodeStyle, state)
+    const style = this.getNodeColor(node.id, gobalScale)
 
-      const processor = this.nodeRenderProcessorMap[nodeType]
-      return processor?.getCollisionRadius?.({ node, style }) ?? 0
-    }
-
-    return d3
-      .forceCollide()
-      .radius((_node) => {
-        const nodeObject = _node as NodeObject
-        const nodeId = nodeObject?.id
-        if (!nodeId) return 0
-
-        const node = this.model.getNodeById(String(nodeId))
-        if (!node) return 0
-
-        return getCollisionRadius(node) * 2
-      })
-      .strength(0.8)
+    const processor = this.nodeRenderProcessorMap[nodeType]
+    return processor?.getCollisionRadius?.({ node, style }) ?? 0
   }
 
   // ==================== 状态查询方法 ====================
@@ -608,7 +619,7 @@ export class ConnGraphView<
   /**
    * 获取节点颜色配置
    */
-  private getNodeColor = (nodeId: NodeId, globalScale: number): Style => {
+  private getNodeColor = (nodeId: NodeId, globalScale?: number): Style => {
     const node = this.model.getNodeById(nodeId)
     const { nodeType } = node?.data || {}
 
@@ -616,12 +627,7 @@ export class ConnGraphView<
     const state = this.getNodeState(node)
     const style = getNodeStyleByStateType(nodeStyle, state)
 
-    const scale = globalScale + 5
-
-    return {
-      ...style,
-      strokeWidth: (style.strokeWidth ?? DEFAULT_BORDER_WIDTH) / scale,
-    }
+    return style
   }
 
   /**
@@ -686,7 +692,7 @@ export class ConnGraphView<
     if (!node) return
 
     const { nodeType } = node?.data || {}
-    const style = this.getNodeColor(String(node.id), globalScale)
+    const style = this.getNodeColor(node.id, globalScale)
 
     // 获取渲染器
     const processor = nodeType
