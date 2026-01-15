@@ -1,19 +1,36 @@
 import type { NodeId } from "./type"
 import { ConnGraphEvents } from "./events"
 
-export interface NodeTag {
-  nodeId: NodeId
+// 标签目标类型
+export type TagTargetType = "node" | "link"
+
+// 通用标签接口
+export interface Tag {
+  // 标签所属目标的ID（可以是节点ID或边ID）
+  targetId: string
+  // 目标类型：节点或边
+  targetType: TagTargetType
+  // 标签文本
   label: string
+  // 是否可见
   visible?: boolean
+  // 图标
   icon?: string
+  // 元数据
   metadata?: Record<string, any>
 }
 
+// 为了向后兼容，保留NodeTag类型别名
+export type NodeTag = Tag & { targetType: "node"; targetId: NodeId }
+export type LinkTag = Tag & { targetType: "link"; targetId: string }
+
 /**
  * TagManager 模型层 - 负责数据存储和管理
+ * 统一管理节点和边的标签
  */
 export class TagManagerModel {
-  private tags: Map<NodeId, NodeTag[]>
+  // 使用复合键 "targetType:targetId" 来存储标签
+  private tags: Map<string, Tag[]>
   private events: ConnGraphEvents
 
   constructor(events: ConnGraphEvents) {
@@ -22,41 +39,77 @@ export class TagManagerModel {
   }
 
   /**
-   * 为节点添加标签
+   * 生成存储键
    */
-  addTag(nodeId: NodeId, tag: Omit<NodeTag, "nodeId">): NodeTag {
-    const nodeTag: NodeTag = {
-      nodeId,
+  private getKey(targetType: TagTargetType, targetId: string): string {
+    return `${targetType}:${targetId}`
+  }
+
+  /**
+   * 添加标签（通用方法）
+   */
+  addTag(
+    targetId: string,
+    targetType: TagTargetType,
+    tag: Omit<Tag, "targetId" | "targetType">
+  ): Tag {
+    const newTag: Tag = {
+      targetId,
+      targetType,
       ...tag,
     }
 
-    const existingTags = this.tags.get(nodeId) || []
-    existingTags.push(nodeTag)
-    this.tags.set(nodeId, existingTags)
+    const key = this.getKey(targetType, targetId)
+    const existingTags = this.tags.get(key) || []
+    existingTags.push(newTag)
+    this.tags.set(key, existingTags)
 
     // 发布标签变化事件
     this.events.publish("tagChange", {
       action: "add",
-      nodeId,
-      tag: nodeTag,
+      targetId,
+      targetType,
+      tag: newTag,
     })
 
-    return nodeTag
+    return newTag
   }
 
   /**
-   * 移除节点的所有标签
+   * 为节点添加标签（便捷方法，保持向后兼容）
    */
-  removeAllTags(nodeId: NodeId): boolean {
-    const tags = this.tags.get(nodeId)
+  addNodeTag(
+    nodeId: NodeId,
+    tag: Omit<Tag, "targetId" | "targetType">
+  ): NodeTag {
+    return this.addTag(nodeId, "node", tag) as NodeTag
+  }
+
+  /**
+   * 为边添加标签（便捷方法）
+   */
+  addLinkTag(
+    linkId: string,
+    tag: Omit<Tag, "targetId" | "targetType">
+  ): LinkTag {
+    return this.addTag(linkId, "link", tag) as LinkTag
+  }
+
+  /**
+   * 移除目标的所有标签
+   */
+  removeAllTags(targetId: string, targetType: TagTargetType): boolean {
+    const key = this.getKey(targetType, targetId)
+    const tags = this.tags.get(key)
     if (!tags || tags.length === 0) return false
 
-    this.tags.delete(nodeId)
+    this.tags.delete(key)
 
     // 发布标签变化事件
     this.events.publish("tagChange", {
       action: "remove",
-      nodeId,
+      targetId,
+      targetType,
       tag: undefined,
     })
 
@@ -64,17 +117,46 @@ export class TagManagerModel {
   }
 
   /**
-   * 获取节点的所有标签
+   * 移除节点的所有标签（便捷方法，保持向后兼容）
    */
-  getTags(nodeId: NodeId): NodeTag[] {
-    return this.tags.get(nodeId) || []
+  removeAllNodeTags(nodeId: NodeId): boolean {
+    return this.removeAllTags(nodeId, "node")
+  }
+
+  /**
+   * 移除边的所有标签（便捷方法）
+   */
+  removeAllLinkTags(linkId: string): boolean {
+    return this.removeAllTags(linkId, "link")
+  }
+
+  /**
+   * 获取目标的所有标签
+   */
+  getTags(targetId: string, targetType: TagTargetType): Tag[] {
+    const key = this.getKey(targetType, targetId)
+    return this.tags.get(key) || []
+  }
+
+  /**
+   * 获取节点的所有标签（便捷方法，保持向后兼容）
+   */
+  getNodeTags(nodeId: NodeId): NodeTag[] {
+    return this.getTags(nodeId, "node") as NodeTag[]
+  }
+
+  /**
+   * 获取边的所有标签（便捷方法）
+   */
+  getLinkTags(linkId: string): LinkTag[] {
+    return this.getTags(linkId, "link") as LinkTag[]
   }
 
   /**
    * 获取所有标签
    */
-  getAllTags(): NodeTag[] {
-    const allTags: NodeTag[] = []
+  getAllTags(): Tag[] {
+    const allTags: Tag[] = []
     for (const tagArray of this.tags.values()) {
       allTags.push(...tagArray)
     }
@@ -82,24 +164,67 @@ export class TagManagerModel {
   }
 
   /**
+   * 获取所有节点标签
+   */
+  getAllNodeTags(): NodeTag[] {
+    return this.getAllTags().filter(
+      (tag) => tag.targetType === "node"
+    ) as NodeTag[]
+  }
+
+  /**
+   * 获取所有边标签
+   */
+  getAllLinkTags(): LinkTag[] {
+    return this.getAllTags().filter(
+      (tag) => tag.targetType === "link"
+    ) as LinkTag[]
+  }
+
+  /**
+   * 获取所有有标签的目标ID（按类型）
+   */
+  getTaggedTargetIds(targetType: TagTargetType): string[] {
+    const ids: string[] = []
+    for (const [key, tags] of this.tags.entries()) {
+      if (tags.length > 0 && key.startsWith(`${targetType}:`)) {
+        ids.push(key.substring(targetType.length + 1))
+      }
+    }
+    return ids
+  }
+
+  /**
    * 获取所有有标签的节点ID
    */
   getTaggedNodeIds(): NodeId[] {
-    return Array.from(this.tags.keys())
+    return this.getTaggedTargetIds("node")
+  }
+
+  /**
+   * 获取所有有标签的边ID
+   */
+  getTaggedLinkIds(): string[] {
+    return this.getTaggedTargetIds("link")
   }
 
   /**
    * 批量添加标签
    */
   addTags(
-    tags: Array<{ nodeId: NodeId } & Omit<NodeTag, "nodeId">>
-  ): NodeTag[] {
-    const addedTags: NodeTag[] = []
+    tags: Array<
+      { targetId: string; targetType: TagTargetType } & Omit<
+        Tag,
+        "targetId" | "targetType"
+      >
+    >
+  ): Tag[] {
+    const addedTags: Tag[] = []
 
     tags.forEach((tag) => {
-      const { nodeId, ...tagData } = tag
-      const nodeTag = this.addTag(nodeId, tagData)
-      addedTags.push(nodeTag)
+      const { targetId, targetType, ...tagData } = tag
+      const newTag = this.addTag(targetId, targetType, tagData)
+      addedTags.push(newTag)
     })
 
     return addedTags
@@ -108,11 +233,13 @@ export class TagManagerModel {
   /**
    * 批量移除标签
    */
-  removeAllTagsForNodes(nodeIds: NodeId[]): number {
+  removeAllTagsForTargets(
+    targets: Array<{ targetId: string; targetType: TagTargetType }>
+  ): number {
     let removedCount = 0
 
-    nodeIds.forEach((nodeId) => {
-      if (this.removeAllTags(nodeId)) {
+    targets.forEach(({ targetId, targetType }) => {
+      if (this.removeAllTags(targetId, targetType)) {
         removedCount++
       }
     })
@@ -121,34 +248,59 @@ export class TagManagerModel {
   }
 
   /**
+   * 批量移除节点标签（便捷方法）
+   */
+  removeAllTagsForNodes(nodeIds: NodeId[]): number {
+    return this.removeAllTagsForTargets(
+      nodeIds.map((id) => ({
+        targetId: id,
+        targetType: "node" as TagTargetType,
+      }))
+    )
+  }
+
+  /**
+   * 批量移除边标签（便捷方法）
+   */
+  removeAllTagsForLinks(linkIds: string[]): number {
+    return this.removeAllTagsForTargets(
+      linkIds.map((id) => ({
+        targetId: id,
+        targetType: "link" as TagTargetType,
+      }))
+    )
+  }
+
+  /**
    * 清空所有标签
    */
   clearAll(): void {
-    const nodeIds = Array.from(this.tags.keys())
+    const allKeys = Array.from(this.tags.keys())
     this.tags.clear()
 
     // 发布标签清空事件
     this.events.publish("tagChange", {
       action: "clear",
-      nodeIds,
+      targetIds: allKeys,
     })
   }
 
   /**
-   * 更新节点指定类型的标签
+   * 更新目标指定类型的标签
    */
   updateTagByType(
-    nodeId: NodeId,
+    targetId: string,
+    targetType: TagTargetType,
     type: string,
-    updates: Partial<Omit<NodeTag, "nodeId">>
-  ): NodeTag | undefined {
-    const tags = this.tags.get(nodeId)
+    updates: Partial<Omit<Tag, "targetId" | "targetType">>
+  ): Tag | undefined {
+    const tags = this.getTags(targetId, targetType)
     if (!tags) return undefined
 
     const index = tags.findIndex((tag) => tag.metadata?.type === type)
     if (index === -1) return undefined
 
-    const updatedTag: NodeTag = {
+    const updatedTag: Tag = {
       ...tags[index],
       ...updates,
       metadata: {
@@ -159,12 +311,14 @@ export class TagManagerModel {
     }
 
     tags[index] = updatedTag
-    this.tags.set(nodeId, tags)
+    const key = this.getKey(targetType, targetId)
+    this.tags.set(key, tags)
 
     // 发布标签变化事件
     this.events.publish("tagChange", {
       action: "update",
-      nodeId,
+      targetId,
+      targetType,
       tag: updatedTag,
     })
 
@@ -172,11 +326,25 @@ export class TagManagerModel {
   }
 
   /**
-   * 检查节点是否有标签
+   * 检查目标是否有标签
    */
-  hasTag(nodeId: NodeId): boolean {
-    const tags = this.tags.get(nodeId)
-    return tags ? tags.length > 0 : false
+  hasTag(targetId: string, targetType: TagTargetType): boolean {
+    const tags = this.getTags(targetId, targetType)
+    return tags.length > 0
+  }
+
+  /**
+   * 检查节点是否有标签（便捷方法，保持向后兼容）
+   */
+  hasNodeTag(nodeId: NodeId): boolean {
+    return this.hasTag(nodeId, "node")
+  }
+
+  /**
+   * 检查边是否有标签（便捷方法）
+   */
+  hasLinkTag(linkId: string): boolean {
+    return this.hasTag(linkId, "link")
   }
 
   /**
@@ -193,8 +361,8 @@ export class TagManagerModel {
   /**
    * 根据标签属性筛选
    */
-  filterTags(predicate: (tag: NodeTag) => boolean): NodeTag[] {
-    const allTags: NodeTag[] = []
+  filterTags(predicate: (tag: Tag) => boolean): Tag[] {
+    const allTags: Tag[] = []
     for (const tagArray of this.tags.values()) {
       allTags.push(...tagArray)
     }
@@ -205,22 +373,27 @@ export class TagManagerModel {
    * 设置指定类型标签的可见性
    */
   setTagVisibleByType(
-    nodeId: NodeId,
+    targetId: string,
+    targetType: TagTargetType,
     type: string,
     visible: boolean
-  ): NodeTag | undefined {
-    return this.updateTagByType(nodeId, type, { visible })
+  ): Tag | undefined {
+    return this.updateTagByType(targetId, targetType, type, { visible })
   }
 
   /**
-   * 设置节点所有标签的可见性
+   * 设置目标所有标签的可见性
    */
-  setAllTagsVisibleForNode(nodeId: NodeId, visible: boolean): NodeTag[] {
-    const tags = this.getTags(nodeId)
-    const updatedTags: NodeTag[] = []
+  setAllTagsVisibleForTarget(
+    targetId: string,
+    targetType: TagTargetType,
+    visible: boolean
+  ): Tag[] {
+    const tags = this.getTags(targetId, targetType)
+    const updatedTags: Tag[] = []
 
     tags.forEach((tag, index) => {
-      const updatedTag: NodeTag = {
+      const updatedTag: Tag = {
         ...tag,
         visible,
       }
@@ -229,12 +402,14 @@ export class TagManagerModel {
     })
 
     if (updatedTags.length > 0) {
-      this.tags.set(nodeId, tags)
+      const key = this.getKey(targetType, targetId)
+      this.tags.set(key, tags)
       // 发布标签变化事件
       updatedTags.forEach((tag) => {
         this.events.publish("tagChange", {
           action: "update",
-          nodeId,
+          targetId,
+          targetType,
           tag,
         })
       })
@@ -244,13 +419,34 @@ export class TagManagerModel {
   }
 
   /**
-   * 批量设置多个节点的所有标签可见性
+   * 设置节点所有标签的可见性（便捷方法，保持向后兼容）
    */
-  setTagsVisible(nodeIds: NodeId[], visible: boolean): NodeTag[] {
-    const updatedTags: NodeTag[] = []
+  setAllTagsVisibleForNode(nodeId: NodeId, visible: boolean): NodeTag[] {
+    return this.setAllTagsVisibleForTarget(nodeId, "node", visible) as NodeTag[]
+  }
 
-    nodeIds.forEach((nodeId) => {
-      const tags = this.setAllTagsVisibleForNode(nodeId, visible)
+  /**
+   * 设置边所有标签的可见性（便捷方法）
+   */
+  setAllTagsVisibleForLink(linkId: string, visible: boolean): LinkTag[] {
+    return this.setAllTagsVisibleForTarget(linkId, "link", visible) as LinkTag[]
+  }
+
+  /**
+   * 批量设置多个目标的所有标签可见性
+   */
+  setTagsVisible(
+    targets: Array<{ targetId: string; targetType: TagTargetType }>,
+    visible: boolean
+  ): Tag[] {
+    const updatedTags: Tag[] = []
+
+    targets.forEach(({ targetId, targetType }) => {
+      const tags = this.setAllTagsVisibleForTarget(
+        targetId,
+        targetType,
+        visible
+      )
       updatedTags.push(...tags)
     })
 
@@ -258,52 +454,94 @@ export class TagManagerModel {
   }
 
   /**
+   * 批量设置多个节点的所有标签可见性（便捷方法）
+   */
+  setNodeTagsVisible(nodeIds: NodeId[], visible: boolean): NodeTag[] {
+    return this.setTagsVisible(
+      nodeIds.map((id) => ({
+        targetId: id,
+        targetType: "node" as TagTargetType,
+      })),
+      visible
+    ) as NodeTag[]
+  }
+
+  /**
+   * 批量设置多个边的所有标签可见性（便捷方法）
+   */
+  setLinkTagsVisible(linkIds: string[], visible: boolean): LinkTag[] {
+    return this.setTagsVisible(
+      linkIds.map((id) => ({
+        targetId: id,
+        targetType: "link" as TagTargetType,
+      })),
+      visible
+    ) as LinkTag[]
+  }
+
+  /**
    * 切换指定类型标签的可见性
    */
-  toggleTagVisibleByType(nodeId: NodeId, type: string): NodeTag | undefined {
-    const tags = this.getTags(nodeId)
+  toggleTagVisibleByType(
+    targetId: string,
+    targetType: TagTargetType,
+    type: string
+  ): Tag | undefined {
+    const tags = this.getTags(targetId, targetType)
     const tag = tags.find((t) => t.metadata?.type === type)
 
     if (!tag) return undefined
 
     const newVisible = !(tag.visible ?? true)
-    return this.setTagVisibleByType(nodeId, type, newVisible)
+    return this.setTagVisibleByType(targetId, targetType, type, newVisible)
   }
 
   /**
    * 获取所有可见的标签
    */
-  getVisibleTags(): NodeTag[] {
+  getVisibleTags(): Tag[] {
     return this.filterTags((tag) => tag.visible !== false)
   }
 
   /**
    * 获取所有隐藏的标签
    */
-  getHiddenTags(): NodeTag[] {
+  getHiddenTags(): Tag[] {
     return this.filterTags((tag) => tag.visible === false)
   }
 
   /**
    * 隐藏全部标签
    */
-  hideAllTags(): NodeTag[] {
-    const allNodeIds = this.getTaggedNodeIds()
-    return this.setTagsVisible(allNodeIds, false)
+  hideAllTags(): Tag[] {
+    const allTargets = Array.from(this.tags.keys()).map((key) => {
+      const [targetType, ...rest] = key.split(":")
+      return {
+        targetId: rest.join(":"),
+        targetType: targetType as TagTargetType,
+      }
+    })
+    return this.setTagsVisible(allTargets, false)
   }
 
   /**
    * 显示全部标签
    */
-  showAllTags(): NodeTag[] {
-    const allNodeIds = this.getTaggedNodeIds()
-    return this.setTagsVisible(allNodeIds, true)
+  showAllTags(): Tag[] {
+    const allTargets = Array.from(this.tags.keys()).map((key) => {
+      const [targetType, ...rest] = key.split(":")
+      return {
+        targetId: rest.join(":"),
+        targetType: targetType as TagTargetType,
+      }
+    })
+    return this.setTagsVisible(allTargets, true)
   }
 
   /**
    * 根据标签文本搜索
    */
-  searchTags(query: string): NodeTag[] {
+  searchTags(query: string): Tag[] {
     const lowerQuery = query.toLowerCase()
     return this.filterTags((tag) =>
       tag.label.toLowerCase().includes(lowerQuery)
@@ -313,40 +551,42 @@ export class TagManagerModel {
   /**
    * 导出标签数据
    */
-  export(): NodeTag[] {
+  export(): Tag[] {
     return this.getAllTags()
   }
 
   /**
    * 导入标签数据
    */
-  import(tags: NodeTag[]): void {
+  import(tags: Tag[]): void {
     this.clearAll()
-    // 按节点ID分组标签
-    const tagsByNodeId = new Map<NodeId, NodeTag[]>()
+    // 按目标ID和类型分组标签
+    const tagsByKey = new Map<string, Tag[]>()
 
     tags.forEach((tag) => {
-      const existing = tagsByNodeId.get(tag.nodeId) || []
+      const key = this.getKey(tag.targetType, tag.targetId)
+      const existing = tagsByKey.get(key) || []
       existing.push(tag)
-      tagsByNodeId.set(tag.nodeId, existing)
+      tagsByKey.set(key, existing)
     })
 
     // 设置到tags Map中
-    for (const [nodeId, nodeTags] of tagsByNodeId) {
-      this.tags.set(nodeId, nodeTags)
+    for (const [key, tagList] of tagsByKey) {
+      this.tags.set(key, tagList)
     }
   }
 
   /**
-   * 为节点添加类型标签
+   * 添加类型标签（通用）
    */
   addTypedTag(
-    nodeId: NodeId,
+    targetId: string,
+    targetType: TagTargetType,
     type: string,
     label: string,
-    extra?: Partial<NodeTag>
-  ): NodeTag {
-    return this.addTag(nodeId, {
+    extra?: Partial<Omit<Tag, "targetId" | "targetType">>
+  ): Tag {
+    return this.addTag(targetId, targetType, {
       label,
       metadata: { type, ...extra?.metadata },
       ...extra,
@@ -354,17 +594,65 @@ export class TagManagerModel {
   }
 
   /**
-   * 获取节点指定类型的标签
+   * 为节点添加类型标签（便捷方法，保持向后兼容）
    */
-  getTagByType(nodeId: NodeId, type: string): NodeTag | undefined {
-    return this.getTags(nodeId).find((tag) => tag.metadata?.type === type)
+  addTypedNodeTag(
+    nodeId: NodeId,
+    type: string,
+    label: string,
+    extra?: Partial<Omit<Tag, "targetId" | "targetType">>
+  ): NodeTag {
+    return this.addTypedTag(nodeId, "node", type, label, extra) as NodeTag
   }
 
   /**
-   * 移除节点指定类型的标签
+   * 为边添加类型标签（便捷方法）
    */
-  removeTagByType(nodeId: NodeId, type: string): boolean {
-    const tags = this.getTags(nodeId)
+  addTypedLinkTag(
+    linkId: string,
+    type: string,
+    label: string,
+    extra?: Partial<Omit<Tag, "targetId" | "targetType">>
+  ): LinkTag {
+    return this.addTypedTag(linkId, "link", type, label, extra) as LinkTag
+  }
+
+  /**
+   * 获取指定类型的标签
+   */
+  getTagByType(
+    targetId: string,
+    targetType: TagTargetType,
+    type: string
+  ): Tag | undefined {
+    return this.getTags(targetId, targetType).find(
+      (tag) => tag.metadata?.type === type
+    )
+  }
+
+  /**
+   * 获取节点指定类型的标签（便捷方法，保持向后兼容）
+   */
+  getNodeTagByType(nodeId: NodeId, type: string): NodeTag | undefined {
+    return this.getTagByType(nodeId, "node", type) as NodeTag | undefined
+  }
+
+  /**
+   * 获取边指定类型的标签（便捷方法）
+   */
+  getLinkTagByType(linkId: string, type: string): LinkTag | undefined {
+    return this.getTagByType(linkId, "link", type) as LinkTag | undefined
+  }
+
+  /**
+   * 移除指定类型的标签
+   */
+  removeTagByType(
+    targetId: string,
+    targetType: TagTargetType,
+    type: string
+  ): boolean {
+    const tags = this.getTags(targetId, targetType)
     if (!tags || tags.length === 0) return false
 
     const index = tags.findIndex((tag) => tag.metadata?.type === type)
@@ -373,16 +661,18 @@ export class TagManagerModel {
     const removedTag = tags[index]
     const newTags = tags.filter((_, i) => i !== index)
 
+    const key = this.getKey(targetType, targetId)
     if (newTags.length === 0) {
-      this.tags.delete(nodeId)
+      this.tags.delete(key)
     } else {
-      this.tags.set(nodeId, newTags)
+      this.tags.set(key, newTags)
     }
 
     // 发布标签变化事件
     this.events.publish("tagChange", {
       action: "remove",
-      nodeId,
+      targetId,
+      targetType,
       tag: removedTag,
     })
 
@@ -390,21 +680,59 @@ export class TagManagerModel {
   }
 
   /**
-   * 获取节点标签数量
+   * 移除节点指定类型的标签（便捷方法，保持向后兼容）
    */
-  getNodeTagCount(nodeId: NodeId): number {
-    const tags = this.tags.get(nodeId)
-    return tags ? tags.length : 0
+  removeNodeTagByType(nodeId: NodeId, type: string): boolean {
+    return this.removeTagByType(nodeId, "node", type)
   }
 
   /**
-   * 获取所有有标签的节点ID
+   * 移除边指定类型的标签（便捷方法）
    */
-  getNodesWithTags(): NodeId[] {
-    return Array.from(this.tags.keys())
+  removeLinkTagByType(linkId: string, type: string): boolean {
+    return this.removeTagByType(linkId, "link", type)
   }
 
-  getTagMap(): Map<NodeId, NodeTag[]> {
+  /**
+   * 获取目标标签数量
+   */
+  getTargetTagCount(targetId: string, targetType: TagTargetType): number {
+    const tags = this.getTags(targetId, targetType)
+    return tags.length
+  }
+
+  /**
+   * 获取节点标签数量（便捷方法，保持向后兼容）
+   */
+  getNodeTagCount(nodeId: NodeId): number {
+    return this.getTargetTagCount(nodeId, "node")
+  }
+
+  /**
+   * 获取边标签数量（便捷方法）
+   */
+  getLinkTagCount(linkId: string): number {
+    return this.getTargetTagCount(linkId, "link")
+  }
+
+  /**
+   * 获取所有有标签的节点ID（保持向后兼容）
+   */
+  getNodesWithTags(): NodeId[] {
+    return this.getTaggedNodeIds()
+  }
+
+  /**
+   * 获取所有有标签的边ID
+   */
+  getLinksWithTags(): string[] {
+    return this.getTaggedLinkIds()
+  }
+
+  /**
+   * 获取标签Map（原始数据）
+   */
+  getTagMap(): Map<string, Tag[]> {
     return this.tags
   }
 }
@@ -446,23 +774,39 @@ export class TagManager {
   /**
    * 判断标签是否应该显示（考虑全局和单个标签的可见性）
    */
-  isTagVisible(tag: NodeTag): boolean {
+  isTagVisible(tag: Tag): boolean {
     if (!this.globalVisible) return false
     return tag.visible !== false
   }
 
   /**
-   * 获取节点所有应该显示的标签
+   * 获取目标所有应该显示的标签
    */
-  getVisibleTags(nodeId: NodeId): NodeTag[] {
+  getVisibleTags(targetId: string, targetType: TagTargetType): Tag[] {
     if (!this.globalVisible) return []
-    return this.model.getTags(nodeId).filter((tag) => tag.visible !== false)
+    return this.model
+      .getTags(targetId, targetType)
+      .filter((tag) => tag.visible !== false)
+  }
+
+  /**
+   * 获取节点所有应该显示的标签（便捷方法，保持向后兼容）
+   */
+  getVisibleNodeTags(nodeId: NodeId): NodeTag[] {
+    return this.getVisibleTags(nodeId, "node") as NodeTag[]
+  }
+
+  /**
+   * 获取边所有应该显示的标签（便捷方法）
+   */
+  getVisibleLinkTags(linkId: string): LinkTag[] {
+    return this.getVisibleTags(linkId, "link") as LinkTag[]
   }
 
   /**
    * 获取所有应该显示的标签
    */
-  getAllVisibleTags(): NodeTag[] {
+  getAllVisibleTags(): Tag[] {
     if (!this.globalVisible) return []
     return this.model.getAllTags().filter((tag) => tag.visible !== false)
   }
@@ -470,7 +814,7 @@ export class TagManager {
   /**
    * 获取所有隐藏的标签
    */
-  getAllHiddenTags(): NodeTag[] {
+  getAllHiddenTags(): Tag[] {
     if (!this.globalVisible) {
       // 如果全局隐藏，返回所有标签
       return this.model.getAllTags()

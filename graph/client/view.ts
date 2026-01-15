@@ -326,8 +326,13 @@ export class ConnGraphView<
       .onNodeDragEnd((node) => {
         this.handleNodeDragEnd(node)
       })
-      .onLinkClick((link) => {
+      .onLinkClick((_link) => {
+        const link = this.model.getLinkById(String(_link.id))
         this.handleLinkClick(link)
+      })
+      .onLinkRightClick((_link, event) => {
+        const link = this.model.getLinkById(String(_link.id))
+        this.handleLinkRightClick(link, event)
       })
       .onBackgroundClick(() => {
         actions.selectNode(undefined)
@@ -457,7 +462,7 @@ export class ConnGraphView<
       _node.x ?? 0,
       _node.y ?? 0
     )
-    this.model.events.publish("menuOpen", { node, screenPos, event })
+    this.model.events.publish("nodeRightClick", { node, screenPos, event })
   }
 
   /**
@@ -476,14 +481,24 @@ export class ConnGraphView<
   /**
    * 处理连线点击
    */
-  private handleLinkClick(link: LinkObject) {
-    const linkWithId = link as { id?: string }
-    if (!linkWithId.id) return
+  private handleLinkClick(link: GraphLink<G> | undefined) {
+    if (!link) return
 
-    const graphLink = this.model.getLinkById(linkWithId.id)
+    const graphLink = this.model.getLinkById(link.id)
     if (graphLink) {
       this.model.events.publish("linkClick", graphLink)
     }
+  }
+
+  /**
+   * 处理连线右键点击
+   */
+  private handleLinkRightClick(link?: GraphLink<G> | undefined, e: MouseEvent) {
+    if (!link) return
+
+    const screenPos = this.forceGraph.screen2GraphCoords(e.clientX, e.clientY)
+
+    this.model.events.publish("linkRightClick", { link, screenPos, event: e })
   }
 
   private handleRenderFramePost({

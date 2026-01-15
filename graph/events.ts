@@ -1,5 +1,5 @@
 import type { NodeId, LinkId } from "./type"
-import type { NodeTag } from "./tag-manager"
+import type { Tag, TagTargetType } from "./tag-manager"
 import type { StateInfo } from "./state-manager"
 import type {
   GraphNode,
@@ -15,7 +15,17 @@ export interface GraphEventMap<
   nodeHover: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
   nodeClick: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
   nodeDragEnd: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
+  nodeRightClick: {
+    node: GraphNode<G["NO"], G["NT"], G["NS"]>
+    screenPos: { x: number; y: number }
+    event: MouseEvent
+  }
   linkClick: GraphLink<G> | undefined
+  linkRightClick: {
+    link: GraphLink<G>
+    screenPos: { x: number; y: number }
+    event: MouseEvent
+  }
   backgroundClick: void
   zoom: { k: number; x: number; y: number }
   focusChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
@@ -41,17 +51,21 @@ export interface GraphEventMap<
   tagChange:
     | {
         action: "add" | "update"
-        nodeId: NodeId
-        tag: NodeTag
+        targetId: string
+        targetType: TagTargetType
+        tag: Tag
       }
     | {
         action: "remove"
-        nodeId: NodeId
-        tag?: NodeTag
+        targetId: string
+        targetType: TagTargetType
+        tag?: Tag
       }
     | {
         action: "clear"
-        nodeIds: NodeId[]
+        targetIds?: string[]
+        nodeIds?: NodeId[]
+        linkIds?: LinkId[]
       }
 }
 
