@@ -4,6 +4,9 @@ import React from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import type { GraphDataGenerics, GraphLink, GraphNode } from "./type"
 
+const tooltipContainerClass = "space-y-2 flex flex-col max-w-xs"
+const dataItemClass = "break-words"
+
 function ToolTip<N extends GraphNode>({
   node,
   debug,
@@ -14,7 +17,7 @@ function ToolTip<N extends GraphNode>({
   if (!node) return null
 
   return debug ? (
-    <div className=" space-y-2 flex flex-col">
+    <div className={tooltipContainerClass}>
       <strong>{node.id}</strong>
       <strong>
         ({node.x}, {node.y})
@@ -27,7 +30,7 @@ function ToolTip<N extends GraphNode>({
 
       {node.data
         ? Object.entries(node.data).map(([key, value]) => (
-            <strong key={key}>
+            <strong key={key} className={dataItemClass}>
               {key}:{JSON.stringify(value)}
             </strong>
           ))
@@ -49,13 +52,13 @@ function LinkToolTip<L extends GraphLink>({
   if (!link) return null
 
   return debug ? (
-    <div className=" space-y-2 flex flex-col">
+    <div className={tooltipContainerClass}>
       <strong>{link.id}</strong>
       <strong>{link.ranking}</strong>
 
       {link?.data
         ? Object.entries(link.data).map(([key, value]) => (
-            <strong key={key}>
+            <strong key={key} className={dataItemClass}>
               {key}:{JSON.stringify(value)}
             </strong>
           ))
