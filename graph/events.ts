@@ -10,17 +10,21 @@ import type {
 } from "./client/type"
 // 定义事件类型
 export interface GraphEventMap<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
-  nodeHover: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
-  nodeClick: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
-  nodeDragEnd: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined
+  nodeHover: GraphNode<G["NO"], G["NT"], G["NS"]> | null
+  nodeClick: GraphNode<G["NO"], G["NT"], G["NS"]> | null
+  nodeDragEnd: GraphNode<G["NO"], G["NT"], G["NS"]> | null
   nodeRightClick: {
     node: GraphNode<G["NO"], G["NT"], G["NS"]>
     screenPos: { x: number; y: number }
     event: MouseEvent
   }
-  linkClick: GraphLink<G> | undefined
+  linkHover: {
+    link: GraphLink<G> | null
+    previousLink: GraphLink<G> | null
+  }
+  linkClick: GraphLink<G> | null
   linkRightClick: {
     link: GraphLink<G>
     screenPos: { x: number; y: number }
@@ -28,10 +32,14 @@ export interface GraphEventMap<
   }
   backgroundClick: void
   zoom: { k: number; x: number; y: number }
+
   focusChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   selectionChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   hiddenChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   rootNodesChange: { nodeIds: NodeId[] }
+  nodesHoverChange: { nodeIds: NodeId[] }
+  linksHoverChange: { linkIds: LinkId[] }
+
   loadMore: GraphNode<G["NO"], G["NT"], G["NS"]>
   plusToolClick: GraphNode<G["NO"], G["NT"], G["NS"]>
   menuOpen: {
@@ -76,7 +84,7 @@ type EventSubscriber<T = unknown> = (data: T) => void
 type UnsubscribeFunction = () => void
 
 export class ConnGraphEvents<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   private subscribers = new Map<string, Set<EventSubscriber>>()
 
@@ -88,7 +96,7 @@ export class ConnGraphEvents<
    */
   subscribe<K extends keyof GraphEventMap<G>>(
     eventType: K,
-    subscriber: EventSubscriber<GraphEventMap<G>[K]>
+    subscriber: EventSubscriber<GraphEventMap<G>[K]>,
   ): UnsubscribeFunction {
     const eventKey = String(eventType)
     if (!this.subscribers.has(eventKey)) {
@@ -114,7 +122,7 @@ export class ConnGraphEvents<
    */
   publish<K extends keyof GraphEventMap<G>>(
     eventType: K,
-    data: GraphEventMap<G>[K]
+    data: GraphEventMap<G>[K],
   ): void {
     const eventKey = String(eventType)
     const subscriberSet = this.subscribers.get(eventKey)
@@ -126,7 +134,7 @@ export class ConnGraphEvents<
       } catch (error) {
         console.error(
           `Error in event subscriber for ${String(eventType)}:`,
-          error
+          error,
         )
       }
     })

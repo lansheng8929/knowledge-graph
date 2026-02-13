@@ -35,7 +35,7 @@ export type DefaultGraphDataGenerics = {
  * 程序中的边数据统一类型
  */
 export interface GraphLink<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   id: LinkId
   source: LinkId | GraphNode<G["NO"], G["NT"], G["NS"]>
@@ -45,7 +45,7 @@ export interface GraphLink<
 }
 
 export interface GraphViewModelGraphData<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   graphData: {
     nodes: GraphNode<G["NO"], G["NT"], G["NS"]>[]
@@ -57,7 +57,7 @@ export interface GraphViewModelGraphData<
  * 程序中使用的图数据模型类型
  */
 export type GraphViewModel<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > = GraphViewModelGraphData<G>
 
 /**
@@ -71,6 +71,8 @@ export interface StateConfig {
   hiddenNodes?: NodeId[]
   hiddenLinks?: LinkId[]
   rootNodes?: NodeId[]
+  hoveredNodes?: NodeId[]
+  hoveredLinks?: LinkId[]
 }
 
 /**
@@ -79,7 +81,7 @@ export interface StateConfig {
 export interface GraphNode<
   D extends object = object,
   T extends string = NodeType,
-  S extends string = NodeState
+  S extends string = NodeState,
 > {
   id: NodeId
   x?: number
@@ -99,7 +101,7 @@ export interface GraphNode<
 export type GraphNodeInfo<
   D extends object = object,
   T extends string = NodeType,
-  S extends string = NodeState
+  S extends string = NodeState,
 > = {
   nodeType?: T
   stateType?: S
@@ -115,7 +117,7 @@ export type GraphNodeInfo<
 export type GraphLinkInfo<
   D = object,
   T extends string = LinkType,
-  S extends string = LinkState
+  S extends string = LinkState,
 > = {
   label?: string
   linkType?: T

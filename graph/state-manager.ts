@@ -17,7 +17,7 @@ export type StateInfo = Required<StateConfig>
  * 这些状态不同于节点的 stateType，是运行时的临时状态
  */
 export class StateManager<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   private state: StateInfo
   private events: ConnGraphEvents<G>
@@ -32,6 +32,8 @@ export class StateManager<
       hiddenNodes: [],
       hiddenLinks: [],
       rootNodes: [],
+      hoveredNodes: [],
+      hoveredLinks: [],
     }
   }
 
@@ -77,7 +79,7 @@ export class StateManager<
   removeFocusNodes(nodeIds: NodeId[]): void {
     const nodeIdSet = new Set(nodeIds)
     this.state.focusNodes = this.state.focusNodes.filter(
-      (id) => !nodeIdSet.has(id)
+      (id) => !nodeIdSet.has(id),
     )
 
     this.events.publish("focusChange", {
@@ -168,7 +170,7 @@ export class StateManager<
   removeSelectedNodes(nodeIds: NodeId[]): void {
     const nodeIdSet = new Set(nodeIds)
     this.state.selectedNodes = this.state.selectedNodes.filter(
-      (id) => !nodeIdSet.has(id)
+      (id) => !nodeIdSet.has(id),
     )
 
     this.events.publish("selectionChange", {
@@ -259,7 +261,7 @@ export class StateManager<
   removeHiddenNodes(nodeIds: NodeId[]): void {
     const nodeIdSet = new Set(nodeIds)
     this.state.hiddenNodes = this.state.hiddenNodes.filter(
-      (id) => !nodeIdSet.has(id)
+      (id) => !nodeIdSet.has(id),
     )
 
     this.events.publish("hiddenChange", {
@@ -340,7 +342,7 @@ export class StateManager<
   removeRootNodes(nodeIds: NodeId[]): void {
     const nodeIdSet = new Set(nodeIds)
     this.state.rootNodes = this.state.rootNodes.filter(
-      (id) => !nodeIdSet.has(id)
+      (id) => !nodeIdSet.has(id),
     )
 
     this.events.publish("rootNodesChange", {
@@ -377,6 +379,121 @@ export class StateManager<
     return this.state.rootNodes.includes(nodeId)
   }
 
+  // ============ 悬浮节点状态管理 ============
+
+  /**
+   * 设置悬浮节点
+   */
+  setHoveredNodes(nodeIds: NodeId[]): void {
+    this.state.hoveredNodes = [...new Set(nodeIds)]
+
+    this.events.publish("nodesHoverChange", {
+      nodeIds: this.state.hoveredNodes,
+    })
+
+    this.publishMetaDataChange()
+  }
+
+  /**
+   * 添加悬浮节点
+   */
+  addHoveredNodes(nodeIds: NodeId[]): void {
+    this.state.hoveredNodes = [
+      ...new Set([...this.state.rootNodes, ...nodeIds]),
+    ]
+
+    this.events.publish("nodesHoverChange", {
+      nodeIds: this.state.hoveredNodes,
+    })
+
+    this.publishMetaDataChange()
+  }
+
+  /**
+   * 移除悬浮节点
+   */
+  removeHoveredNodes(nodeIds: NodeId[]): void {
+    const nodeIdSet = new Set(nodeIds)
+    this.state.hoveredNodes = this.state.hoveredNodes.filter(
+      (id) => !nodeIdSet.has(id),
+    )
+
+    this.events.publish("nodesHoverChange", {
+      nodeIds: this.state.hoveredNodes,
+    })
+
+    this.publishMetaDataChange()
+  }
+
+  /**
+   * 清空悬浮节点
+   */
+  clearHoveredNodes(): void {
+    this.state.hoveredNodes = []
+
+    this.events.publish("nodesHoverChange", {
+      nodeIds: [],
+    })
+
+    this.publishMetaDataChange()
+  }
+
+  /**
+   * 获取悬浮节点
+   */
+  getHoveredNodes(): NodeId[] {
+    return [...this.state.hoveredNodes]
+  }
+
+  /**
+   * 判断节点是否为悬浮节点
+   */
+  isHoveredNode(nodeId: NodeId): boolean {
+    return this.state.hoveredNodes.includes(nodeId)
+  }
+
+  // ============ 悬浮连线状态管理 ============
+
+  /**
+   * 设置悬浮连线
+   */
+  setHoveredLinks(linkIds: LinkId[]): void {
+    this.state.hoveredLinks = [...new Set(linkIds)]
+
+    this.events.publish("linksHoverChange", {
+      linkIds: this.state.hoveredLinks,
+    })
+
+    this.publishMetaDataChange()
+  }
+
+  /**
+   * 清空悬浮连线
+   */
+  clearHoveredLinks(): void {
+    this.state.hoveredLinks = []
+
+    this.events.publish("linksHoverChange", {
+      linkIds: [],
+    })
+
+    this.publishMetaDataChange()
+  }
+
+  /**
+   * 获取悬浮节点
+   */
+  getHoveredLinks(): LinkId[] {
+    return [...this.state.hoveredLinks]
+  }
+
+  /**
+   * 判断节点是否为悬浮连线
+   */
+  isHoveredLink(linkId: LinkId): boolean {
+    return this.state.hoveredLinks.includes(linkId)
+  }
+
   // ============ 通用方法 ============
 
   /**
@@ -391,6 +508,8 @@ export class StateManager<
       hiddenNodes: [...this.state.hiddenNodes],
       hiddenLinks: [...this.state.hiddenLinks],
       rootNodes: [...this.state.rootNodes],
+      hoveredNodes: [...this.state.hoveredNodes],
+      hoveredLinks: [...this.state.hoveredLinks],
     }
   }
 
@@ -486,6 +605,8 @@ export class StateManager<
       hiddenNodes: [],
       hiddenLinks: [],
       rootNodes: [],
+      hoveredNodes: [],
+      hoveredLinks: [],
     }
 
     this.events.publish("focusChange", { nodeIds: [], linkIds: [] })

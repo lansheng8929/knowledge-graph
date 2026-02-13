@@ -18,33 +18,33 @@ import type {
   GraphViewModelGraphData,
   StateConfig,
 } from "./client/type"
+import { StyleManager } from "./style-manager"
 
 export interface Options<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   initData: GraphViewModel<G>
 }
 
 type ModelComputedCache<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > = GraphViewModel<G>
 
 export class ConnGraphModel<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   protected cache!: ModelComputedCache<G>
   public events = new ConnGraphEvents<G>()
   public tagManager = new TagManager(this.events)
   public loadingManager = new LoadingManager(this.events)
-  public stateManager: StateManager<G>
-  public colorTracker: ColorTracker
+  public stateManager = new StateManager<G>(this.events)
+  public styleManager = new StyleManager<G>()
+  public colorTracker = new ColorTracker()
 
   constructor({ initData }: Options<G>) {
     this.cache = {
       graphData: { nodes: [], links: [] },
     }
-    this.colorTracker = new ColorTracker()
-    this.stateManager = new StateManager<G>(this.events)
 
     this.updateGraphData({
       graphData: initData.graphData,
@@ -160,11 +160,13 @@ export class ConnGraphModel<
     }
   }
 
-  getLinkById(id: LinkId) {
-    return this.cache.graphData.links.find((link) => link.id === id)
+  getLinkById(id: LinkId | null | undefined) {
+    if (!id) return null
+    return this.cache.graphData.links.find((link) => link.id === id) || null
   }
 
-  getNodeById(id: NodeId) {
-    return this.cache.graphData.nodes.find((node) => node.id === id)
+  getNodeById(id: NodeId | null | undefined) {
+    if (!id) return null
+    return this.cache.graphData.nodes.find((node) => node.id === id) || null
   }
 }

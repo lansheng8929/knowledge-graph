@@ -35,6 +35,7 @@ import type {
   GraphNode,
   GraphViewModel,
 } from "./type"
+import type { StyleManager } from "../style-manager"
 
 interface GraphModelActions {
   highlightNode(id: NodeId | undefined): void
@@ -50,7 +51,7 @@ export type CustomGraphViewStyle<G extends GraphDataGenerics> =
 export type CustomNodeStyle = RecursivePartial<Style>
 
 interface GraphViewOptions<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   container: HTMLElement
   graphModel: ConnGraphModel<G>
@@ -67,18 +68,18 @@ interface GraphViewOptions<
   setupD3Force?: (
     this: ConnGraphView<G>,
     forceGraph: ForceGraph,
-    d3: typeof import("d3-force")
+    d3: typeof import("d3-force"),
   ) => void
 }
 
 export class ConnGraphView<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   declare options: GraphViewOptions<G>
   declare container: HTMLElement
   declare forceGraph: ForceGraph
   declare model: ConnGraphModel<G>
-  declare style: GraphViewStyle<G>
+
   declare nodeRenderProcessorMap: NodeRenderProcessorMap<G>
   declare colorTracker: ColorTracker
   declare canvas: HTMLCanvasElement | null
@@ -86,6 +87,7 @@ export class ConnGraphView<
   declare toolShadowCanvas: HTMLCanvasElement | null
   declare toolShadowCtx: CanvasRenderingContext2D | null
   declare entityRegistry: EntityRegistry<G>
+  declare styleManager: StyleManager<G>
 
   actions: GraphModelActions = {
     highlightNode: (nodeId: NodeId) => {
@@ -101,6 +103,7 @@ export class ConnGraphView<
     this.container = opts.container
     this.model = opts.graphModel
     this.colorTracker = this.model.colorTracker
+    this.styleManager = this.model.styleManager
     this.canvas = null
     this.forceGraphShadowCtx = null
     this.toolShadowCanvas = null
@@ -154,7 +157,7 @@ export class ConnGraphView<
    */
   private getLinkCurveOffset(
     link: GraphLink<G>,
-    linkCountMap: Map<string, { total: number; links: Map<string, number> }>
+    linkCountMap: Map<string, { total: number; links: Map<string, number> }>,
   ): number {
     const sourceId =
       typeof link.source === "object" ? link.source.id : link.source
@@ -219,7 +222,9 @@ export class ConnGraphView<
    * 更新样式
    */
   updateStyle(options: Pick<GraphViewOptions<G>, "style">) {
-    this.options.style = options.style
+    if (options.style) {
+      this.styleManager.update(options.style)
+    }
 
     this.refreshByStyle()
   }
@@ -230,11 +235,10 @@ export class ConnGraphView<
    * 初始化样式
    */
   protected initStyle() {
-    if (this.options.style) {
-      this.style = mergeObjects(this.style, this.options.style || {})
-    } else {
-      this.style = getDefaultColorOf<G>(this.container)
-    }
+    this.styleManager.init({
+      style: this.options.style,
+      container: this.container,
+    })
 
     this.refreshByStyle()
   }
@@ -256,8 +260,6 @@ export class ConnGraphView<
     this.setupCanvasClickListener()
 
     this.forceGraph = forceGraph
-
-    this.refreshByStyle()
   }
 
   /**
@@ -265,7 +267,7 @@ export class ConnGraphView<
    */
   private setupForceGraph(
     forceGraph: ForceGraph,
-    d3: typeof import("d3-force")
+    d3: typeof import("d3-force"),
   ) {
     // 如果外部提供了自定义配置函数，优先使用
     if (this.options.setupD3Force) {
@@ -299,21 +301,13 @@ export class ConnGraphView<
     const { actions } = this
 
     forceGraph
-      .onNodeHover((_node) => {
-        if (!_node) return
-        const node = this.model.getNodeById(String(_node.id))
-        if (node) {
-          this.model.events.publish("nodeHover", node)
-        }
+      .onNodeHover((_node, _previousNode) => {
+        const node = this.model.getNodeById(String(_node?.id))
+        const previousNode = this.model.getNodeById(String(_previousNode?.id))
+        this.handleNodeHover(node, previousNode)
       })
       .onNodeClick((_node, event) => {
         const node = this.model.getNodeById(String(_node.id))
-
-        // if (node) {
-        //   const style = this.getNodeColor(node.id)
-        //   console.log("节点样式：", style)
-        // }
-
         this.handleNodeClick(node, event)
       })
       .onNodeRightClick((_node, event) => {
@@ -333,6 +327,11 @@ export class ConnGraphView<
       .onLinkRightClick((_link, event) => {
         const link = this.model.getLinkById(String(_link.id))
         this.handleLinkRightClick(link, event)
+      })
+      .onLinkHover((_link, _previousLink) => {
+        const link = this.model.getLinkById(String(_link?.id))
+        const previousLink = this.model.getLinkById(String(_previousLink?.id))
+        this.handleLinkHover(link, previousLink)
       })
       .onBackgroundClick(() => {
         actions.selectNode(undefined)
@@ -427,7 +426,7 @@ export class ConnGraphView<
       case "PlusTool":
         this.model.events.publish(
           "plusToolClick",
-          obj.d as GraphNode<G["NO"], G["NT"], G["NS"]>
+          obj.d as GraphNode<G["NO"], G["NT"], G["NS"]>,
         )
         event.stopPropagation()
         break
@@ -437,11 +436,27 @@ export class ConnGraphView<
   // ==================== 事件处理方法 ====================
 
   /**
+   * 处理节点悬浮
+   */
+  private handleNodeHover(
+    node: GraphNode<G["NO"], G["NT"], G["NS"]> | null,
+    previousNode: GraphNode<G["NO"], G["NT"], G["NS"]> | null,
+  ) {
+    if (node) {
+      this.model.stateManager.setHoveredNodes([node.id])
+    } else {
+      this.model.stateManager.clearHoveredNodes()
+    }
+
+    this.model.events.publish("nodeHover", node)
+  }
+
+  /**
    * 处理节点点击
    */
   private handleNodeClick(
-    node: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined,
-    event?: MouseEvent
+    node: GraphNode<G["NO"], G["NT"], G["NS"]> | null,
+    event?: MouseEvent,
   ) {
     if (!node) return
     this.actions.selectNode(String(node.id))
@@ -453,14 +468,14 @@ export class ConnGraphView<
    */
   private handleNodeRightClick(
     _node: NodeObject,
-    node: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined,
-    event: MouseEvent
+    node: GraphNode<G["NO"], G["NT"], G["NS"]> | null,
+    event: MouseEvent,
   ) {
     if (!node?.data?.nodeType) return
 
     const screenPos = this.forceGraph.graph2ScreenCoords(
       _node.x ?? 0,
-      _node.y ?? 0
+      _node.y ?? 0,
     )
     this.model.events.publish("nodeRightClick", { node, screenPos, event })
   }
@@ -481,7 +496,7 @@ export class ConnGraphView<
   /**
    * 处理连线点击
    */
-  private handleLinkClick(link: GraphLink<G> | undefined) {
+  private handleLinkClick(link: GraphLink<G> | null) {
     if (!link) return
 
     const graphLink = this.model.getLinkById(link.id)
@@ -493,12 +508,28 @@ export class ConnGraphView<
   /**
    * 处理连线右键点击
    */
-  private handleLinkRightClick(link?: GraphLink<G> | undefined, e: MouseEvent) {
+  private handleLinkRightClick(link: GraphLink<G> | null, e: MouseEvent) {
     if (!link) return
 
     const screenPos = this.forceGraph.screen2GraphCoords(e.clientX, e.clientY)
 
     this.model.events.publish("linkRightClick", { link, screenPos, event: e })
+  }
+
+  /**
+   * 处理连线悬停
+   */
+  private handleLinkHover(
+    link: GraphLink<G> | null,
+    previousLink: GraphLink<G> | null,
+  ) {
+    if (link) {
+      this.model.stateManager.setHoveredLinks([link.id])
+    } else {
+      this.model.stateManager.clearHoveredLinks()
+    }
+
+    this.model.events.publish("linkHover", { link, previousLink })
   }
 
   private handleRenderFramePost({
@@ -517,7 +548,7 @@ export class ConnGraphView<
         0,
         0,
         this.toolShadowCanvas.width,
-        this.toolShadowCanvas.height
+        this.toolShadowCanvas.height,
       )
       this.toolShadowCtx.restore()
       this.toolShadowCtx.setTransform(transform)
@@ -568,7 +599,7 @@ export class ConnGraphView<
         0,
         transform.k,
         transform.x,
-        transform.y
+        transform.y,
       )
     }
   }
@@ -577,7 +608,7 @@ export class ConnGraphView<
 
   public getCollisionRadius = <G extends GraphDataGenerics>(
     node: GraphNode<G["NO"], G["NT"], G["NS"]>,
-    gobalScale?: number
+    gobalScale?: number,
   ) => {
     const { nodeType } = node?.data || {}
     if (!nodeType) return 0
@@ -594,13 +625,14 @@ export class ConnGraphView<
    * 获取节点状态
    */
   protected getNodeState(
-    node?: GraphNode<G["NO"], G["NT"], G["NS"]>
+    node?: GraphNode<G["NO"], G["NT"], G["NS"]>,
   ): G["NS"] | undefined {
     if (!node) return undefined
 
     const nodeId = node.id
     const { stateType } = node.data || {}
 
+    if (this.model.stateManager.isHoveredNode(nodeId)) return "hovered"
     if (this.model.stateManager.isFocused(nodeId)) return "highlighted"
     if (this.model.stateManager.isSelected(nodeId)) return "selected"
     if (this.model.stateManager.isHidden(nodeId)) return "hidden"
@@ -621,7 +653,9 @@ export class ConnGraphView<
     const focusLinks = this.model.stateManager.getFocusLinks()
     const selectedLinks = this.model.stateManager.getSelectedLinks()
     const hiddenLinks = this.model.stateManager.getHiddenLinks()
+    const hoveredLinks = this.model.stateManager.getHoveredLinks()
 
+    if (hoveredLinks.some((id) => id === linkId)) return "hovered"
     if (focusLinks.some((id) => id === linkId)) return "highlighted"
     if (selectedLinks.some((id) => id === linkId)) return "selected"
     if (hiddenLinks.some((id) => id === linkId)) return "hidden"
@@ -636,9 +670,9 @@ export class ConnGraphView<
    */
   private getNodeColor = (nodeId: NodeId, globalScale?: number): Style => {
     const node = this.model.getNodeById(nodeId)
-    const { nodeType } = node?.data || {}
+    if (!node) return {} as Style
 
-    const nodeStyle = getNodeStyleByType(this.style, nodeType)
+    const nodeStyle = this.styleManager.getNodeStyle(node)
     const state = this.getNodeState(node)
     const style = getNodeStyleByStateType(nodeStyle, state)
 
@@ -650,16 +684,13 @@ export class ConnGraphView<
    */
   private getLinkColor = (linkId: LinkId): LStyle => {
     const link = this.model.getLinkById(linkId)
-    const { linkType, color } = link?.data || {}
+    if (!link) return {} as LStyle
 
-    const linkStyle = getLinkStyleByType(this.style, linkType)
+    const linkStyle = this.styleManager.getLinkStyle(link)
     const state = this.getLinkState(link)
     const style = getLinkStyleByStateType(linkStyle, state)
 
-    return {
-      ...style,
-      color: color || style.color,
-    } as LStyle
+    return style
   }
 
   // ==================== 渲染方法 ====================
@@ -670,14 +701,10 @@ export class ConnGraphView<
   refreshByStyle() {
     if (!this.forceGraph) return
 
-    if (this.options.style) {
-      this.style = mergeObjects(this.style, this.options.style || {})
-    } else {
-      this.style = getDefaultColorOf<G>(this.container)
-    }
+    const { background } = this.styleManager.getStyle()
 
     this.forceGraph
-      .backgroundColor(this.style.background)
+      .backgroundColor(background)
       .nodeCanvasObjectMode(() => "replace")
       .nodeCanvasObject(this.renderNode)
       .nodePointerAreaPaint(this.renderNodePointerArea)
@@ -685,12 +712,12 @@ export class ConnGraphView<
       .linkPointerAreaPaint(this.renderLinkPointerArea)
       .nodeLabel((node) => {
         const graphNode = this.model.getNodeById(String(node.id))
-        return nodeLabel(graphNode, this.options.debug)
+        return nodeLabel(graphNode || undefined, this.options.debug)
       })
       .linkLabel((_link) => {
         const link = _link as GraphLink<G>
         const graphLink = this.model.getLinkById(String(link.id))
-        return linkLabel(graphLink, this.options.debug)
+        return linkLabel(graphLink || undefined, this.options.debug)
       })
   }
 
@@ -700,7 +727,7 @@ export class ConnGraphView<
   private renderNode = (
     _node: NodeObject,
     ctx: CanvasRenderingContext2D,
-    globalScale: number
+    globalScale: number,
   ) => {
     if (!_node.id) return
     const node = this.model.getNodeById(String(_node.id))
@@ -733,7 +760,7 @@ export class ConnGraphView<
     _node: NodeObject,
     color: string,
     ctx: CanvasRenderingContext2D,
-    globalScale: number
+    globalScale: number,
   ) => {
     if (!_node.id) return
 
@@ -741,7 +768,7 @@ export class ConnGraphView<
     if (!node) return
     const { nodeType } = node?.data || {}
 
-    const nodeStyle = getNodeStyleByType(this.style, nodeType)
+    const nodeStyle = this.styleManager.getNodeStyle(node)
     const state = this.getNodeState(node)
     const style = getNodeStyleByStateType(nodeStyle, state)
 
@@ -779,11 +806,12 @@ export class ConnGraphView<
    */
   private renderLinkPointerArea = (
     _link: LinkObject,
-    color: string,
+    indexColor: string,
     ctx: CanvasRenderingContext2D,
-    globalScale: number
+    globalScale: number,
   ) => {
     const link = _link as GraphLink<G>
+    if (!link.source || !link.target) return
     if (typeof link.source !== "object" || typeof link.target !== "object")
       return
 
@@ -801,7 +829,7 @@ export class ConnGraphView<
     const pointerAreaWidth = 8 / globalScale
 
     ctx.save()
-    ctx.fillStyle = color
+    ctx.fillStyle = indexColor
     ctx.beginPath()
 
     if (curveOffset === 0) {
@@ -809,7 +837,7 @@ export class ConnGraphView<
       const { x: arrowStartX, y: arrowStartY } = this.calculateArrowStart(
         start,
         end,
-        targetRadius
+        targetRadius,
       )
 
       // 绘制矩形点击区域（线条两侧扩展）
@@ -843,7 +871,7 @@ export class ConnGraphView<
       ctx.quadraticCurveTo(controlX, controlY, endX, endY)
       ctx.lineWidth = pointerAreaWidth
       ctx.lineCap = "round"
-      ctx.strokeStyle = color
+      ctx.strokeStyle = indexColor
       ctx.stroke()
     }
 
@@ -857,7 +885,7 @@ export class ConnGraphView<
   private renderLink = (
     _link: LinkObject,
     ctx: CanvasRenderingContext2D,
-    globalScale: number
+    globalScale: number,
   ) => {
     const link = _link as GraphLink<G>
 
@@ -866,44 +894,30 @@ export class ConnGraphView<
 
     if (typeof start !== "object" || typeof end !== "object") return
 
-    const {
-      color = DEFAULT_STROKE_COLOR,
-      opacity,
-      light,
-    } = this.getLinkColor(String(link.id))
+    const style = this.getLinkColor(String(link.id))
 
     // 计算曲线偏移
     const linkCountMap = this.calculateLinkCurveInfo()
     const curveOffset = this.getLinkCurveOffset(link, linkCountMap)
 
     // 渲染连线主体
-    this.renderLinkLine(
-      start,
-      end,
-      link,
-      ctx,
-      globalScale,
-      color,
-      opacity,
-      curveOffset
-    )
+    this.renderLinkLine(start, end, link, ctx, globalScale, style, curveOffset)
 
     // 渲染箭头
     if (this.options.arrowDisplay) {
-      this.renderArrow(start, end, link, ctx, globalScale, color, curveOffset)
+      this.renderArrow(start, end, link, ctx, globalScale, style, curveOffset)
     }
 
     // 渲染光晕效果
-    if (light) {
+    if (style.light) {
       this.renderLinkLight(
         start,
         end,
         link,
         ctx,
         globalScale,
-        light,
-        opacity,
-        curveOffset
+        style,
+        curveOffset,
       )
     }
 
@@ -915,8 +929,8 @@ export class ConnGraphView<
         link,
         ctx,
         globalScale,
-        opacity,
-        curveOffset
+        style,
+        curveOffset,
       )
     }
 
@@ -933,10 +947,11 @@ export class ConnGraphView<
     link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
-    stroke: string,
-    opacity?: number,
-    curveOffset: number = 0
+    style: LStyle,
+    curveOffset: number = 0,
   ) {
+    const { color = DEFAULT_STROKE_COLOR, opacity } = style
+
     const focusLinks = this.model.stateManager.getFocusLinks()
 
     const lineWidth = link.data?.lineWidth ?? DEFAULT_LINE_WIDTH
@@ -966,7 +981,7 @@ export class ConnGraphView<
       ctx.quadraticCurveTo(controlX, controlY, end.x!, end.y!)
     }
 
-    ctx.strokeStyle = stroke
+    ctx.strokeStyle = color
     ctx.lineWidth = (lineWidth * focusMultiplier) / globalScale
     ctx.stroke()
     ctx.closePath()
@@ -982,9 +997,11 @@ export class ConnGraphView<
     link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
-    stroke: string,
-    curveOffset: number = 0
+    style: LStyle,
+    curveOffset: number = 0,
   ) {
+    const { stroke = DEFAULT_STROKE_COLOR } = style
+
     let angle: number
 
     if (curveOffset === 0) {
@@ -1015,7 +1032,7 @@ export class ConnGraphView<
       end.y!,
       arrowLength,
       arrowWidth,
-      angle
+      angle,
     )
 
     ctx.beginPath()
@@ -1036,10 +1053,11 @@ export class ConnGraphView<
     link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
-    light: string,
-    opacity?: number,
-    curveOffset: number = 0
+    style: LStyle,
+    curveOffset: number = 0,
   ) {
+    const { light = DEFAULT_STROKE_COLOR, opacity } = style
+
     ctx.save()
     ctx.globalAlpha = opacity ?? 1
 
@@ -1097,7 +1115,7 @@ export class ConnGraphView<
         end.y!,
         arrowLength,
         arrowWidth,
-        angle
+        angle,
       )
 
       ctx.beginPath()
@@ -1121,9 +1139,11 @@ export class ConnGraphView<
     link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
-    opacity?: number,
-    curveOffset: number = 0
+    style: LStyle,
+    curveOffset: number = 0,
   ) {
+    const { opacity, color = DEFAULT_STROKE_COLOR } = style
+
     const label = link.data?.label
     if (!label || label.length === 0) return
 
@@ -1197,13 +1217,13 @@ export class ConnGraphView<
       -bckgDimensions[0] / 2,
       -bckgDimensions[1] / 2,
       bckgDimensions[0],
-      bckgDimensions[1]
+      bckgDimensions[1],
     )
 
     // 文字
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    ctx.fillStyle = "darkgrey"
+    ctx.fillStyle = color
     ctx.fillText(label, 0, 0)
 
     ctx.restore()
@@ -1234,7 +1254,7 @@ export class ConnGraphView<
   private calculateArrowStart(
     start: NodeObject,
     end: NodeObject,
-    targetRadius: number
+    targetRadius: number,
   ) {
     const dx = end.x! - start.x!
     const dy = end.y! - start.y!
@@ -1254,7 +1274,7 @@ export class ConnGraphView<
     tipY: number,
     arrowLength: number,
     arrowWidth: number,
-    angle: number
+    angle: number,
   ) {
     return {
       tip: { x: tipX, y: tipY },

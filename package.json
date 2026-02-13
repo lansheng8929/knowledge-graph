@@ -1,7 +1,7 @@
 {
   "name": "@ra-sdk/knowledge-graph",
   "sideEffects": false,
-  "version": "1.0.26",
+  "version": "1.0.26-beta.3",
   "type": "module",
   "main": "./graph/index.ts",
   "types": "./graph/index.ts",
@@ -24,5 +24,6 @@
   "peerDependencies": {
     "react": "^18",
     "react-dom": "^18"
-  }
+  },
+  "packageManager": "npm@11.0.0"
 }

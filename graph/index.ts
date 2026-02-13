@@ -9,4 +9,6 @@ export * from "./state-manager"
 export * from "./events"
 export * from "./image-cache"
 
+export * from "./type"
+
 export * as d3 from "d3-force"

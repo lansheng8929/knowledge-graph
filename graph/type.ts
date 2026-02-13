@@ -4,7 +4,13 @@ export type NodeState =
   | "highlighted"
   | "selected"
   | "hidden"
-export type LinkState = "regular" | "highlighted" | "selected" | "hidden"
+  | "hovered"
+export type LinkState =
+  | "regular"
+  | "highlighted"
+  | "selected"
+  | "hidden"
+  | "hovered"
 
 export type NodeType = "default"
 export type LinkType = "default"
