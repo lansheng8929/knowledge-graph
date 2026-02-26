@@ -616,7 +616,8 @@ export class ConnGraphView<
     const style = this.getNodeColor(node.id, gobalScale)
 
     const processor = this.nodeRenderProcessorMap[nodeType]
-    return processor?.getCollisionRadius?.({ node, style }) ?? 0
+    const rawRadius = processor?.getCollisionRadius?.({ node, style }) || 0
+    return rawRadius
   }
 
   // ==================== 状态查询方法 ====================
@@ -889,8 +890,8 @@ export class ConnGraphView<
   ) => {
     const link = _link as GraphLink<G>
 
-    const start = link.source as NodeObject
-    const end = link.target as NodeObject
+    const start = link.source as GraphNode<G["NO"], G["NT"], G["NS"]>
+    const end = link.target as GraphNode<G["NO"], G["NT"], G["NS"]>
 
     if (typeof start !== "object" || typeof end !== "object") return
 
@@ -950,7 +951,7 @@ export class ConnGraphView<
     style: LStyle,
     curveOffset: number = 0,
   ) {
-    const { color = DEFAULT_STROKE_COLOR, opacity } = style
+    const { color = DEFAULT_STROKE_COLOR, opacity = 1 } = style
 
     const focusLinks = this.model.stateManager.getFocusLinks()
 
@@ -960,7 +961,7 @@ export class ConnGraphView<
       : 1
 
     ctx.save()
-    ctx.globalAlpha = opacity ?? 1
+    ctx.globalAlpha = opacity
     ctx.beginPath()
 
     if (curveOffset === 0) {
@@ -992,15 +993,17 @@ export class ConnGraphView<
    * 渲染箭头
    */
   private renderArrow(
-    start: NodeObject,
-    end: NodeObject,
+    start: GraphNode<G["NO"], G["NT"], G["NS"]>,
+    end: GraphNode<G["NO"], G["NT"], G["NS"]>,
     link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
     style: LStyle,
     curveOffset: number = 0,
   ) {
-    const { stroke = DEFAULT_STROKE_COLOR } = style
+    const { color = DEFAULT_STROKE_COLOR } = style
+
+    const endRadius = this.getCollisionRadius(end, globalScale)
 
     let angle: number
 
@@ -1023,16 +1026,17 @@ export class ConnGraphView<
       angle = Math.atan2(tangentY, tangentX)
     }
 
-    const arrowLength = ARROW_SIZE / globalScale
+    const arrowLength = ARROW_SIZE
     const arrowWidth = arrowLength * 0.8
 
-    // 箭头绘制在节点中心
+    // 箭头绘制在节点边缘
     const arrowPoints = this.calculateArrowPoints(
       end.x!,
       end.y!,
       arrowLength,
       arrowWidth,
       angle,
+      endRadius,
     )
 
     ctx.beginPath()
@@ -1040,7 +1044,7 @@ export class ConnGraphView<
     ctx.lineTo(arrowPoints.left.x, arrowPoints.left.y)
     ctx.lineTo(arrowPoints.right.x, arrowPoints.right.y)
     ctx.closePath()
-    ctx.fillStyle = stroke
+    ctx.fillStyle = color
     ctx.fill()
   }
 
@@ -1048,8 +1052,8 @@ export class ConnGraphView<
    * 渲染连线光晕
    */
   private renderLinkLight(
-    start: NodeObject,
-    end: NodeObject,
+    start: GraphNode<G["NO"], G["NT"], G["NS"]>,
+    end: GraphNode<G["NO"], G["NT"], G["NS"]>,
     link: GraphLink<G>,
     ctx: CanvasRenderingContext2D,
     globalScale: number,
@@ -1063,7 +1067,6 @@ export class ConnGraphView<
 
     // 光晕线条
     ctx.beginPath()
-
     if (curveOffset === 0) {
       // 直线光晕 - 终点为节点中心
       ctx.moveTo(start.x!, start.y!)
@@ -1088,6 +1091,8 @@ export class ConnGraphView<
 
     // 光晕箭头
     if (this.options.arrowDisplay) {
+      const endRadius = this.getCollisionRadius(end, globalScale)
+
       let angle: number
 
       if (curveOffset === 0) {
@@ -1107,7 +1112,7 @@ export class ConnGraphView<
         angle = Math.atan2(tangentY, tangentX)
       }
 
-      const arrowLength = ARROW_SIZE / globalScale
+      const arrowLength = ARROW_SIZE
       const arrowWidth = arrowLength * 0.8
 
       const arrowPoints = this.calculateArrowPoints(
@@ -1116,6 +1121,7 @@ export class ConnGraphView<
         arrowLength,
         arrowWidth,
         angle,
+        endRadius,
       )
 
       ctx.beginPath()
@@ -1275,26 +1281,30 @@ export class ConnGraphView<
     arrowLength: number,
     arrowWidth: number,
     angle: number,
+    radius: number = 0,
   ) {
+    const x = tipX - radius * Math.cos(angle)
+    const y = tipY - radius * Math.sin(angle)
+
     return {
-      tip: { x: tipX, y: tipY },
+      tip: { x: x, y: y },
       left: {
         x:
-          tipX -
+          x -
           arrowLength * Math.cos(angle) +
           (arrowWidth * Math.sin(angle)) / 2,
         y:
-          tipY -
+          y -
           arrowLength * Math.sin(angle) -
           (arrowWidth * Math.cos(angle)) / 2,
       },
       right: {
         x:
-          tipX -
+          x -
           arrowLength * Math.cos(angle) -
           (arrowWidth * Math.sin(angle)) / 2,
         y:
-          tipY -
+          y -
           arrowLength * Math.sin(angle) +
           (arrowWidth * Math.cos(angle)) / 2,
       },

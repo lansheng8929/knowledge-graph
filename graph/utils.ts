@@ -7,7 +7,7 @@ import type {
 // 合并外部图数据到内部图数据
 export const mergeModelGraphData = <G extends GraphDataGenerics>(
   prevGraphData: GraphViewModel<G> | undefined,
-  newGraphData: GraphViewModel<G> | undefined
+  newGraphData: GraphViewModel<G> | undefined,
 ) => {
   if (!prevGraphData) {
     return prevGraphData
@@ -16,7 +16,7 @@ export const mergeModelGraphData = <G extends GraphDataGenerics>(
   // 直接修改原数据，而不是创建新对象
   newGraphData?.graphData.nodes.forEach((node) => {
     const existingNodeIndex = prevGraphData.graphData.nodes.findIndex(
-      (n) => n.id === node.id
+      (n) => n.id === node.id,
     )
 
     if (existingNodeIndex !== -1) {
@@ -57,7 +57,7 @@ export const mergeModelGraphData = <G extends GraphDataGenerics>(
 
   newGraphData?.graphData.links.forEach((link) => {
     const existingLinkIndex = prevGraphData.graphData.links.findIndex(
-      (l) => l.id === link.id
+      (l) => l.id === link.id,
     )
 
     if (existingLinkIndex !== -1) {
@@ -82,8 +82,8 @@ export type RecursivePartial<T> = {
   [P in keyof T]?: T[P] extends (infer U)[]
     ? RecursivePartial<U>[]
     : T[P] extends object
-    ? RecursivePartial<T[P]>
-    : T[P]
+      ? RecursivePartial<T[P]>
+      : T[P]
 }
 
 export const mergeObjects = <T extends object = object>(
@@ -148,7 +148,7 @@ export const deepClone = <T>(obj: T): T => {
 // 以新数据为主合并到原数据：添加新数据、删除原数据中不存在的数据、更新原数据中存在的数据
 export const replaceModelGraphData = <G extends GraphDataGenerics>(
   prevGraphData: GraphViewModel<G> | undefined,
-  newGraphData: GraphViewModel<G> | undefined
+  newGraphData: GraphViewModel<G> | undefined,
 ) => {
   if (!prevGraphData || !newGraphData) {
     return prevGraphData
@@ -160,18 +160,18 @@ export const replaceModelGraphData = <G extends GraphDataGenerics>(
 
   // 1. 删除原数据中不存在于新数据的节点
   prevGraphData.graphData.nodes = prevGraphData.graphData.nodes.filter((node) =>
-    newNodeIds.has(node.id)
+    newNodeIds.has(node.id),
   )
 
   // 2. 删除原数据中不存在于新数据的链接
   prevGraphData.graphData.links = prevGraphData.graphData.links.filter((link) =>
-    newLinkIds.has(link.id)
+    newLinkIds.has(link.id),
   )
 
   // 3. 更新或添加节点
   newGraphData.graphData.nodes.forEach((node) => {
     const existingNodeIndex = prevGraphData.graphData.nodes.findIndex(
-      (n) => n.id === node.id
+      (n) => n.id === node.id,
     )
 
     if (existingNodeIndex !== -1) {
@@ -200,7 +200,7 @@ export const replaceModelGraphData = <G extends GraphDataGenerics>(
   // 4. 更新或添加链接
   newGraphData.graphData.links.forEach((link) => {
     const existingLinkIndex = prevGraphData.graphData.links.findIndex(
-      (l) => l.id === link.id
+      (l) => l.id === link.id,
     )
 
     if (existingLinkIndex === -1 && link.source && link.target) {
