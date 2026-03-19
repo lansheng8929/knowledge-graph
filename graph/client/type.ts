@@ -17,6 +17,8 @@ export interface GraphDataGenerics {
   LO: object
   LT: string
   LS: string
+
+  M: object
 }
 
 /**
@@ -29,6 +31,8 @@ export type DefaultGraphDataGenerics = {
   LO: {}
   LT: LinkType
   LS: LinkState
+
+  M: {}
 }
 
 /**

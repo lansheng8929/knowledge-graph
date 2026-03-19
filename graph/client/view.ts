@@ -673,7 +673,7 @@ export class ConnGraphView<
     const node = this.model.getNodeById(nodeId)
     if (!node) return {} as Style
 
-    const nodeStyle = this.styleManager.getNodeStyle(node)
+    const nodeStyle = this.styleManager.getNodeStyle(node.id)
     const state = this.getNodeState(node)
     const style = getNodeStyleByStateType(nodeStyle, state)
 
@@ -687,7 +687,7 @@ export class ConnGraphView<
     const link = this.model.getLinkById(linkId)
     if (!link) return {} as LStyle
 
-    const linkStyle = this.styleManager.getLinkStyle(link)
+    const linkStyle = this.styleManager.getLinkStyle(link.id)
     const state = this.getLinkState(link)
     const style = getLinkStyleByStateType(linkStyle, state)
 
@@ -769,7 +769,7 @@ export class ConnGraphView<
     if (!node) return
     const { nodeType } = node?.data || {}
 
-    const nodeStyle = this.styleManager.getNodeStyle(node)
+    const nodeStyle = this.styleManager.getNodeStyle(node.id)
     const state = this.getNodeState(node)
     const style = getNodeStyleByStateType(nodeStyle, state)
 

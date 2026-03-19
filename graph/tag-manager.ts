@@ -1,36 +1,42 @@
 import type { NodeId } from "./type"
 import { ConnGraphEvents } from "./events"
+import type { GraphDataGenerics } from "./client"
 
 // 标签目标类型
 export type TagTargetType = "node" | "link"
 
 // 通用标签接口
-export interface Tag {
+export interface Tag<M extends object = object> {
   // 标签所属目标的ID（可以是节点ID或边ID）
   targetId: string
   // 目标类型：节点或边
   targetType: TagTargetType
   // 标签文本
-  label: string
+  label?: string
   // 是否可见
   visible?: boolean
   // 图标
   icon?: string
   // 元数据
-  metadata?: Record<string, any>
+  metadata?: M
 }
 
 // 为了向后兼容，保留NodeTag类型别名
-export type NodeTag = Tag & { targetType: "node"; targetId: NodeId }
-export type LinkTag = Tag & { targetType: "link"; targetId: string }
+export type NodeTag<M extends object = object> = Tag<M> & {
+  targetType: "node"
+  targetId: NodeId
+}
+export type LinkTag<M extends object = object> = Tag<M> & {
+  targetType: "link"
+  targetId: string
+}
 
 /**
  * TagManager 模型层 - 负责数据存储和管理
  * 统一管理节点和边的标签
  */
-export class TagManagerModel {
-  // 使用复合键 "targetType:targetId" 来存储标签
-  private tags: Map<string, Tag[]>
+export class TagManagerModel<G extends GraphDataGenerics> {
+  private tags: Map<string, Tag<G["M"]>[]>
   private events: ConnGraphEvents
 
   constructor(events: ConnGraphEvents) {
@@ -51,9 +57,9 @@ export class TagManagerModel {
   addTag(
     targetId: string,
     targetType: TagTargetType,
-    tag: Omit<Tag, "targetId" | "targetType">
-  ): Tag {
-    const newTag: Tag = {
+    tag: Omit<Tag<G["M"]>, "targetId" | "targetType">,
+  ): Tag<G["M"]> {
+    const newTag: Tag<G["M"]> = {
       targetId,
       targetType,
       ...tag,
@@ -61,7 +67,14 @@ export class TagManagerModel {
 
     const key = this.getKey(targetType, targetId)
     const existingTags = this.tags.get(key) || []
-    existingTags.push(newTag)
+    if (
+      !existingTags.some(
+        (tag) => JSON.stringify(tag) === JSON.stringify(newTag),
+      )
+    ) {
+      existingTags.push(newTag)
+    }
+
     this.tags.set(key, existingTags)
 
     // 发布标签变化事件
@@ -80,7 +93,7 @@ export class TagManagerModel {
    */
   addNodeTag(
     nodeId: NodeId,
-    tag: Omit<Tag, "targetId" | "targetType">
+    tag: Omit<Tag<G["M"]>, "targetId" | "targetType">,
   ): NodeTag {
     return this.addTag(nodeId, "node", tag) as NodeTag
   }
@@ -90,7 +103,7 @@ export class TagManagerModel {
    */
   addLinkTag(
     linkId: string,
-    tag: Omit<Tag, "targetId" | "targetType">
+    tag: Omit<Tag<G["M"]>, "targetId" | "targetType">,
   ): LinkTag {
     return this.addTag(linkId, "link", tag) as LinkTag
   }
@@ -133,7 +146,7 @@ export class TagManagerModel {
   /**
    * 获取目标的所有标签
    */
-  getTags(targetId: string, targetType: TagTargetType): Tag[] {
+  getTags(targetId: string, targetType: TagTargetType): Tag<G["M"]>[] {
     const key = this.getKey(targetType, targetId)
     return this.tags.get(key) || []
   }
@@ -155,8 +168,8 @@ export class TagManagerModel {
   /**
    * 获取所有标签
    */
-  getAllTags(): Tag[] {
-    const allTags: Tag[] = []
+  getAllTags(): Tag<G["M"]>[] {
+    const allTags: Tag<G["M"]>[] = []
     for (const tagArray of this.tags.values()) {
       allTags.push(...tagArray)
     }
@@ -168,7 +181,7 @@ export class TagManagerModel {
    */
   getAllNodeTags(): NodeTag[] {
     return this.getAllTags().filter(
-      (tag) => tag.targetType === "node"
+      (tag) => tag.targetType === "node",
     ) as NodeTag[]
   }
 
@@ -177,7 +190,7 @@ export class TagManagerModel {
    */
   getAllLinkTags(): LinkTag[] {
     return this.getAllTags().filter(
-      (tag) => tag.targetType === "link"
+      (tag) => tag.targetType === "link",
     ) as LinkTag[]
   }
 
@@ -214,12 +227,12 @@ export class TagManagerModel {
   addTags(
     tags: Array<
       { targetId: string; targetType: TagTargetType } & Omit<
-        Tag,
+        Tag<G["M"]>,
         "targetId" | "targetType"
       >
-    >
-  ): Tag[] {
-    const addedTags: Tag[] = []
+    >,
+  ): Tag<G["M"]>[] {
+    const addedTags: Tag<G["M"]>[] = []
 
     tags.forEach((tag) => {
       const { targetId, targetType, ...tagData } = tag
@@ -234,7 +247,7 @@ export class TagManagerModel {
    * 批量移除标签
    */
   removeAllTagsForTargets(
-    targets: Array<{ targetId: string; targetType: TagTargetType }>
+    targets: Array<{ targetId: string; targetType: TagTargetType }>,
   ): number {
     let removedCount = 0
 
@@ -255,7 +268,7 @@ export class TagManagerModel {
       nodeIds.map((id) => ({
         targetId: id,
         targetType: "node" as TagTargetType,
-      }))
+      })),
     )
   }
 
@@ -267,7 +280,7 @@ export class TagManagerModel {
       linkIds.map((id) => ({
         targetId: id,
         targetType: "link" as TagTargetType,
-      }))
+      })),
     )
   }
 
@@ -292,15 +305,15 @@ export class TagManagerModel {
     targetId: string,
     targetType: TagTargetType,
     type: string,
-    updates: Partial<Omit<Tag, "targetId" | "targetType">>
-  ): Tag | undefined {
+    updates: Partial<Omit<Tag<G["M"]>, "targetId" | "targetType">>,
+  ): Tag<G["M"]> | undefined {
     const tags = this.getTags(targetId, targetType)
     if (!tags) return undefined
 
-    const index = tags.findIndex((tag) => tag.metadata?.type === type)
+    const index = tags.findIndex((tag) => tag.targetType === type)
     if (index === -1) return undefined
 
-    const updatedTag: Tag = {
+    const updatedTag: Tag<G["M"]> = {
       ...tags[index],
       ...updates,
       metadata: {
@@ -361,8 +374,8 @@ export class TagManagerModel {
   /**
    * 根据标签属性筛选
    */
-  filterTags(predicate: (tag: Tag) => boolean): Tag[] {
-    const allTags: Tag[] = []
+  filterTags(predicate: (tag: Tag<G["M"]>) => boolean): Tag<G["M"]>[] {
+    const allTags: Tag<G["M"]>[] = []
     for (const tagArray of this.tags.values()) {
       allTags.push(...tagArray)
     }
@@ -376,8 +389,8 @@ export class TagManagerModel {
     targetId: string,
     targetType: TagTargetType,
     type: string,
-    visible: boolean
-  ): Tag | undefined {
+    visible: boolean,
+  ): Tag<G["M"]> | undefined {
     return this.updateTagByType(targetId, targetType, type, { visible })
   }
 
@@ -387,13 +400,13 @@ export class TagManagerModel {
   setAllTagsVisibleForTarget(
     targetId: string,
     targetType: TagTargetType,
-    visible: boolean
-  ): Tag[] {
+    visible: boolean,
+  ): Tag<G["M"]>[] {
     const tags = this.getTags(targetId, targetType)
-    const updatedTags: Tag[] = []
+    const updatedTags: Tag<G["M"]>[] = []
 
     tags.forEach((tag, index) => {
-      const updatedTag: Tag = {
+      const updatedTag: Tag<G["M"]> = {
         ...tag,
         visible,
       }
@@ -437,15 +450,15 @@ export class TagManagerModel {
    */
   setTagsVisible(
     targets: Array<{ targetId: string; targetType: TagTargetType }>,
-    visible: boolean
-  ): Tag[] {
-    const updatedTags: Tag[] = []
+    visible: boolean,
+  ): Tag<G["M"]>[] {
+    const updatedTags: Tag<G["M"]>[] = []
 
     targets.forEach(({ targetId, targetType }) => {
       const tags = this.setAllTagsVisibleForTarget(
         targetId,
         targetType,
-        visible
+        visible,
       )
       updatedTags.push(...tags)
     })
@@ -462,7 +475,7 @@ export class TagManagerModel {
         targetId: id,
         targetType: "node" as TagTargetType,
       })),
-      visible
+      visible,
     ) as NodeTag[]
   }
 
@@ -475,7 +488,7 @@ export class TagManagerModel {
         targetId: id,
         targetType: "link" as TagTargetType,
       })),
-      visible
+      visible,
     ) as LinkTag[]
   }
 
@@ -485,10 +498,10 @@ export class TagManagerModel {
   toggleTagVisibleByType(
     targetId: string,
     targetType: TagTargetType,
-    type: string
-  ): Tag | undefined {
+    type: string,
+  ): Tag<G["M"]> | undefined {
     const tags = this.getTags(targetId, targetType)
-    const tag = tags.find((t) => t.metadata?.type === type)
+    const tag = tags.find((t) => t.targetType === type)
 
     if (!tag) return undefined
 
@@ -499,21 +512,21 @@ export class TagManagerModel {
   /**
    * 获取所有可见的标签
    */
-  getVisibleTags(): Tag[] {
+  getVisibleTags(): Tag<G["M"]>[] {
     return this.filterTags((tag) => tag.visible !== false)
   }
 
   /**
    * 获取所有隐藏的标签
    */
-  getHiddenTags(): Tag[] {
+  getHiddenTags(): Tag<G["M"]>[] {
     return this.filterTags((tag) => tag.visible === false)
   }
 
   /**
    * 隐藏全部标签
    */
-  hideAllTags(): Tag[] {
+  hideAllTags(): Tag<G["M"]>[] {
     const allTargets = Array.from(this.tags.keys()).map((key) => {
       const [targetType, ...rest] = key.split(":")
       return {
@@ -527,7 +540,7 @@ export class TagManagerModel {
   /**
    * 显示全部标签
    */
-  showAllTags(): Tag[] {
+  showAllTags(): Tag<G["M"]>[] {
     const allTargets = Array.from(this.tags.keys()).map((key) => {
       const [targetType, ...rest] = key.split(":")
       return {
@@ -541,27 +554,27 @@ export class TagManagerModel {
   /**
    * 根据标签文本搜索
    */
-  searchTags(query: string): Tag[] {
+  searchTags(query: string): Tag<G["M"]>[] {
     const lowerQuery = query.toLowerCase()
-    return this.filterTags((tag) =>
-      tag.label.toLowerCase().includes(lowerQuery)
+    return this.filterTags(
+      (tag) => tag.label?.toLowerCase().includes(lowerQuery) || false,
     )
   }
 
   /**
    * 导出标签数据
    */
-  export(): Tag[] {
+  export(): Tag<G["M"]>[] {
     return this.getAllTags()
   }
 
   /**
    * 导入标签数据
    */
-  import(tags: Tag[]): void {
+  import(tags: Tag<G["M"]>[]): void {
     this.clearAll()
     // 按目标ID和类型分组标签
-    const tagsByKey = new Map<string, Tag[]>()
+    const tagsByKey = new Map<string, Tag<G["M"]>[]>()
 
     tags.forEach((tag) => {
       const key = this.getKey(tag.targetType, tag.targetId)
@@ -584,8 +597,8 @@ export class TagManagerModel {
     targetType: TagTargetType,
     type: string,
     label: string,
-    extra?: Partial<Omit<Tag, "targetId" | "targetType">>
-  ): Tag {
+    extra?: Partial<Omit<Tag<G["M"]>, "targetId" | "targetType">>,
+  ): Tag<G["M"]> {
     return this.addTag(targetId, targetType, {
       label,
       metadata: { type, ...extra?.metadata },
@@ -600,7 +613,7 @@ export class TagManagerModel {
     nodeId: NodeId,
     type: string,
     label: string,
-    extra?: Partial<Omit<Tag, "targetId" | "targetType">>
+    extra?: Partial<Omit<Tag<G["M"]>, "targetId" | "targetType">>,
   ): NodeTag {
     return this.addTypedTag(nodeId, "node", type, label, extra) as NodeTag
   }
@@ -612,7 +625,7 @@ export class TagManagerModel {
     linkId: string,
     type: string,
     label: string,
-    extra?: Partial<Omit<Tag, "targetId" | "targetType">>
+    extra?: Partial<Omit<Tag<G["M"]>, "targetId" | "targetType">>,
   ): LinkTag {
     return this.addTypedTag(linkId, "link", type, label, extra) as LinkTag
   }
@@ -623,10 +636,10 @@ export class TagManagerModel {
   getTagByType(
     targetId: string,
     targetType: TagTargetType,
-    type: string
-  ): Tag | undefined {
+    type: string,
+  ): Tag<G["M"]> | undefined {
     return this.getTags(targetId, targetType).find(
-      (tag) => tag.metadata?.type === type
+      (tag) => tag.targetType === type,
     )
   }
 
@@ -650,12 +663,12 @@ export class TagManagerModel {
   removeTagByType(
     targetId: string,
     targetType: TagTargetType,
-    type: string
+    type: string,
   ): boolean {
     const tags = this.getTags(targetId, targetType)
     if (!tags || tags.length === 0) return false
 
-    const index = tags.findIndex((tag) => tag.metadata?.type === type)
+    const index = tags.findIndex((tag) => tag.targetType === type)
     if (index === -1) return false
 
     const removedTag = tags[index]
@@ -732,7 +745,7 @@ export class TagManagerModel {
   /**
    * 获取标签Map（原始数据）
    */
-  getTagMap(): Map<string, Tag[]> {
+  getTagMap(): Map<string, Tag<G["M"]>[]> {
     return this.tags
   }
 }
@@ -740,8 +753,8 @@ export class TagManagerModel {
 /**
  * TagManager - 整合模型层
  */
-export class TagManager {
-  public readonly model: TagManagerModel
+export class TagManager<G extends GraphDataGenerics> {
+  public readonly model: TagManagerModel<G>
   private globalVisible: boolean
 
   constructor(events: ConnGraphEvents) {
@@ -774,7 +787,7 @@ export class TagManager {
   /**
    * 判断标签是否应该显示（考虑全局和单个标签的可见性）
    */
-  isTagVisible(tag: Tag): boolean {
+  isTagVisible(tag: Tag<G["M"]>): boolean {
     if (!this.globalVisible) return false
     return tag.visible !== false
   }
@@ -782,7 +795,7 @@ export class TagManager {
   /**
    * 获取目标所有应该显示的标签
    */
-  getVisibleTags(targetId: string, targetType: TagTargetType): Tag[] {
+  getVisibleTags(targetId: string, targetType: TagTargetType): Tag<G["M"]>[] {
     if (!this.globalVisible) return []
     return this.model
       .getTags(targetId, targetType)
@@ -806,7 +819,7 @@ export class TagManager {
   /**
    * 获取所有应该显示的标签
    */
-  getAllVisibleTags(): Tag[] {
+  getAllVisibleTags(): Tag<G["M"]>[] {
     if (!this.globalVisible) return []
     return this.model.getAllTags().filter((tag) => tag.visible !== false)
   }
@@ -814,7 +827,7 @@ export class TagManager {
   /**
    * 获取所有隐藏的标签
    */
-  getAllHiddenTags(): Tag[] {
+  getAllHiddenTags(): Tag<G["M"]>[] {
     if (!this.globalVisible) {
       // 如果全局隐藏，返回所有标签
       return this.model.getAllTags()

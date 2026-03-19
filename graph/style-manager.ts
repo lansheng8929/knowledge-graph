@@ -3,6 +3,7 @@ import type {
   GraphDataGenerics,
   GraphLink,
   GraphNode,
+  GraphViewModel,
 } from "./client"
 import {
   type GraphViewStyle,
@@ -13,6 +14,7 @@ import {
   getLinkStyleByType,
 } from "./theme"
 import { mergeObjects, type RecursivePartial } from "./client/utils"
+import type { LinkId, NodeId } from "./type"
 
 /**
  * 动态样式管理器，优先级最高
@@ -21,8 +23,17 @@ export class StyleManager<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   declare style: GraphViewStyle<G>
+  private graphModelData: GraphViewModel<G>
   private nodeInstanceStyles = new Map<string, Partial<NodeStyle<G>>>()
   private linkInstanceStyles = new Map<string, Partial<LinkStyle<G>>>()
+
+  constructor(graphModelData: GraphViewModel<G>) {
+    this.graphModelData = graphModelData
+  }
+
+  updategGraphModelData(graphModelData: GraphViewModel<G>) {
+    this.graphModelData = graphModelData
+  }
 
   init({
     style,
@@ -58,9 +69,12 @@ export class StyleManager<
     return this.linkInstanceStyles.has(linkId)
   }
 
-  getNodeStyle(
-    node: GraphNode<G["NO"], G["NT"], G["NS"]> | undefined,
-  ): NodeStyle<G> {
+  getNodeStyle(nodeId: NodeId | undefined): NodeStyle<G> {
+    if (!nodeId) return {} as NodeStyle<G>
+    const node = this.graphModelData.graphData.nodes.find(
+      (node) => node.id === nodeId,
+    )
+
     if (!node) return {} as NodeStyle<G>
 
     const base = getNodeStyleByType(this.style, node.data?.nodeType)
@@ -73,7 +87,11 @@ export class StyleManager<
     return mergeObjects(merged, instanceStyle as RecursivePartial<NodeStyle<G>>)
   }
 
-  getLinkStyle(link: GraphLink<G> | undefined): LinkStyle<G> {
+  getLinkStyle(linkId: LinkId | undefined): LinkStyle<G> {
+    if (!linkId) return {} as NodeStyle<G>
+    const link = this.graphModelData.graphData.links.find(
+      (link) => link.id === linkId,
+    )
     if (!link) return {} as LinkStyle<G>
 
     const base = getLinkStyleByType(this.style, link.data?.linkType)
@@ -96,6 +114,13 @@ export class StyleManager<
 
   getStyle(): GraphViewStyle<G> {
     return this.style
+  }
+
+  getInstances() {
+    return {
+      nodeInstanceStyles: this.nodeInstanceStyles,
+      linkInstanceStyles: this.linkInstanceStyles,
+    }
   }
 
   clear() {

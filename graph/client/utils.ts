@@ -6,7 +6,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     y: number,
     radius: number,
     color: string,
-    opacity = 1
+    opacity = 1,
   ) {
     ctx.save()
     // ctx.globalAlpha = opacity;
@@ -24,7 +24,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     y: number,
     size: number,
     color: string,
-    opacity = 1
+    opacity = 1,
   ) {
     ctx.save()
     ctx.globalAlpha = opacity
@@ -43,7 +43,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     size: number,
     color: string,
     opacity = 1,
-    maxWidth: number
+    maxWidth: number,
   ) {
     ctx.save()
     ctx.globalAlpha = opacity
@@ -86,7 +86,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     radius: number,
     color = "#000",
     lineWidth = 0.3,
-    opacity = 1
+    opacity = 1,
   ) {
     ctx.save()
     ctx.globalAlpha = opacity
@@ -106,7 +106,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     y: number,
     width: number,
     height: number,
-    opacity = 1
+    opacity = 1,
   ) {
     let img: HTMLImageElement
 
@@ -159,7 +159,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     maxHeight: number,
     fontSize: number,
     color: string,
-    opacity = 1
+    opacity = 1,
   ) {
     const words = text.split(" ")
     let line = ""
@@ -234,7 +234,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     x: number,
     y: number,
     radius: number,
-    globalScale: number
+    globalScale: number,
   ) {
     const plusSize = Math.max(1, Math.min(1.5, globalScale * 0.15))
     const nodeRadius = radius
@@ -252,7 +252,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
       plusX - lineLength / 2,
       plusY - lineWidth / 2,
       lineLength,
-      lineWidth
+      lineWidth,
     )
 
     // 纵向线条
@@ -260,7 +260,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
       plusX - lineWidth / 2,
       plusY - lineLength / 2,
       lineWidth,
-      lineLength
+      lineLength,
     )
 
     ctx.restore()
@@ -271,7 +271,7 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     x: number,
     y: number,
     radius: number,
-    globalScale: number
+    globalScale: number,
   ) {
     const plusSize = Math.max(1, Math.min(1.5, globalScale * 0.15))
     const nodeRadius = radius
@@ -318,7 +318,7 @@ export type RecursivePartial<T> = {
 // 深度合并对象属性
 export function mergeObjects<T extends Record<string, any>>(
   source?: T,
-  target?: RecursivePartial<T>
+  target?: RecursivePartial<T>,
 ): T {
   const result = { ...source }
 

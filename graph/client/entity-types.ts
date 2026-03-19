@@ -20,7 +20,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       style: Style
       colorTracker: ColorTracker
-    } & ManagerProps
+    } & ManagerProps,
   ) => void
 
   renderNodePointerArea: (
@@ -32,7 +32,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       colorTracker: ColorTracker
       shadowCtx: CanvasRenderingContext2D
-    } & ManagerProps
+    } & ManagerProps,
   ) => void
 
   renderNodeTools?: (
@@ -44,7 +44,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       colorTracker: ColorTracker
       shadowCtx: CanvasRenderingContext2D
-    } & ManagerProps
+    } & ManagerProps,
   ) => void
 
   renderNodeToolsPointerArea?: (
@@ -56,7 +56,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       colorTracker: ColorTracker
       shadowCtx: CanvasRenderingContext2D
-    } & ManagerProps
+    } & ManagerProps,
   ) => void
 
   getCollisionRadius: (props: {

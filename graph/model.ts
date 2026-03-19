@@ -33,19 +33,17 @@ type ModelComputedCache<
 export class ConnGraphModel<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
-  protected cache!: ModelComputedCache<G>
+  protected cache: ModelComputedCache<G> = {
+    graphData: { nodes: [], links: [] },
+  }
   public events = new ConnGraphEvents<G>()
-  public tagManager = new TagManager(this.events)
+  public tagManager = new TagManager<G>(this.events)
   public loadingManager = new LoadingManager(this.events)
   public stateManager = new StateManager<G>(this.events)
-  public styleManager = new StyleManager<G>()
+  public styleManager = new StyleManager<G>(this.cache)
   public colorTracker = new ColorTracker()
 
   constructor({ initData }: Options<G>) {
-    this.cache = {
-      graphData: { nodes: [], links: [] },
-    }
-
     this.updateGraphData({
       graphData: initData.graphData,
     })
@@ -63,6 +61,8 @@ export class ConnGraphModel<
     })
 
     this.cache.graphData = graphData
+
+    this.styleManager.updategGraphModelData(this.cache)
 
     this.events.publish("dataChange", {
       graphData: this.cache.graphData,
