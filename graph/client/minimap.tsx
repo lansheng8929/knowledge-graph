@@ -1,4 +1,4 @@
-import {
+import React, {
   useRef,
   forwardRef,
   useImperativeHandle,
@@ -52,7 +52,7 @@ const MinimapInner = <G extends GraphDataGenerics>(
     onMinimapClick,
     onViewportDrag,
   }: MinimapProps<G>,
-  ref: React.ForwardedRef<MinimapRef>
+  ref: React.ForwardedRef<MinimapRef>,
 ) => {
   const miniRef = useRef<HTMLCanvasElement>(null)
   const bboxRef = useRef<BBox>({ minX: 0, minY: 0, maxX: 0, maxY: 0 })
@@ -143,7 +143,7 @@ const MinimapInner = <G extends GraphDataGenerics>(
     const worldH = bbox.maxY - bbox.minY
     const scale = Math.min(
       (mw - 2 * padding) / worldW,
-      (mh - 2 * padding) / worldH
+      (mh - 2 * padding) / worldH,
     )
     scaleRef.current = scale
 
@@ -192,7 +192,7 @@ const MinimapInner = <G extends GraphDataGenerics>(
       const [vx, vy] = worldToMini(leftWorld, topWorld)
       const [vx2, vy2] = worldToMini(
         leftWorld + viewWWorld,
-        topWorld + viewHWorld
+        topWorld + viewHWorld,
       )
       const vw = vx2 - vx
       const vh = vy2 - vy
@@ -225,9 +225,9 @@ const MinimapInner = <G extends GraphDataGenerics>(
 }
 
 export const Minimap = forwardRef(MinimapInner) as <
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 >(
   props: MinimapProps<G> & {
     ref?: React.ForwardedRef<MinimapRef>
-  }
+  },
 ) => React.ReactElement
