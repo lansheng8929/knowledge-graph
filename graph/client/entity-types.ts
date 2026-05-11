@@ -5,8 +5,8 @@ import type { TagManager } from "../tag-manager"
 import type { LoadingManager } from "../loading-manager"
 import type { GraphNode } from "./type"
 
-export interface ManagerProps {
-  tagManager: TagManager
+export interface ManagerProps<G extends GraphDataGenerics> {
+  tagManager: TagManager<G>
   loadingManager: LoadingManager
 }
 
@@ -20,7 +20,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       style: Style
       colorTracker: ColorTracker
-    } & ManagerProps,
+    } & ManagerProps<G>,
   ) => void
 
   renderNodePointerArea: (
@@ -32,7 +32,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       colorTracker: ColorTracker
       shadowCtx: CanvasRenderingContext2D
-    } & ManagerProps,
+    } & ManagerProps<G>,
   ) => void
 
   renderNodeTools?: (
@@ -44,7 +44,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       colorTracker: ColorTracker
       shadowCtx: CanvasRenderingContext2D
-    } & ManagerProps,
+    } & ManagerProps<G>,
   ) => void
 
   renderNodeToolsPointerArea?: (
@@ -56,7 +56,7 @@ export interface EntityRenderer<G extends GraphDataGenerics> {
       globalScale: number
       colorTracker: ColorTracker
       shadowCtx: CanvasRenderingContext2D
-    } & ManagerProps,
+    } & ManagerProps<G>,
   ) => void
 
   getCollisionRadius: (props: {

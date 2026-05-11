@@ -46,6 +46,7 @@ export interface GraphLink<
   target: LinkId | GraphNode<G["NO"], G["NT"], G["NS"]>
   ranking?: number
   data?: GraphLinkInfo<G["LO"], G["LT"], G["LS"]>
+  __rawLabel?: string
 }
 
 export interface GraphViewModelGraphData<

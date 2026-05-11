@@ -1,7 +1,7 @@
 {
   "name": "@ra-sdk/knowledge-graph",
   "sideEffects": false,
-  "version": "1.0.27-beta.6",
+  "version": "2.0.0-beta.2",
   "type": "module",
   "main": "./graph/index.ts",
   "types": "./graph/index.ts",
@@ -25,5 +25,8 @@
     "react": "^18",
     "react-dom": "^18"
   },
-  "packageManager": "npm@11.0.0"
+  "packageManager": "npm@11.0.0",
+  "publishConfig": {
+    "registry": "http://192.168.0.243:4873/"
+  }
 }

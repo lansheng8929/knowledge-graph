@@ -1,6 +1,6 @@
 import type { NodeId } from "./type"
 import { ConnGraphEvents } from "./events"
-import type { GraphDataGenerics } from "./client"
+import type { DefaultGraphDataGenerics, GraphDataGenerics } from "./client"
 
 // 标签目标类型
 export type TagTargetType = "node" | "link"
@@ -753,7 +753,9 @@ export class TagManagerModel<G extends GraphDataGenerics> {
 /**
  * TagManager - 整合模型层
  */
-export class TagManager<G extends GraphDataGenerics> {
+export class TagManager<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
+> {
   public readonly model: TagManagerModel<G>
   private globalVisible: boolean
 
@@ -805,14 +807,14 @@ export class TagManager<G extends GraphDataGenerics> {
   /**
    * 获取节点所有应该显示的标签（便捷方法，保持向后兼容）
    */
-  getVisibleNodeTags(nodeId: NodeId): NodeTag[] {
+  getVisibleNodeTags(nodeId: NodeId): NodeTag<G["M"]>[] {
     return this.getVisibleTags(nodeId, "node") as NodeTag[]
   }
 
   /**
    * 获取边所有应该显示的标签（便捷方法）
    */
-  getVisibleLinkTags(linkId: string): LinkTag[] {
+  getVisibleLinkTags(linkId: string): LinkTag<G["M"]>[] {
     return this.getVisibleTags(linkId, "link") as LinkTag[]
   }
 

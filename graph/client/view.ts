@@ -36,6 +36,7 @@ import type {
   GraphViewModel,
 } from "./type"
 import type { StyleManager } from "../style-manager"
+import { ShadowLayerManager } from "./shadow-layer"
 
 interface GraphModelActions {
   highlightNode(id: NodeId | undefined): void
@@ -83,9 +84,17 @@ export class ConnGraphView<
   declare nodeRenderProcessorMap: NodeRenderProcessorMap<G>
   declare colorTracker: ColorTracker
   declare canvas: HTMLCanvasElement | null
-  declare forceGraphShadowCtx: CanvasRenderingContext2D | null
-  declare toolShadowCanvas: HTMLCanvasElement | null
-  declare toolShadowCtx: CanvasRenderingContext2D | null
+  declare shadowLayerManager: ShadowLayerManager
+  /** 默认的工具互动层（向后兼容，等价于 shadowLayerManager.getLayer("tools")） */
+  get toolShadowCanvas(): HTMLCanvasElement | null {
+    return this.shadowLayerManager.getLayer("tools")?.canvas ?? null
+  }
+  get toolShadowCtx(): CanvasRenderingContext2D | null {
+    return this.shadowLayerManager.getLayer("tools")?.ctx ?? null
+  }
+  get forceGraphShadowCtx(): CanvasRenderingContext2D | null {
+    return null
+  }
   declare entityRegistry: EntityRegistry<G>
   declare styleManager: StyleManager<G>
 
@@ -105,9 +114,7 @@ export class ConnGraphView<
     this.colorTracker = this.model.colorTracker
     this.styleManager = this.model.styleManager
     this.canvas = null
-    this.forceGraphShadowCtx = null
-    this.toolShadowCanvas = null
-    this.toolShadowCtx = null
+    this.shadowLayerManager = new ShadowLayerManager()
 
     this.entityRegistry = opts.entityRegistry || new EntityRegistry()
     this.nodeRenderProcessorMap = this.entityRegistry.getAll()
@@ -358,33 +365,66 @@ export class ConnGraphView<
       return
     }
 
-    // 创建独立的 shadowCanvas 用于工具颜色追踪
-    this.toolShadowCanvas = document.createElement("canvas")
-    this.toolShadowCanvas.width = this.canvas.width
-    this.toolShadowCanvas.height = this.canvas.height
-    this.toolShadowCanvas.style.position = "absolute"
-    this.toolShadowCanvas.style.top = "0"
-    this.toolShadowCanvas.style.left = "0"
-    // this.toolShadowCanvas.style.pointerEvents = "none"
-    // this.toolShadowCanvas.style.opacity = "0.5"
-    // this.toolShadowCanvas.style.zIndex = "999"
-    // this.container.appendChild(this.toolShadowCanvas)
+    // 创建默认的工具互动层（向后兼容）
+    this.shadowLayerManager.addLayer(
+      "tools",
+      this.canvas.width,
+      this.canvas.height,
+      {
+        zIndex: 10,
+        capturesEvents: true,
+        onRender: (_ctx, globalScale) => {
+          const { graphData } = this.model.getGraphModelData()
+          graphData.nodes.forEach((_node) => {
+            const node = this.model.getNodeById(String(_node.id))
+            if (!node) return
 
-    this.toolShadowCtx = this.toolShadowCanvas.getContext("2d")
+            const { __toolIndexColor } = node
+            const { nodeType } = node.data || {}
+            const style = this.getNodeColor(node.id, globalScale)
 
-    this.container.addEventListener("pointerup", (event) => {
-      this.handleCanvasClick(event)
-    })
-    this.container.addEventListener("pointermove", (event) => {
-      this.handleCanvasPointermove(event)
-    })
+            const processor = nodeType
+              ? this.nodeRenderProcessorMap[nodeType]
+              : undefined
+
+            processor?.renderNodeToolsPointerArea?.({
+              node: node,
+              indexColor: __toolIndexColor,
+              ctx: _ctx,
+              style: style,
+              globalScale: globalScale,
+              colorTracker: this.colorTracker,
+              shadowCtx: _ctx,
+              tagManager: this.model.tagManager,
+              loadingManager: this.model.loadingManager,
+            })
+          })
+        },
+      },
+    )
+
+    // 捕获阶段监听 ，确保 ShadowLayer 优先于 ForceGraph 处理点击
+    this.container.addEventListener(
+      "pointerup",
+      (event) => {
+        this.handleCanvasClick(event)
+      },
+      true,
+    )
+    this.container.addEventListener(
+      "pointermove",
+      (event) => {
+        this.handleCanvasPointermove(event)
+      },
+      true,
+    )
   }
 
   /**
    * 更新鼠标位置缓存
    */
   private handleCanvasPointermove(event: MouseEvent) {
-    if (!this.canvas || !this.toolShadowCtx) return
+    if (!this.canvas) return
 
     const rect = this.canvas.getBoundingClientRect()
     const scaleX = this.canvas.width / rect.width
@@ -392,8 +432,19 @@ export class ConnGraphView<
     const x = (event.clientX - rect.left) * scaleX
     const y = (event.clientY - rect.top) * scaleY
 
-    const pxColor = this.toolShadowCtx.getImageData(x, y, 1, 1).data
-    const obj = this.colorTracker.lookup([pxColor[0], pxColor[1], pxColor[2]])
+    const hit = this.shadowLayerManager.hitTest(x, y)
+    if (!hit) return (this.canvas.style.cursor = "")
+
+    // 命中层的 capturesEvents 决定是否阻止 hover 事件到达 ForceGraph
+    if (hit.layer.capturesEvents) {
+      event.stopPropagation()
+    }
+
+    const obj = this.colorTracker.lookup([
+      hit.pixel[0],
+      hit.pixel[1],
+      hit.pixel[2],
+    ])
 
     if (!obj) return (this.canvas.style.cursor = "")
 
@@ -408,7 +459,7 @@ export class ConnGraphView<
    * 处理画布点击
    */
   private handleCanvasClick(event: MouseEvent) {
-    if (!this.canvas || !this.toolShadowCtx) return
+    if (!this.canvas) return
 
     const rect = this.canvas.getBoundingClientRect()
 
@@ -417,10 +468,21 @@ export class ConnGraphView<
     const x = (event.clientX - rect.left) * scaleX
     const y = (event.clientY - rect.top) * scaleY
 
-    const pxColor = this.toolShadowCtx.getImageData(x, y, 1, 1).data
-    const obj = this.colorTracker.lookup([pxColor[0], pxColor[1], pxColor[2]])
+    const hit = this.shadowLayerManager.hitTest(x, y)
+    if (!hit) return
+
+    const obj = this.colorTracker.lookup([
+      hit.pixel[0],
+      hit.pixel[1],
+      hit.pixel[2],
+    ])
 
     if (!obj) return
+
+    // 命中层的 capturesEvents 决定是否阻止事件继续传递到 ForceGraph
+    if (hit.layer.capturesEvents) {
+      event.stopPropagation()
+    }
 
     switch (obj.type) {
       case "PlusTool":
@@ -428,7 +490,6 @@ export class ConnGraphView<
           "plusToolClick",
           obj.d as GraphNode<G["NO"], G["NT"], G["NS"]>,
         )
-        event.stopPropagation()
         break
     }
   }
@@ -539,47 +600,14 @@ export class ConnGraphView<
     ctx: CanvasRenderingContext2D
     globalScale: number
   }) {
-    // 清空 toolShadowCanvas
-    if (this.toolShadowCtx && this.toolShadowCanvas) {
-      const transform = ctx.getTransform()
-      this.toolShadowCtx.save()
-      this.toolShadowCtx.setTransform(1, 0, 0, 1, 0, 0)
-      this.toolShadowCtx.clearRect(
-        0,
-        0,
-        this.toolShadowCanvas.width,
-        this.toolShadowCanvas.height,
-      )
-      this.toolShadowCtx.restore()
-      this.toolShadowCtx.setTransform(transform)
+    const transform = ctx.getTransform()
 
-      // 重新绘制所有节点工具
-      const { graphData } = this.model.getGraphModelData()
-      graphData.nodes.forEach((_node) => {
-        const node = this.model.getNodeById(String(_node.id))
-        if (!node) return
-
-        const { __toolIndexColor } = node
-        const { nodeType } = node.data || {}
-        const style = this.getNodeColor(node.id, globalScale)
-
-        const processor = nodeType
-          ? this.nodeRenderProcessorMap[nodeType]
-          : undefined
-
-        processor?.renderNodeToolsPointerArea?.({
-          node: node,
-          indexColor: __toolIndexColor,
-          ctx: this.toolShadowCtx!,
-          style: style,
-          globalScale: globalScale,
-          colorTracker: this.colorTracker,
-          shadowCtx: this.toolShadowCtx!,
-          tagManager: this.model.tagManager,
-          loadingManager: this.model.loadingManager,
-        })
-      })
-    }
+    // 清空所有层并调用各自的 onRender 回调
+    this.shadowLayerManager.forEach((layer) => {
+      layer.clear()
+      layer.ctx.setTransform(transform)
+      layer.onRender?.(layer.ctx, globalScale)
+    })
 
     this.model.events.publish("framePost", {
       ctx,
@@ -590,18 +618,7 @@ export class ConnGraphView<
 
   private handleCanvasZoom(transform: { k: number; x: number; y: number }) {
     this.model.events.publish("zoom", transform)
-
-    // 同步 toolShadowCanvas 的变换
-    if (this.toolShadowCtx) {
-      this.toolShadowCtx.setTransform(
-        transform.k,
-        0,
-        0,
-        transform.k,
-        transform.x,
-        transform.y,
-      )
-    }
+    this.shadowLayerManager.syncZoom(transform)
   }
 
   // ==================== 工具相关方法 ====================
@@ -785,18 +802,6 @@ export class ConnGraphView<
       globalScale: globalScale,
       colorTracker: this.colorTracker,
       shadowCtx: ctx,
-      tagManager: this.model.tagManager,
-      loadingManager: this.model.loadingManager,
-    })
-
-    processor?.renderNodeToolsPointerArea?.({
-      node: node,
-      indexColor: color,
-      ctx: ctx,
-      style: style,
-      globalScale: globalScale,
-      colorTracker: this.colorTracker,
-      shadowCtx: this.toolShadowCtx!,
       tagManager: this.model.tagManager,
       loadingManager: this.model.loadingManager,
     })
