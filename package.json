@@ -10,6 +10,7 @@
     "create-entity": "node graph/entity/create-entity.js"
   },
   "dependencies": {
+    "@cosmograph/cosmograph": "^2.3.2",
     "canvas-color-tracker": "^1.0.3",
     "d3-force": "^3.0.0",
     "force-graph": "^1.51.0",

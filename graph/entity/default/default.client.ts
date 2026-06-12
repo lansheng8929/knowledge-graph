@@ -48,7 +48,7 @@ export const createDefaultEntity: EntityCreator<
           y,
           radius,
           radius,
-          opacity
+          opacity,
         )
       }
 
@@ -61,7 +61,7 @@ export const createDefaultEntity: EntityCreator<
           y + radius + fontSize,
           fontSize,
           textColor,
-          opacity
+          opacity,
         )
       }
     },
