@@ -24,6 +24,35 @@ export interface GpuRendererOptions<
   debug?: boolean
   /** 额外的 Cosmograph 配置（会与自动生成的配置合并） */
   extraCosmographConfig?: Partial<CosmographConfig>
+
+  /**
+   * 【自定义节点】转换 rawPoints 中每个节点的数据。
+   * 框架会先构建一个包含 `id` / `__index` / 标量字段的默认对象，
+   * 你可以在此之上添加/覆盖任何字段（color / size / label / iconUrl / shape 等）。
+   * 返回 `null` 或 `undefined` 则跳过该节点。
+   */
+  transformPoint?: (
+    node: GraphNode<G["NO"], G["NT"], G["NS"]>,
+    index: number,
+    defaultRaw: Record<string, unknown>,
+  ) => Record<string, unknown> | null | undefined
+
+  /**
+   * 【自定义边】转换 rawLinks 中每条边的数据。
+   * 框架会先构建包含 `source` / `target` / `__sourceIdx` / `__targetIdx` 的默认对象。
+   * 返回 `null` 或 `undefined` 则跳过该边。
+   */
+  transformLink?: (
+    link: GraphLink<G>,
+    index: number,
+    defaultRaw: Record<string, unknown>,
+  ) => Record<string, unknown> | null | undefined
+
+  /**
+   * 【自定义配置】在 CosmographConfig 构建完成后、创建实例前最终修改。
+   * 可以在这里加 `pointColorByFn` / `pointSizeByFn` / `pointLabelFn` / `pointImageUrlBy` 等。
+   */
+  customizeConfig?: (config: CosmographConfig) => CosmographConfig
 }
 
 /**
@@ -91,20 +120,29 @@ export class CosmographRenderer<
       })
 
       // 2. 转换并清洗数据：去掉所有非标量字段（object/array/null/undefined）
-      const rawPoints: Record<string, unknown>[] = graphData.nodes.map(
-        (node, i) => {
+      const { transformPoint, transformLink } = this.options
+
+      const rawPoints: Record<string, unknown>[] = graphData.nodes
+        .map((node, i) => {
+          // 框架构建默认 raw
           const raw: Record<string, unknown> = {
             id: node.id,
-            __index: i, // Cosmograph 需要数值索引做高效查找
+            __index: i,
           }
           if (node.data) {
             for (const [k, v] of Object.entries(node.data)) {
               if (isScalar(v)) raw[k] = v
             }
           }
+          // 允许外部接管
+          if (transformPoint) {
+            const custom = transformPoint(node, i, { ...raw })
+            if (!custom) return null // 跳过
+            return custom
+          }
           return raw
-        },
-      )
+        })
+        .filter(Boolean) as Record<string, unknown>[]
 
       const rawLinks: Record<string, unknown>[] = graphData.links
         .filter((link) => {
@@ -112,7 +150,12 @@ export class CosmographRenderer<
             typeof link.source === "object" ? link.source.id : link.source
           const tid =
             typeof link.target === "object" ? link.target.id : link.target
-          return Boolean(sid) && Boolean(tid)
+          if (!sid || !tid) return false
+          if (transformLink) {
+            // 让外部决定是否过滤
+            return true
+          }
+          return true
         })
         .map((link, li) => {
           const sid =
@@ -130,17 +173,31 @@ export class CosmographRenderer<
               if (isScalar(v)) raw[k] = v
             }
           }
-          // 收集连线标签
+          // 收集连线标签（仅在外部未自定义时）
           const linkLabelText = link.data?.label || link.__rawLabel
-          if (linkLabelText) {
+          if (linkLabelText && !transformLink) {
             this.linkLabels.set(li, { text: String(linkLabelText) })
+          }
+          // 允许外部接管
+          if (transformLink) {
+            const custom = transformLink(link, li, { ...raw })
+            if (!custom) return null
+            return custom
           }
           return raw
         })
+        .filter(Boolean) as Record<string, unknown>[]
 
       console.log(
         `[CosmographRenderer] Prepared ${rawPoints.length} points, ${rawLinks.length} links (filtered)`,
       )
+
+      if (rawPoints.length === 0) {
+        throw new Error(
+          "No valid points after data transformation. " +
+            "Check if transformPoint returned non-null values and nodes have 'id' field.",
+        )
+      }
 
       // 3. 直接构建配置（不经过 prepareCosmographData）
       const config: CosmographConfig = {
@@ -278,10 +335,18 @@ export class CosmographRenderer<
         Object.assign(config, this.options.extraCosmographConfig)
       }
 
+      // 最终自定义（可改写上面的一切）
+      const finalConfig = this.options.customizeConfig
+        ? this.options.customizeConfig(config)
+        : config
+
       // 4. 创建 Cosmograph 实例
       console.log("[CosmographRenderer] Creating Cosmograph instance...")
-      this.cosmograph = new Cosmograph(this.container, config)
+      this.cosmograph = new Cosmograph(this.container, finalConfig)
       this._initialized = true
+
+      // 等待数据加载完成
+      await this.cosmograph.dataUploaded()
 
       // 5. 如果有连线标签，首次刷新位置
       if (this.linkLabels.size > 0) {
@@ -388,8 +453,7 @@ export class CosmographRenderer<
 
     const customLabels: Array<{
       text: string
-      x: number
-      y: number
+      position: [number, number]
       weight: number
       className?: string
     }> = []
@@ -421,8 +485,7 @@ export class CosmographRenderer<
 
       customLabels.push({
         text: label.text,
-        x: (sx + tx) / 2,
-        y: (sy + ty) / 2,
+        position: [(sx + tx) / 2, (sy + ty) / 2],
         weight: 0.5,
         className:
           "background: rgba(255,255,255,0.85); padding: 2px 6px; border-radius: 3px; font-size: 11px; color: #666;",

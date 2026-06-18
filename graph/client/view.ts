@@ -135,8 +135,8 @@ export class ConnGraphView<
     }
 
     // 默认 Canvas 2D 渲染模式（force-graph）
-    this.initStyle()
     this.initView()
+    this.initStyle()
   }
 
   /**
@@ -483,10 +483,12 @@ export class ConnGraphView<
     if (!this.canvas) return
 
     const rect = this.canvas.getBoundingClientRect()
-    const scaleX = this.canvas.width / rect.width
-    const scaleY = this.canvas.height / rect.height
+    const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1
+    const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1
     const x = (event.clientX - rect.left) * scaleX
     const y = (event.clientY - rect.top) * scaleY
+
+    if (!isFinite(x) || !isFinite(y)) return
 
     const hit = this.shadowLayerManager.hitTest(x, y)
     if (!hit) return (this.canvas.style.cursor = "")
@@ -518,11 +520,12 @@ export class ConnGraphView<
     if (!this.canvas) return
 
     const rect = this.canvas.getBoundingClientRect()
-
-    const scaleX = this.canvas.width / rect.width
-    const scaleY = this.canvas.height / rect.height
+    const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1
+    const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1
     const x = (event.clientX - rect.left) * scaleX
     const y = (event.clientY - rect.top) * scaleY
+
+    if (!isFinite(x) || !isFinite(y)) return
 
     const hit = this.shadowLayerManager.hitTest(x, y)
     if (!hit) return

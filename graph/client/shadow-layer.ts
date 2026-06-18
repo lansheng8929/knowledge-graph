@@ -70,6 +70,10 @@ export class ShadowLayer {
 
   /** 读取指定坐标的像素颜色 */
   getPixel(x: number, y: number): Uint8ClampedArray {
+    // 防止 Canvas 变换导致无限坐标
+    if (!isFinite(x) || !isFinite(y)) {
+      return new Uint8ClampedArray([0, 0, 0, 0])
+    }
     return this.ctx.getImageData(x, y, 1, 1).data
   }
 }
@@ -155,6 +159,9 @@ export class ShadowLayerManager {
    * @returns 第一个有效命中，或 null
    */
   hitTest(x: number, y: number): ShadowLayerHit | null {
+    // 防止无穷坐标
+    if (!isFinite(x) || !isFinite(y)) return null
+
     let firstHit: ShadowLayerHit | null = null
 
     for (const layer of this.layers) {

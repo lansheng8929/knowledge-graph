@@ -8,6 +8,9 @@ export * from "./loading-manager"
 export * from "./state-manager"
 export * from "./events"
 export * from "./image-cache"
+export * from "./meta-manager"
+export * from "./history-manager"
+export * from "./style-registry"
 
 export * from "./type"
 

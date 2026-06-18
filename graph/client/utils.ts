@@ -80,6 +80,53 @@ export const makeDrawWrapper = (ctx: CanvasRenderingContext2D) => ({
     ctx.restore()
     return this
   },
+  multiColorText: function (
+    segments: Array<{
+      text: string
+      color: string
+      fontSize?: number
+      disabled?: boolean
+    }>,
+    x: number,
+    y: number,
+    opacity = 1,
+    align: "left" | "center" | "right" = "center",
+  ) {
+    const _segments = segments.filter((segment) => !segment.disabled)
+
+    ctx.save()
+    ctx.globalAlpha = opacity
+    ctx.textBaseline = "top"
+    ctx.font = "12px Sans-Serif" // 默认字体
+
+    // 计算总宽度
+    let totalWidth = 0
+    for (const segment of _segments) {
+      const fontSize = segment.fontSize || 12
+      ctx.font = `${fontSize}px Sans-Serif`
+      totalWidth += ctx.measureText(segment.text).width
+    }
+
+    // 计算起始位置
+    let currentX = x
+    if (align === "center") {
+      currentX = x - totalWidth / 2
+    } else if (align === "right") {
+      currentX = x - totalWidth
+    }
+
+    // 绘制
+    for (const segment of _segments) {
+      const fontSize = segment.fontSize || 12
+      ctx.font = `${fontSize}px Sans-Serif`
+      ctx.fillStyle = segment.color
+      ctx.fillText(segment.text, currentX, y)
+      currentX += ctx.measureText(segment.text).width
+    }
+
+    ctx.restore()
+    return this
+  },
   stroke: function (
     x: number,
     y: number,

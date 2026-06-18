@@ -18,7 +18,7 @@ import type { DefaultGraphDataGenerics, GraphDataGenerics } from "./client"
  * - G["LT"] 表示从图数据泛型中获取的连接线类型判别器
  */
 export interface GraphViewStyle<
-  G extends GraphDataGenerics = DefaultGraphDataGenerics
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   background: string
   node: Partial<Record<G["NT"], NodeStyle<G>>>
@@ -49,7 +49,7 @@ export type LinkStyle<G extends GraphDataGenerics> = Record<G["LS"], LStyle>
 export const getColorOnContainer = (
   container: HTMLElement,
   name: string,
-  fallback: string
+  fallback: string,
 ): string => {
   return getComputedStyle(container).getPropertyValue(name) || fallback
 }
@@ -63,7 +63,7 @@ const nodeConfigs: Record<NodeType, NodeStyle<DefaultGraphDataGenerics>> = {
 export const getCachedProperty = (
   computedStyle: CSSStyleDeclaration,
   name: string,
-  fallback: string
+  fallback: string,
 ): string => {
   return computedStyle.getPropertyValue(name).trim() || fallback
 }
@@ -73,42 +73,46 @@ const createDefaultNodeStyle = (
   computedStyle: CSSStyleDeclaration,
   key: string,
   key2: string,
-  overrides?: Partial<Style>
+  overrides?: Partial<Style>,
 ): Style => ({
   textColor: getCachedProperty(
     computedStyle,
     `--graph-${key}-node-textColor-${key2}`,
-    "#000"
+    "#000",
   ),
   strokeWidth: parseInt(
     getCachedProperty(
       computedStyle,
       `--graph-${key}-node-strokeWidth-${key2}`,
-      "1.5"
-    )
+      "1.5",
+    ),
   ),
   strokeColor: getCachedProperty(
     computedStyle,
     `--graph-${key}-node-strokeColor-${key2}`,
-    "#000"
+    "#000",
   ),
   tagColor: getCachedProperty(
     computedStyle,
     `--graph-${key}-node-tagColor-${key2}`,
-    "#000"
+    "#000",
   ),
   radius: parseInt(
-    getCachedProperty(computedStyle, `--graph-${key}-node-radius-${key2}`, "4")
+    getCachedProperty(computedStyle, `--graph-${key}-node-radius-${key2}`, "4"),
   ),
   fontSize: parseInt(
     getCachedProperty(
       computedStyle,
       `--graph-${key}-node-fontSize-${key2}`,
-      "2"
-    )
+      "2",
+    ),
   ),
   opacity: parseFloat(
-    getCachedProperty(computedStyle, `--graph-${key}-node-opacity-${key2}`, "1")
+    getCachedProperty(
+      computedStyle,
+      `--graph-${key}-node-opacity-${key2}`,
+      "1",
+    ),
   ),
   ...overrides,
 })
@@ -124,39 +128,45 @@ const createDefaultNodeStyle = (
 const createNodeStyles = (
   computedStyle: CSSStyleDeclaration,
   type: NodeType | "default",
-  config: NodeStyle<DefaultGraphDataGenerics>
+  config: NodeStyle<DefaultGraphDataGenerics>,
 ): NodeStyle<DefaultGraphDataGenerics> => {
   return {
     regular: createDefaultNodeStyle(
       computedStyle,
       type,
       "regular",
-      config.regular
+      config.regular,
+    ),
+    hovered: createDefaultNodeStyle(
+      computedStyle,
+      type,
+      "hovered",
+      config.hovered,
     ),
     highlighted: createDefaultNodeStyle(
       computedStyle,
       type,
       "highlighted",
-      config.highlighted
+      config.highlighted,
     ),
     selected: createDefaultNodeStyle(
       computedStyle,
       type,
       "selected",
-      config.selected
+      config.selected,
     ),
     hidden: createDefaultNodeStyle(
       computedStyle,
       type,
       "hidden",
-      config.hidden
+      config.hidden,
     ),
     root: createDefaultNodeStyle(computedStyle, "server", "root", config.root),
   }
 }
 
 export const getDefaultColorOf = <G extends GraphDataGenerics>(
-  container: HTMLElement
+  container: HTMLElement,
 ): GraphViewStyle<G> => {
   // 缓存样式计算
   const computedStyle = getComputedStyle(container)
@@ -165,13 +175,13 @@ export const getDefaultColorOf = <G extends GraphDataGenerics>(
     background: getCachedProperty(
       computedStyle,
       `--graph-background`,
-      "#f7f7f7"
+      "#f7f7f7",
     ),
     node: {
       default: createNodeStyles(
         computedStyle,
         "default",
-        nodeConfigs["default"]
+        nodeConfigs["default"],
       ) as NodeStyle<G>,
     } as Partial<Record<G["NT"], NodeStyle<G>>>,
     link: {
@@ -180,66 +190,66 @@ export const getDefaultColorOf = <G extends GraphDataGenerics>(
           color: getCachedProperty(
             computedStyle,
             "--graph-link-color-regular",
-            "#ccc"
+            "#ccc",
           ),
           opacity: parseFloat(
             getCachedProperty(
               computedStyle,
               "--graph-link-opacity-regular",
-              "1"
-            )
+              "1",
+            ),
           ),
         },
         highlighted: {
           color: getCachedProperty(
             computedStyle,
             "--graph-link-color-highlighted",
-            "#ffff00"
+            "#ffff00",
           ),
           light: getCachedProperty(
             computedStyle,
             "--graph-link-light-highlighted",
-            "#ffff00"
+            "#ffff00",
           ),
           opacity: parseFloat(
             getCachedProperty(
               computedStyle,
               "--graph-link-opacity-highlighted",
-              "1"
-            )
+              "1",
+            ),
           ),
         },
         selected: {
           color: getCachedProperty(
             computedStyle,
             "--graph-link-color-selected",
-            "#357abd"
+            "#357abd",
           ),
           light: getCachedProperty(
             computedStyle,
             "--graph-link-light-selected",
-            "#357abd"
+            "#357abd",
           ),
           opacity: parseFloat(
             getCachedProperty(
               computedStyle,
               "--graph-link-opacity-selected",
-              "1"
-            )
+              "1",
+            ),
           ),
         },
         hidden: {
           color: getCachedProperty(
             computedStyle,
             "--graph-link-color-hidden",
-            "#ccc"
+            "#ccc",
           ),
           opacity: parseFloat(
             getCachedProperty(
               computedStyle,
               "--graph-link-opacity-hidden",
-              "0.3"
-            )
+              "0.3",
+            ),
           ),
         },
       } as LinkStyle<G>,
@@ -247,14 +257,14 @@ export const getDefaultColorOf = <G extends GraphDataGenerics>(
   }
 }
 const getNodeStyle = <G extends GraphDataGenerics>(
-  v: NodeStyle<G>
+  v: NodeStyle<G>,
 ): NodeStyle<G> => {
   return v
 }
 
 export const getNodeStyleByType = <G extends GraphDataGenerics>(
   style: GraphViewStyle<G>,
-  type?: G["NT"]
+  type?: G["NT"],
 ): NodeStyle<G> => {
   if (!type) return {} as NodeStyle<G>
   const v = style.node[type]
@@ -264,7 +274,7 @@ export const getNodeStyleByType = <G extends GraphDataGenerics>(
 
 export const getNodeStyleByStateType = <G extends GraphDataGenerics>(
   style: NodeStyle<G>,
-  type?: G["NS"]
+  type?: G["NS"],
 ): Style => {
   if (!type) return {} as Style
   const v = style[type]
@@ -273,14 +283,14 @@ export const getNodeStyleByStateType = <G extends GraphDataGenerics>(
 }
 
 const getLinkStyle = <G extends GraphDataGenerics>(
-  v: LinkStyle<G>
+  v: LinkStyle<G>,
 ): LinkStyle<G> => {
   return v
 }
 
 export const getLinkStyleByType = <G extends GraphDataGenerics>(
   style: GraphViewStyle<G>,
-  type?: G["LT"]
+  type?: G["LT"],
 ): LinkStyle<G> => {
   if (!type) return {} as LinkStyle<G>
   const v = style.link[type as G["LT"]]
@@ -290,7 +300,7 @@ export const getLinkStyleByType = <G extends GraphDataGenerics>(
 
 export const getLinkStyleByStateType = <G extends GraphDataGenerics>(
   style: LinkStyle<G>,
-  type?: G["LS"]
+  type?: G["LS"],
 ): LStyle => {
   if (!type) return {} as LStyle
   const v = style[type]
