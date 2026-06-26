@@ -28,6 +28,12 @@ import { EntityRegistry } from "./entity-registry"
 
 import ColorTracker from "canvas-color-tracker"
 import type { NodeRenderProcessorMap } from "./entity-types"
+import { LinkRegistry } from "./link-registry"
+import type {
+  LinkRenderProps,
+  LinkRenderer,
+  LinkRendererMap,
+} from "./link-types"
 import type {
   DefaultGraphDataGenerics,
   GraphDataGenerics,
@@ -66,6 +72,7 @@ interface GraphViewOptions<
   arrowDisplay?: boolean
   customLinkCanvasObject?: CustomLinkCanvasObjectType
   entityRegistry?: EntityRegistry<G>
+  linkRegistry?: LinkRegistry<G>
   // d3力配置函数
   setupD3Force?: (
     this: ConnGraphView<G>,
@@ -89,6 +96,7 @@ export class ConnGraphView<
   declare model: ConnGraphModel<G>
 
   declare nodeRenderProcessorMap: NodeRenderProcessorMap<G>
+  declare linkRenderProcessorMap: LinkRendererMap<G>
   declare colorTracker: ColorTracker
   declare canvas: HTMLCanvasElement | null
   declare shadowLayerManager: ShadowLayerManager
@@ -103,6 +111,7 @@ export class ConnGraphView<
     return null
   }
   declare entityRegistry: EntityRegistry<G>
+  declare linkRegistry: LinkRegistry<G>
   declare styleManager: StyleManager<G>
   /** Cosmograph GPU 渲染器实例（当 renderer='gpu' 时使用） */
   cosmographRenderer?: CosmographRenderer<G>
@@ -126,7 +135,9 @@ export class ConnGraphView<
     this.shadowLayerManager = new ShadowLayerManager()
 
     this.entityRegistry = opts.entityRegistry || new EntityRegistry()
+    this.linkRegistry = opts.linkRegistry || new LinkRegistry()
     this.nodeRenderProcessorMap = this.entityRegistry.getAll()
+    this.linkRenderProcessorMap = this.linkRegistry.getAll()
 
     // GPU 渲染模式（@cosmograph/cosmograph）
     if (opts.renderer === "gpu") {
@@ -887,9 +898,7 @@ export class ConnGraphView<
     if (!node) return
     const { nodeType } = node?.data || {}
 
-    const nodeStyle = this.styleManager.getNodeStyle(node.id)
-    const state = this.getNodeState(node)
-    const style = getNodeStyleByStateType(nodeStyle, state)
+    const style = this.getNodeColor(node.id, globalScale)
 
     const processor = nodeType
       ? this.nodeRenderProcessorMap[nodeType]
@@ -1001,7 +1010,19 @@ export class ConnGraphView<
 
     if (typeof start !== "object" || typeof end !== "object") return
 
-    const style = this.getLinkColor(String(link.id))
+    let style = this.getLinkColor(String(link.id))
+
+    const linkType = link.data?.linkType
+    const linkRenderer = linkType
+      ? this.linkRenderProcessorMap[linkType]
+      : undefined
+
+    if (linkRenderer?.getLinkStype) {
+      style = linkRenderer.getLinkStype({
+        link,
+        style,
+      } as LinkRenderProps<G>)
+    }
 
     // 计算曲线偏移
     const linkCountMap = this.calculateLinkCurveInfo()
@@ -1057,11 +1078,11 @@ export class ConnGraphView<
     style: LStyle,
     curveOffset: number = 0,
   ) {
-    const { color = DEFAULT_STROKE_COLOR, opacity = 1 } = style
+    const { color = DEFAULT_STROKE_COLOR, opacity = 1, strokeWidth } = style
 
     const focusLinks = this.model.stateManager.getFocusLinks()
 
-    const lineWidth = link.data?.lineWidth ?? DEFAULT_LINE_WIDTH
+    const lineWidth = strokeWidth || link.data?.lineWidth || DEFAULT_LINE_WIDTH
     const focusMultiplier = focusLinks.some((id) => id === link.id)
       ? DEFAULT_FOUCS_LINE_WIDTH
       : 1
@@ -1109,6 +1130,8 @@ export class ConnGraphView<
   ) {
     const { color = DEFAULT_STROKE_COLOR } = style
 
+    const sw = style.strokeWidth || DEFAULT_LINE_WIDTH
+
     const endRadius = this.getCollisionRadius(end, globalScale)
 
     let angle: number
@@ -1132,7 +1155,7 @@ export class ConnGraphView<
       angle = Math.atan2(tangentY, tangentX)
     }
 
-    const arrowLength = ARROW_SIZE
+    const arrowLength = ARROW_SIZE * sw
     const arrowWidth = arrowLength * 0.8
 
     // 箭头绘制在节点边缘
@@ -1168,6 +1191,8 @@ export class ConnGraphView<
   ) {
     const { light = DEFAULT_STROKE_COLOR, opacity } = style
 
+    const sw = style.strokeWidth || DEFAULT_LINE_WIDTH
+
     ctx.save()
     ctx.globalAlpha = opacity ?? 1
 
@@ -1190,7 +1215,7 @@ export class ConnGraphView<
       ctx.quadraticCurveTo(controlX, controlY, end.x!, end.y!)
     }
 
-    ctx.lineWidth = 0.5 / globalScale
+    ctx.lineWidth = (0.5 * sw) / globalScale
     ctx.strokeStyle = light
     ctx.stroke()
     ctx.closePath()
@@ -1218,7 +1243,7 @@ export class ConnGraphView<
         angle = Math.atan2(tangentY, tangentX)
       }
 
-      const arrowLength = ARROW_SIZE
+      const arrowLength = ARROW_SIZE * sw
       const arrowWidth = arrowLength * 0.8
 
       const arrowPoints = this.calculateArrowPoints(

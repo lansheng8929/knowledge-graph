@@ -88,7 +88,7 @@ export class StyleManager<
   }
 
   getLinkStyle(linkId: LinkId | undefined): LinkStyle<G> {
-    if (!linkId) return {} as NodeStyle<G>
+    if (!linkId) return {} as LinkStyle<G>
     const link = this.graphModelData.graphData.links.find(
       (link) => link.id === linkId,
     )

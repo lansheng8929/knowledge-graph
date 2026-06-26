@@ -34,14 +34,8 @@ export interface LinkPointerAreaProps<G extends GraphDataGenerics = any> {
  * 每种 LinkType 可实现自己的渲染逻辑
  */
 export interface LinkRenderer<G extends GraphDataGenerics = any> {
-  /** 渲染边主体 */
-  renderLinkCanvasObject?: (props: LinkRenderProps<G>) => void
-
-  /** 渲染边的指针交互区域（点击/悬停检测） */
-  renderLinkPointerArea?: (props: LinkPointerAreaProps<G>) => void
-
-  /** 获取边的宽度 */
-  getLinkWidth?: (props: { link: GraphLink<G>; style: LStyle }) => number
+  /** 获取边的样式 */
+  getLinkStype?: (props: { link: GraphLink<G>; style: LStyle }) => LStyle
 }
 
 /** 边渲染器部分实现（允许只实现部分方法） */

@@ -494,6 +494,44 @@ export class StateManager<
     return this.state.hoveredLinks.includes(linkId)
   }
 
+  // ============ 单个节点/边状态查询 ============
+
+  /**
+   * 获取节点的所有状态
+   */
+  getNodeState(nodeId: NodeId): {
+    focused: boolean
+    selected: boolean
+    hidden: boolean
+    hovered: boolean
+    root: boolean
+  } {
+    return {
+      focused: this.isFocused(nodeId),
+      selected: this.isSelected(nodeId),
+      hidden: this.isHidden(nodeId),
+      hovered: this.isHoveredNode(nodeId),
+      root: this.isRootNode(nodeId),
+    }
+  }
+
+  /**
+   * 获取边的所有状态
+   */
+  getLinkState(linkId: LinkId): {
+    focused: boolean
+    selected: boolean
+    hidden: boolean
+    hovered: boolean
+  } {
+    return {
+      focused: this.state.focusLinks.includes(linkId),
+      selected: this.state.selectedLinks.includes(linkId),
+      hidden: this.state.hiddenLinks.includes(linkId),
+      hovered: this.isHoveredLink(linkId),
+    }
+  }
+
   // ============ 通用方法 ============
 
   /**
