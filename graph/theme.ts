@@ -41,7 +41,7 @@ export type NodeStyle<G extends GraphDataGenerics> = Record<G["NS"], Style>
 export interface LStyle {
   color?: string
   stroke?: string
-  strokeWidth: number
+  strokeWidth?: number
   opacity?: number
   light?: string
 }
