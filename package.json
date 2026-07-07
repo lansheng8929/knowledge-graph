@@ -1,7 +1,7 @@
 {
   "name": "@ra-sdk/knowledge-graph",
   "sideEffects": false,
-  "version": "3.0.0-beta.1",
+  "version": "3.0.0-beta.2",
   "type": "module",
   "main": "./graph/index.ts",
   "types": "./graph/index.ts",
@@ -10,7 +10,6 @@
     "create-entity": "node graph/entity/create-entity.js"
   },
   "dependencies": {
-    "@cosmograph/cosmograph": "^2.3.2",
     "canvas-color-tracker": "^1.0.3",
     "d3-force": "^3.0.0",
     "force-graph": "^1.51.0",

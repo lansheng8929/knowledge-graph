@@ -4,6 +4,3 @@
  */
 
 export * from "./default/default.client"
-
-// 导出内置边渲染器
-export * from "./link/default/default.client"

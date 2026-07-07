@@ -43,7 +43,6 @@ import type {
 } from "./type"
 import type { StyleManager } from "../style-manager"
 import { ShadowLayerManager } from "./shadow-layer"
-import { CosmographRenderer } from "./cosmograph-renderer"
 
 interface GraphModelActions {
   highlightNode(id: NodeId | undefined): void
@@ -79,12 +78,6 @@ interface GraphViewOptions<
     forceGraph: ForceGraph,
     d3: typeof import("d3-force"),
   ) => void
-  /**
-   * 渲染引擎选择
-   * - 'canvas' (默认): 使用 Canvas 2D (force-graph) 渲染
-   * - 'gpu': 使用 WebGL/GPU (@cosmograph/cosmograph) 渲染
-   */
-  renderer?: "canvas" | "gpu"
 }
 
 export class ConnGraphView<
@@ -113,8 +106,6 @@ export class ConnGraphView<
   declare entityRegistry: EntityRegistry<G>
   declare linkRegistry: LinkRegistry<G>
   declare styleManager: StyleManager<G>
-  /** Cosmograph GPU 渲染器实例（当 renderer='gpu' 时使用） */
-  cosmographRenderer?: CosmographRenderer<G>
 
   actions: GraphModelActions = {
     highlightNode: (nodeId: NodeId) => {
@@ -139,38 +130,9 @@ export class ConnGraphView<
     this.nodeRenderProcessorMap = this.entityRegistry.getAll()
     this.linkRenderProcessorMap = this.linkRegistry.getAll()
 
-    // GPU 渲染模式（@cosmograph/cosmograph）
-    if (opts.renderer === "gpu") {
-      this.initGpuRenderer()
-      return
-    }
-
-    // 默认 Canvas 2D 渲染模式（force-graph）
+    // Canvas 2D 渲染模式（force-graph）
     this.initView()
     this.initStyle()
-  }
-
-  /**
-   * 初始化 GPU 渲染器（Cosmograph）
-   */
-  private async initGpuRenderer() {
-    this.cosmographRenderer = new CosmographRenderer({
-      container: this.container,
-      graphModel: this.model,
-      width: this.options.width,
-      height: this.options.height,
-      backgroundColor: this.options.backgroundColor,
-      arrowDisplay: this.options.arrowDisplay,
-      debug: this.options.debug,
-    })
-
-    await this.cosmographRenderer.init()
-
-    // GPU 模式下同步初始化样式（仅用于数据获取）
-    this.styleManager.init({
-      style: this.options.style,
-      container: this.container,
-    })
   }
 
   /**
@@ -244,13 +206,8 @@ export class ConnGraphView<
 
   // ==================== 公共方法 ====================
 
-  /** 是否使用 GPU 渲染 */
-  get useGpu(): boolean {
-    return this.options.renderer === "gpu"
-  }
-
   /**
-   * 更新 d3 力配置（仅在 Canvas 模式下有效）
+   * 更新 d3 力配置
    */
   updateD3Force(setupFn: (d3: typeof import("d3-force")) => void) {
     setupFn(d3)
@@ -267,11 +224,6 @@ export class ConnGraphView<
    * 更新视图
    */
   updateView(graphViewModel: Partial<GraphViewModel<G>>) {
-    if (this.useGpu) {
-      this.cosmographRenderer?.updateData(graphViewModel)
-      return
-    }
-
     if (!this.forceGraph) return
 
     if (graphViewModel.graphData) {
@@ -291,11 +243,6 @@ export class ConnGraphView<
   updateStyle(options: Pick<GraphViewOptions<G>, "style">) {
     if (options.style) {
       this.styleManager.update(options.style)
-    }
-
-    if (this.useGpu) {
-      // GPU 模式下样式通过 styleManager 维护，渲染由 Cosmograph 内部处理
-      return
     }
 
     this.refreshByStyle()
@@ -424,8 +371,6 @@ export class ConnGraphView<
    * 设置画布点击监听
    */
   private setupCanvasClickListener() {
-    if (this.useGpu) return
-
     this.canvas = this.container.querySelector("canvas")
     if (!this.canvas) {
       console.error("❌ 未找到主 canvas 元素")
@@ -615,8 +560,6 @@ export class ConnGraphView<
    * 处理节点拖拽结束
    */
   private handleNodeDragEnd(node: NodeObject) {
-    if (this.useGpu) return
-
     node.fx = node.x
     node.fy = node.y
 
@@ -626,40 +569,24 @@ export class ConnGraphView<
     }
   }
 
-  // ==================== GPU 增强方法 ====================
-
   /**
-   * 聚焦到某个节点（GPU 模式下使用 GPU 原生聚焦）
+   * 聚焦到某个节点
    */
   focusNodeById(nodeId: string) {
-    if (this.useGpu) {
-      this.cosmographRenderer?.focusNode(nodeId)
-    } else {
-      // Canvas 模式下通过 stateManager 实现
-      this.model.stateManager.setFocusNodes([nodeId])
-    }
+    this.model.stateManager.setFocusNodes([nodeId])
   }
 
   /**
    * 自适应视图
    */
   fitView(duration?: number, padding?: number) {
-    if (this.useGpu) {
-      this.cosmographRenderer?.fitView(duration, padding)
-    } else {
-      this.forceGraph?.zoomToFit(duration ?? 400, padding ?? 50)
-    }
+    this.forceGraph?.zoomToFit(duration ?? 400, padding ?? 50)
   }
 
   /**
-   * 调整画布尺寸（兼容 Canvas / GPU 两种模式）
-   * GPU 模式下 Cosmograph 自动适配容器大小，无需手动调用
+   * 调整画布尺寸
    */
   resize(width: number, height: number) {
-    if (this.useGpu) {
-      // Cosmograph 基于容器自动适配，无需额外操作
-      return
-    }
     if (this.forceGraph) {
       this.forceGraph.width(width).height(height)
     }
@@ -828,7 +755,6 @@ export class ConnGraphView<
    * 刷新样式和渲染
    */
   refreshByStyle() {
-    if (this.useGpu) return
     if (!this.forceGraph) return
 
     const { background } = this.styleManager.getStyle()
@@ -1372,12 +1298,6 @@ export class ConnGraphView<
    * 获取节点半径
    */
   private getNodeRadius(node: GraphNode<G["NO"], G["NT"], G["NS"]>): number {
-    if (this.useGpu) {
-      // GPU 模式下，通过 styleManager 获取基础半径
-      const style = this.getNodeColor(String(node.id), 1)
-      return style.radius ?? 4
-    }
-
     const nodeType = node?.data?.nodeType
     const style = this.getNodeColor(String(node.id), 1)
     const processor = nodeType
