@@ -83,7 +83,7 @@ type EventSubscriber<T = unknown> = (data: T) => void
 // 取消订阅函数类型
 type UnsubscribeFunction = () => void
 
-export class ConnGraphEvents<
+export class GraphEvents<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   private subscribers = new Map<string, Set<EventSubscriber>>()

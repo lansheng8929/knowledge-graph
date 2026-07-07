@@ -7,13 +7,12 @@
   "types": "./graph/index.ts",
   "scripts": {
     "tsc": "tsc --noEmit --pretty",
-    "create-entity": "node graph/entity/create-entity.js"
+    "create-entity": "node graph/entity/create-entity.js",
+    "dev": "cd vite-test && vite",
+    "build:test": "cd vite-test && vite build"
   },
   "dependencies": {
-    "@cosmograph/cosmograph": "^2.3.2",
-    "canvas-color-tracker": "^1.0.3",
     "d3-force": "^3.0.0",
-    "force-graph": "^1.51.0",
     "lodash-es": "^4.17.21",
     "typescript": "^5.9.3"
   },

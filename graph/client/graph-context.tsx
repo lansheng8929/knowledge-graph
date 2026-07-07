@@ -7,7 +7,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react"
-import { ConnGraphModel, type Options } from "../model"
+import { GraphModel, type Options } from "../model"
 import { MetadataManager } from "../meta-manager"
 import {
   HistoryManager,
@@ -51,7 +51,7 @@ export interface GraphContextValue<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   /** 数据模型 */
-  model: ConnGraphModel<G>
+  model: GraphModel<G>
   /** 图数据引用（实时） */
   graphDataRef: React.MutableRefObject<GraphViewModel<G>["graphData"]>
   /** 当前图数据 */
@@ -59,13 +59,13 @@ export interface GraphContextValue<
 
   // --- 管理器 ---
   /** 状态管理器（focus/select/hide/hover） */
-  stateManager: ConnGraphModel<G>["stateManager"]
+  stateManager: GraphModel<G>["stateManager"]
   /** 标签管理器 */
-  tagManager: ConnGraphModel<G>["tagManager"]
+  tagManager: GraphModel<G>["tagManager"]
   /** 加载状态管理器 */
-  loadingManager: ConnGraphModel<G>["loadingManager"]
+  loadingManager: GraphModel<G>["loadingManager"]
   /** 样式管理器 */
-  styleManager: ConnGraphModel<G>["styleManager"]
+  styleManager: GraphModel<G>["styleManager"]
   /** 元数据管理器 */
   metadataManager: MetadataManager
   /** 历史管理器 */
@@ -97,7 +97,7 @@ export interface GraphProviderProps<
   /** 模型选项（至少需要 initData） */
   options: Options<G>
   /** 可选：外部传入已有模型实例 */
-  model?: ConnGraphModel<G>
+  model?: GraphModel<G>
   /** 事件处理器 */
   eventHandlers?: GraphEventHandlers<G>
   /** 历史管理器选项 */
@@ -121,9 +121,9 @@ export function GraphProvider<
   const [eventHandlers, setEventHandlers] = useState(initialHandlers)
 
   // --- 懒初始化模型（只创建一次） ---
-  const modelRef = useRef<ConnGraphModel<G> | null>(null)
+  const modelRef = useRef<GraphModel<G> | null>(null)
   if (!modelRef.current) {
-    modelRef.current = externalModel ?? new ConnGraphModel<G>(options)
+    modelRef.current = externalModel ?? new GraphModel<G>(options)
   }
   const model = modelRef.current
 

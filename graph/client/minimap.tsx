@@ -5,13 +5,13 @@ import React, {
   useEffect,
   useState,
 } from "react"
-import type { ConnGraphModel } from "../model"
+import type { GraphModel } from "../model"
 import type { DefaultGraphDataGenerics, GraphDataGenerics } from "./type"
 
 interface MinimapProps<G extends GraphDataGenerics> {
   className?: string
   style?: React.CSSProperties
-  graphModel: ConnGraphModel<G>
+  graphModel: GraphModel<G>
   transform: {
     k: number
     x: number

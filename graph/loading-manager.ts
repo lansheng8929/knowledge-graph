@@ -1,5 +1,5 @@
 import type { NodeId } from "./type"
-import { ConnGraphEvents } from "./events"
+import { GraphEvents } from "./events"
 
 export interface NodeLoadingState {
   nodeId: NodeId
@@ -14,9 +14,9 @@ export interface NodeLoadingState {
  */
 export class LoadingManagerModel {
   private loadingStates: Map<NodeId, NodeLoadingState>
-  private events: ConnGraphEvents
+  private events: GraphEvents
 
-  constructor(events: ConnGraphEvents) {
+  constructor(events: GraphEvents) {
     this.loadingStates = new Map()
     this.events = events
   }
@@ -31,7 +31,7 @@ export class LoadingManagerModel {
       progress?: number
       message?: string
       metadata?: Record<string, any>
-    }
+    },
   ): NodeLoadingState {
     const loadingState: NodeLoadingState = {
       nodeId,
@@ -62,7 +62,7 @@ export class LoadingManagerModel {
       progress?: number
       message?: string
       metadata?: Record<string, any>
-    }
+    },
   ): NodeLoadingState {
     return this.setLoading(nodeId, true, options)
   }
@@ -84,7 +84,7 @@ export class LoadingManagerModel {
   updateProgress(
     nodeId: NodeId,
     progress: number,
-    message?: string
+    message?: string,
   ): NodeLoadingState | undefined {
     const state = this.loadingStates.get(nodeId)
     if (!state) return undefined
@@ -141,7 +141,7 @@ export class LoadingManagerModel {
       progress?: number
       message?: string
       metadata?: Record<string, any>
-    }
+    },
   ): NodeLoadingState[] {
     const states: NodeLoadingState[] = []
 
@@ -162,7 +162,7 @@ export class LoadingManagerModel {
       progress?: number
       message?: string
       metadata?: Record<string, any>
-    }
+    },
   ): NodeLoadingState[] {
     return this.setLoadingForNodes(nodeIds, true, options)
   }
@@ -220,7 +220,7 @@ export class LoadingManagerModel {
    * 根据条件筛选加载状态
    */
   filterLoadingStates(
-    predicate: (state: NodeLoadingState) => boolean
+    predicate: (state: NodeLoadingState) => boolean,
   ): NodeLoadingState[] {
     return Array.from(this.loadingStates.values()).filter(predicate)
   }
@@ -250,7 +250,7 @@ export class LoadingManager {
   public readonly model: LoadingManagerModel
   private globalVisible: boolean
 
-  constructor(events: ConnGraphEvents) {
+  constructor(events: GraphEvents) {
     this.model = new LoadingManagerModel(events)
     this.globalVisible = true // 默认显示所有加载状态
   }

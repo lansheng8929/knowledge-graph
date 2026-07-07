@@ -8,7 +8,7 @@ import { makeDrawWrapper } from "../client/utils"
 import type { EntityCreator, EntityRenderer } from "../client/entity-types"
 
 export const createEntity = (
-  entityCreator: EntityCreator<DefaultGraphDataGenerics>
+  entityCreator: EntityCreator<DefaultGraphDataGenerics>,
 ): EntityRenderer<DefaultGraphDataGenerics> => {
   const entityInstance = entityCreator()
 
@@ -78,7 +78,7 @@ export const entityCommonRenderer = {
     }
 
     // 渲染标签
-    const tags = tagManager.getVisibleTags(node.id)
+    const tags = tagManager.getVisibleTags(node.id, "node")
 
     if (tags) {
       makeDrawWrapper(ctx).textWrap(
@@ -88,7 +88,7 @@ export const entityCommonRenderer = {
         fontSize,
         tagColor || "#000",
         opacity,
-        30
+        30,
       )
     }
   },
@@ -142,7 +142,7 @@ export const entityCommonRenderer = {
         x,
         y,
         radius,
-        globalScale
+        globalScale,
       )
     }
   },

@@ -36,6 +36,15 @@ export interface LinkPointerAreaProps<G extends GraphDataGenerics = any> {
 export interface LinkRenderer<G extends GraphDataGenerics = any> {
   /** 获取边的样式 */
   getLinkStype?: (props: { link: GraphLink<G>; style: LStyle }) => LStyle
+
+  /** 渲染边的 Canvas 对象 */
+  renderLinkCanvasObject?: (props: LinkRenderProps<G>) => void
+
+  /** 渲染边的指针区域（用于点击检测） */
+  renderLinkPointerArea?: (props: LinkPointerAreaProps<G>) => void
+
+  /** 获取边的宽度 */
+  getLinkWidth?: () => number
 }
 
 /** 边渲染器部分实现（允许只实现部分方法） */

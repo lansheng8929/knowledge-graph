@@ -1,9 +1,14 @@
-import type ColorTracker from "canvas-color-tracker"
 import type { Style } from "../theme"
 
 import type { TagManager } from "../tag-manager"
 import type { LoadingManager } from "../loading-manager"
 import type { GraphNode } from "./type"
+
+/** Simple color tracker type (replaces canvas-color-tracker dependency) */
+export interface ColorTracker {
+  register: (item: { type: string; d: unknown }) => string | undefined
+  lookup: (color: string) => unknown | undefined
+}
 
 export interface ManagerProps<G extends GraphDataGenerics> {
   tagManager: TagManager<G>

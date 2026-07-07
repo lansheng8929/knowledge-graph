@@ -1,4 +1,4 @@
-import type { ConnGraphEvents } from "./events"
+import type { GraphEvents } from "./events"
 import type { NodeId, LinkId } from "./type"
 import type {
   GraphDataGenerics,
@@ -20,9 +20,9 @@ export class StateManager<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   private state: StateInfo
-  private events: ConnGraphEvents<G>
+  private events: GraphEvents<G>
 
-  constructor(events: ConnGraphEvents<G>) {
+  constructor(events: GraphEvents<G>) {
     this.events = events
     this.state = {
       focusNodes: [],

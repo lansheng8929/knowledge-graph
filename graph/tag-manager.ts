@@ -1,5 +1,5 @@
 import type { NodeId } from "./type"
-import { ConnGraphEvents } from "./events"
+import { GraphEvents } from "./events"
 import type { DefaultGraphDataGenerics, GraphDataGenerics } from "./client"
 
 // 标签目标类型
@@ -37,9 +37,9 @@ export type LinkTag<M extends object = object> = Tag<M> & {
  */
 export class TagManagerModel<G extends GraphDataGenerics> {
   private tags: Map<string, Tag<G["M"]>[]>
-  private events: ConnGraphEvents
+  private events: GraphEvents
 
-  constructor(events: ConnGraphEvents) {
+  constructor(events: GraphEvents) {
     this.tags = new Map()
     this.events = events
   }
@@ -759,7 +759,7 @@ export class TagManager<
   public readonly model: TagManagerModel<G>
   private globalVisible: boolean
 
-  constructor(events: ConnGraphEvents) {
+  constructor(events: GraphEvents) {
     this.model = new TagManagerModel(events)
     this.globalVisible = true // 默认显示所有标签
   }

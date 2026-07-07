@@ -1,4 +1,4 @@
-import { ConnGraphEvents } from "./events"
+import { GraphEvents } from "./events"
 import type {
   LinkId,
   LinkState,
@@ -10,7 +10,6 @@ import type {
 import { TagManager } from "./tag-manager"
 import { LoadingManager } from "./loading-manager"
 import { StateManager } from "./state-manager"
-import ColorTracker from "canvas-color-tracker"
 import type {
   DefaultGraphDataGenerics,
   GraphDataGenerics,
@@ -30,18 +29,17 @@ type ModelComputedCache<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > = GraphViewModel<G>
 
-export class ConnGraphModel<
+export class GraphModel<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   protected cache: ModelComputedCache<G> = {
     graphData: { nodes: [], links: [] },
   }
-  public events = new ConnGraphEvents<G>()
+  public events = new GraphEvents<G>()
   public tagManager = new TagManager<G>(this.events)
   public loadingManager = new LoadingManager(this.events)
   public stateManager = new StateManager<G>(this.events)
   public styleManager = new StyleManager<G>(this.cache)
-  public colorTracker = new ColorTracker()
 
   constructor({ initData }: Options<G>) {
     this.updateGraphData({
@@ -50,16 +48,6 @@ export class ConnGraphModel<
   }
 
   updateGraphData({ graphData }: GraphViewModelGraphData<G>) {
-    graphData.nodes.forEach((node) => {
-      const indexColor = this.colorTracker.register({
-        type: "PlusTool",
-        d: node,
-      })
-      if (!indexColor) return
-
-      node.__toolIndexColor = indexColor
-    })
-
     this.cache.graphData = graphData
 
     this.styleManager.updategGraphModelData(this.cache)

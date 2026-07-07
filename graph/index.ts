@@ -14,4 +14,12 @@ export * from "./style-registry"
 
 export * from "./type"
 
+// New Canvas2D-based renderer and physics
+export { GraphView } from "./client/view-new.js"
+export type { GraphViewOptions } from "./client/view-new.js"
+export { Canvas2DRenderer } from "./renderer/canvas2d-renderer.js"
+export type { Canvas2DRendererOptions } from "./renderer/canvas2d-renderer.js"
+export { ForceSimulation } from "./physics/index.js"
+export type { ForceConfig, SimNode, SimLink } from "./physics/index.js"
+
 export * as d3 from "d3-force"
