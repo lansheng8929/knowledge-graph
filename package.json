@@ -1,7 +1,7 @@
 {
   "name": "@ra-sdk/knowledge-graph",
   "sideEffects": false,
-  "version": "3.0.0-beta.2",
+  "version": "3.0.0-beta.3",
   "type": "module",
   "main": "./graph/index.ts",
   "types": "./graph/index.ts",
