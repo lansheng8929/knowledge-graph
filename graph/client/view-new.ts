@@ -1,11 +1,14 @@
 /**
- * GraphView — main graph view using Canvas 2D rendering + d3-force physics.
+ * GraphView — main graph view with configurable renderer + d3-force physics.
  *
- * This replaces the old force-graph + cosmograph based implementation.
+ * Supports switching render backend via `renderer` option:
+ * - "canvas" (default): Canvas2DRenderer + CanvasColorPicker
+ * - "webgl":           WebGLRenderer      + WebGLPicker
  */
 
 import { GraphModel } from "../model.js"
-import { Canvas2DRenderer } from "../renderer/canvas2d-renderer.js"
+import { GraphRenderer } from "../renderer/graph-renderer.js"
+import type { RendererBackend } from "../renderer/graph-renderer.js"
 import {
   ForceSimulation,
   type SimNode,
@@ -38,6 +41,9 @@ export interface GraphViewOptions<
   /** d3-force configuration */
   forceConfig?: ForceConfig
 
+  /** 渲染后端: "canvas" (默认) 或 "webgl" */
+  renderer?: RendererBackend
+
   /** Custom node-to-render mapping */
   mapNode?: (
     node: GraphNode<G["NO"], G["NT"], G["NS"]>,
@@ -51,7 +57,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   private options: GraphViewOptions<G>
   private container: HTMLElement
   model: GraphModel<G>
-  private renderer: Canvas2DRenderer
+  /** 渲染器代理门面 */
+  renderer: GraphRenderer
   private physics: ForceSimulation
 
   // Node/link lookup
@@ -73,13 +80,14 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       container: this.container,
     })
 
-    // Initialize Canvas2D renderer
-    this.renderer = new Canvas2DRenderer({
+    // Initialize renderer proxy
+    this.renderer = new GraphRenderer({
       container: this.container,
       width: opts.width,
       height: opts.height,
       backgroundColor: opts.backgroundColor,
       showArrows: opts.arrowDisplay,
+      renderer: opts.renderer ?? "canvas",
     })
 
     // Initialize physics
@@ -108,6 +116,9 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     }
 
     this.renderer.onNodeHover = (nodeId) => {
+      // 直接更新渲染器中的节点样式，无需全量重建
+      this.updateHoverVisuals(nodeId)
+
       if (nodeId) {
         this.model.stateManager.setHoveredNodes([nodeId])
         const node = this.nodeMap.get(nodeId) ?? null
@@ -120,6 +131,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
     this.renderer.onNodeDrag = (nodeId, x, y) => {
       this.physics.fixNode(nodeId, x, y)
+      // 重新加热物理引擎，让其他节点被力牵引
+      this.physics.reheat(0.3)
       // Update render node
       const simNodes = this.physics["nodes"] as SimNode[]
       const simNode = simNodes.find((n) => n.id === nodeId)
@@ -152,6 +165,66 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.events.subscribe("dataChange", ({ graphData }) => {
       this.rebuildFromModel()
     })
+  }
+
+  // ========== Hover 视觉更新（直接操作渲染器，不触发重建） ==========
+
+  private hoveredNodeId: string | null = null
+
+  private updateHoverVisuals(nodeId: string | null): void {
+    const renderNodes = this.renderer.nodes
+    const renderLinks = this.renderer.links
+
+    // 恢复上一个悬浮节点到默认样式
+    if (this.hoveredNodeId && this.hoveredNodeId !== nodeId) {
+      const prev = renderNodes.find((n) => n.id === this.hoveredNodeId)
+      if (prev) {
+        prev.radius = 8
+        prev.color = [0.357, 0.608, 0.835, 1.0]
+        prev.strokeWidth = 2
+      }
+    }
+
+    if (!nodeId) {
+      // 恢复所有关联边
+      for (const rl of renderLinks) {
+        rl.color = [0.6, 0.6, 0.6, 0.7]
+        rl.width = 1.5
+      }
+      this.hoveredNodeId = null
+      return
+    }
+
+    // 高亮当前悬浮节点
+    const curr = renderNodes.find((n) => n.id === nodeId)
+    if (curr) {
+      curr.radius = 12
+      curr.color = [1.0, 0.6, 0.2, 1.0]
+      curr.strokeWidth = 3
+    }
+
+    // 通过 model 数据找到关联边的 ID
+    const { graphData } = this.model.getGraphModelData()
+    const relatedLinkIds = new Set<string>()
+    for (const link of graphData.links) {
+      const sid = typeof link.source === "object" ? link.source.id : link.source
+      const tid = typeof link.target === "object" ? link.target.id : link.target
+      if (String(sid) === nodeId || String(tid) === nodeId) {
+        relatedLinkIds.add(link.id)
+      }
+    }
+
+    for (const rl of renderLinks) {
+      if (relatedLinkIds.has(rl.id)) {
+        rl.color = [1.0, 0.6, 0.2, 0.9]
+        rl.width = 2.5
+      } else {
+        rl.color = [0.6, 0.6, 0.6, 0.7]
+        rl.width = 1.5
+      }
+    }
+
+    this.hoveredNodeId = nodeId
   }
 
   // ========== Data rebuilding ==========
@@ -238,13 +311,12 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     gn: GraphNode<G["NO"], G["NT"], G["NS"]>,
     _index: number,
   ): RenderNode {
-    // Simplified: use hardcoded colors for initial test
     return {
       x: gn.x ?? 0,
       y: gn.y ?? 0,
       radius: 8,
-      color: [0.357, 0.608, 0.835, 1.0], // #5b9bd5 blue
-      strokeColor: [1.0, 1.0, 1.0, 1.0], // white stroke
+      color: [0.357, 0.608, 0.835, 1.0],
+      strokeColor: [1.0, 1.0, 1.0, 1.0],
       strokeWidth: 2,
       id: gn.id,
       label: gn.data?.label,
@@ -258,13 +330,12 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     const sourceNode = this.nodeMap.get(String(sourceId))
     const targetNode = this.nodeMap.get(String(targetId))
 
-    // Simplified: use hardcoded colors
     return {
       sourceX: sourceNode?.x ?? 0,
       sourceY: sourceNode?.y ?? 0,
       targetX: targetNode?.x ?? 0,
       targetY: targetNode?.y ?? 0,
-      color: [0.6, 0.6, 0.6, 0.7], // gray with some alpha
+      color: [0.6, 0.6, 0.6, 0.7],
       width: 1.5,
       id: gl.id,
       label: gl.data?.label,
@@ -291,8 +362,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.renderer.updateNodePositions(posMap)
 
     // Update link positions
-    const renderNodes = (this.renderer as any).nodes as RenderNode[]
-    const renderLinks = (this.renderer as any).links as RenderLink[]
+    const renderNodes = this.renderer.nodes
+    const renderLinks = this.renderer.links
     for (const rl of renderLinks) {
       const srcNode = renderNodes.find((n) => n.id === rl.id)
       // Actually need to find by source/target. We store link data differently.
@@ -338,8 +409,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.renderer.fitView(padding)
   }
 
-  /** Get the canvas renderer */
-  getRenderer(): Canvas2DRenderer {
+  /** Get the renderer proxy */
+  getRenderer(): GraphRenderer {
     return this.renderer
   }
 

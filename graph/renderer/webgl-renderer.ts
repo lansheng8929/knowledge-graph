@@ -1,26 +1,21 @@
 /**
- * WebGLRenderer — main orchestrator for WebGL-based graph rendering.
+ * WebGLRenderer — WebGL 图渲染器。
  *
- * Manages:
- * - WebGL2 context and canvas
- * - Camera (pan/zoom)
- * - Node rendering (instanced circles)
- * - Link rendering (instanced lines + arrows)
- * - Text labels (texture atlas)
- * - Color-picking framebuffer (hit detection)
- * - Interaction (click, hover, drag)
+ * 职责：WebGL 绘制节点、边、文字标签。
+ * 相机由 Camera 类管理，交互委托给 InteractionManager + WebGLPicker。
  */
 
 import { Camera } from "./camera.js"
 import { NodeBatchRenderer } from "./node-batch.js"
 import { LinkBatchRenderer } from "./link-batch.js"
 import { TextLabelRenderer, type LabelInfo } from "./text-label.js"
-import type {
-  RenderNode,
-  RenderLink,
-  ViewTransform,
-  Viewport,
-} from "./types.js"
+import { WebGLPicker } from "./webgl-picker.js"
+import {
+  InteractionManager,
+  type ViewTransform,
+  type InteractionCallbacks,
+} from "./interaction-manager.js"
+import type { RenderNode, RenderLink } from "./types.js"
 
 export interface WebGLRendererOptions {
   container: HTMLElement
@@ -56,18 +51,16 @@ export function decodePickColor(r: number, g: number, b: number): number {
 }
 
 export class WebGLRenderer {
-  private container: HTMLElement
-  private canvas: HTMLCanvasElement
+  readonly container: HTMLElement
+  readonly canvas: HTMLCanvasElement
+  readonly interaction: InteractionManager
+  readonly picker: WebGLPicker
+
   private gl: WebGL2RenderingContext
   private camera = new Camera()
   private nodeRenderer: NodeBatchRenderer
   private linkRenderer: LinkBatchRenderer
   private labelRenderer: TextLabelRenderer
-
-  // Picking framebuffer
-  private pickFbo: WebGLFramebuffer | null = null
-  private pickTexture: WebGLTexture | null = null
-  private pickDepth: WebGLRenderbuffer | null = null
 
   // Current data
   private nodes: RenderNode[] = []
@@ -80,18 +73,10 @@ export class WebGLRenderer {
   private labelMinScale = 0.5
   private width: number
   private height: number
-
-  // Interaction state
-  private isDragging = false
-  private dragNodeId: string | null = null
-  private hoveredId: string | null = null
-  private lastMouseX = 0
-  private lastMouseY = 0
-  private isPanning = false
   private _destroyed = false
   private _rafId = 0
 
-  // Callbacks
+  // 公开回调（桥接到 InteractionManager）
   onNodeClick?: (nodeId: string | null, event: MouseEvent) => void
   onNodeHover?: (nodeId: string | null) => void
   onNodeDrag?: (nodeId: string, x: number, y: number) => void
@@ -103,7 +88,7 @@ export class WebGLRenderer {
   constructor(opts: WebGLRendererOptions) {
     this.container = opts.container
 
-    // Create canvas
+    // Canvas
     this.canvas = document.createElement("canvas")
     this.canvas.style.width = "100%"
     this.canvas.style.height = "100%"
@@ -117,7 +102,7 @@ export class WebGLRenderer {
 
     this.container.appendChild(this.canvas)
 
-    // Init WebGL2
+    // WebGL2
     const gl = this.canvas.getContext("webgl2", {
       antialias: true,
       alpha: true,
@@ -125,7 +110,6 @@ export class WebGLRenderer {
     })
     if (!gl) throw new Error("WebGL2 not supported")
     this.gl = gl
-
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
@@ -150,38 +134,67 @@ export class WebGLRenderer {
       opts.labelFontSize ?? 24,
     )
 
-    this.initPicking()
-    this.setupInteraction()
+    // WebGL 拾取器
+    this.picker = new WebGLPicker({
+      gl,
+      nodeRenderer: this.nodeRenderer,
+      linkRenderer: this.linkRenderer,
+      width: this.width,
+      height: this.height,
+    })
+
+    // 交互管理器
+    this.interaction = new InteractionManager(
+      this.canvas,
+      this.picker,
+      this.makeCallbacks(),
+    )
+    // 保持相机同步
+    this.interaction.transform = this.camera.state as ViewTransform
+
+    // 尺寸监听
+    const ro = new ResizeObserver(() => this.handleResize())
+    ro.observe(this.container)
+
     this.startRenderLoop()
   }
 
-  private initPicking(): void {
-    const gl = this.gl
-    const dpr = window.devicePixelRatio || 1
-    const w = this.width * dpr
-    const h = this.height * dpr
+  // ========== 回调桥接 ==========
 
-    this.pickFbo = gl.createFramebuffer()
-
-    this.pickTexture = gl.createTexture()!
-    gl.bindTexture(gl.TEXTURE_2D, this.pickTexture)
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      w,
-      h,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      null,
-    )
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-
-    this.pickDepth = gl.createRenderbuffer()!
-    gl.bindRenderbuffer(gl.RENDERBUFFER, this.pickDepth)
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h)
+  private makeCallbacks(): InteractionCallbacks {
+    const self = this
+    return {
+      onNodeClick(nodeId, event) {
+        self.onNodeClick?.(nodeId, event)
+      },
+      onLinkClick(linkId, event) {
+        self.onLinkClick?.(linkId, event)
+      },
+      onNodeHover(nodeId) {
+        self.onNodeHover?.(nodeId)
+      },
+      onNodeDrag(nodeId, dx, dy) {
+        const k = self.interaction.transform.k
+        const node = self.nodes.find((n) => n.id === nodeId)
+        if (node) {
+          node.x += dx / k
+          node.y += dy / k
+          self.onNodeDrag?.(nodeId, node.x, node.y)
+        }
+      },
+      onNodeDragEnd(nodeId) {
+        self.onNodeDragEnd?.(nodeId)
+      },
+      onBackgroundClick(event) {
+        self.onBackgroundClick?.(event)
+      },
+      onZoom(transform) {
+        self.onZoom?.(transform)
+      },
+      onPan(transform) {
+        self.onZoom?.(transform)
+      },
+    }
   }
 
   // ========== Data ==========
@@ -189,7 +202,8 @@ export class WebGLRenderer {
   updateData(nodes: RenderNode[], links: RenderLink[]): void {
     this.nodes = nodes
     this.links = links
-    // Pre-register labels
+    this.picker.syncData(nodes, links)
+
     const texts = nodes.map((n) => n.label).filter(Boolean) as string[]
     texts.push(...(links.map((l) => l.label).filter(Boolean) as string[]))
     this.labelRenderer.preRegister(texts)
@@ -203,9 +217,6 @@ export class WebGLRenderer {
         n.y = pos.y
       }
     }
-    // Also update link endpoints from node positions
-    // (links store sourceX/sourceY/targetX/targetY which reference node positions)
-    // The caller should update links separately if needed
   }
 
   getCamera(): Camera {
@@ -229,10 +240,11 @@ export class WebGLRenderer {
     gl.clearColor(...this.bgColor)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-    const { x, y, k } = this.camera.state
+    const t = this.interaction.transform
+    const { x, y, k } = t
 
-    // Render links (temporarily disabled for debugging)
-    // this.linkRenderer.render(this.links, w, h, x, y, k, this.showArrows)
+    // Render links
+    this.linkRenderer.render(this.links, w, h, x, y, k, this.showArrows)
 
     // Render nodes
     this.nodeRenderer.render(this.nodes, w, h, x, y, k)
@@ -244,6 +256,11 @@ export class WebGLRenderer {
       this.labelMinScale,
     )
     this.labelRenderer.render(this.labels, w, h, x, y, k)
+
+    // 同步拾取器的相机
+    this.picker.tx = x
+    this.picker.ty = y
+    this.picker.k = k
   }
 
   private startRenderLoop(): void {
@@ -255,164 +272,16 @@ export class WebGLRenderer {
     this._rafId = requestAnimationFrame(loop)
   }
 
-  // ========== Picking ==========
+  // ========== Picking（委托给 WebGLPicker） ==========
 
-  /** Read pixel at screen position, returns encoded index or -1 */
   pick(
     screenX: number,
     screenY: number,
   ): { type: "node" | "link"; id: string } | null {
-    const gl = this.gl
-    const dpr = window.devicePixelRatio || 1
-    const w = this.width * dpr
-    const h = this.height * dpr
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickFbo!)
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      this.pickTexture!,
-      0,
-    )
-    gl.framebufferRenderbuffer(
-      gl.FRAMEBUFFER,
-      gl.DEPTH_ATTACHMENT,
-      gl.RENDERBUFFER,
-      this.pickDepth,
-    )
-    gl.viewport(0, 0, w, h)
-    gl.clearColor(0, 0, 0, 0)
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
-
-    const { x, y, k } = this.camera.state
-
-    // Render nodes for picking (each with unique color)
-    for (let i = 0; i < this.nodes.length; i++) {
-      const pickColor = encodePickColor(i)
-      this.nodeRenderer.renderPicking([this.nodes[i]], w, h, x, y, k, pickColor)
-    }
-
-    // Read pixel
-    const px = Math.round(screenX * dpr)
-    const py = Math.round(h - screenY * dpr) // flip Y
-    const pixel = new Uint8Array(4)
-    gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
-    if (pixel[3] === 0) return null
-
-    const index = decodePickColor(
-      pixel[0] / 255,
-      pixel[1] / 255,
-      pixel[2] / 255,
-    )
-    if (index >= 0 && index < this.nodes.length) {
-      return { type: "node", id: this.nodes[index].id }
-    }
-
-    return null
+    return this.picker.pick(screenX, screenY)
   }
 
-  // ========== Interaction ==========
-
-  private setupInteraction(): void {
-    this.canvas.addEventListener("pointerdown", this.onPointerDown)
-    this.canvas.addEventListener("pointermove", this.onPointerMove)
-    this.canvas.addEventListener("pointerup", this.onPointerUp)
-    this.canvas.addEventListener("wheel", this.onWheel, { passive: false })
-    this.canvas.addEventListener("contextmenu", (e) => e.preventDefault())
-
-    // Resize
-    const ro = new ResizeObserver(() => this.handleResize())
-    ro.observe(this.container)
-  }
-
-  private getEventPos(e: MouseEvent): { x: number; y: number } {
-    const rect = this.canvas.getBoundingClientRect()
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    }
-  }
-
-  private onPointerDown = (e: PointerEvent): void => {
-    const pos = this.getEventPos(e)
-    this.lastMouseX = pos.x
-    this.lastMouseY = pos.y
-
-    // Check if clicked on a node
-    const hit = this.pick(pos.x, pos.y)
-
-    if (hit && hit.type === "node") {
-      if (e.button === 0) {
-        this.isDragging = true
-        this.dragNodeId = hit.id
-        this.canvas.setPointerCapture(e.pointerId)
-      }
-      this.onNodeClick?.(hit.id, e)
-    } else if (hit && hit.type === "link") {
-      this.onLinkClick?.(hit.id, e)
-    } else {
-      // Start panning
-      this.isPanning = true
-      this.canvas.setPointerCapture(e.pointerId)
-      this.onBackgroundClick?.(e)
-    }
-  }
-
-  private onPointerMove = (e: PointerEvent): void => {
-    const pos = this.getEventPos(e)
-    const dx = pos.x - this.lastMouseX
-    const dy = pos.y - this.lastMouseY
-
-    if (this.isDragging && this.dragNodeId) {
-      // Drag node in world space
-      const worldDx = dx / this.camera.k
-      const worldDy = dy / this.camera.k
-
-      const node = this.nodes.find((n) => n.id === this.dragNodeId)
-      if (node) {
-        node.x += worldDx
-        node.y += worldDy
-        this.onNodeDrag?.(this.dragNodeId, node.x, node.y)
-      }
-    } else if (this.isPanning) {
-      this.camera.pan(dx, dy)
-      this.onZoom?.(this.camera.state)
-    } else {
-      // Hover detection
-      const hit = this.pick(pos.x, pos.y)
-      const newId = hit?.id ?? null
-      if (newId !== this.hoveredId) {
-        this.hoveredId = newId
-        this.onNodeHover?.(newId)
-        this.canvas.style.cursor = newId ? "pointer" : "default"
-      }
-    }
-
-    this.lastMouseX = pos.x
-    this.lastMouseY = pos.y
-  }
-
-  private onPointerUp = (e: PointerEvent): void => {
-    if (this.isDragging && this.dragNodeId) {
-      this.onNodeDragEnd?.(this.dragNodeId)
-    }
-    this.isDragging = false
-    this.dragNodeId = null
-    this.isPanning = false
-    this.canvas.releasePointerCapture(e.pointerId)
-  }
-
-  private onWheel = (e: WheelEvent): void => {
-    e.preventDefault()
-    const pos = this.getEventPos(e)
-    const delta = e.deltaY > 0 ? 0.9 : 1.1
-    this.camera.zoomTo(delta, pos.x, pos.y)
-    this.onZoom?.(this.camera.state)
-  }
+  // ========== 尺寸变化 ==========
 
   private handleResize(): void {
     const dpr = window.devicePixelRatio || 1
@@ -421,49 +290,13 @@ export class WebGLRenderer {
     this.canvas.width = this.width * dpr
     this.canvas.height = this.height * dpr
     this.gl.viewport(0, 0, this.width * dpr, this.height * dpr)
-
-    // Recreate picking resources
-    if (this.pickTexture) this.gl.deleteTexture(this.pickTexture)
-    if (this.pickDepth) this.gl.deleteRenderbuffer(this.pickDepth)
-
-    this.pickTexture = this.gl.createTexture()!
-    this.gl.bindTexture(this.gl.TEXTURE_2D, this.pickTexture)
-    this.gl.texImage2D(
-      this.gl.TEXTURE_2D,
-      0,
-      this.gl.RGBA,
-      this.width * dpr,
-      this.height * dpr,
-      0,
-      this.gl.RGBA,
-      this.gl.UNSIGNED_BYTE,
-      null,
-    )
-    this.gl.texParameteri(
-      this.gl.TEXTURE_2D,
-      this.gl.TEXTURE_MIN_FILTER,
-      this.gl.NEAREST,
-    )
-    this.gl.texParameteri(
-      this.gl.TEXTURE_2D,
-      this.gl.TEXTURE_MAG_FILTER,
-      this.gl.NEAREST,
-    )
-
-    this.pickDepth = this.gl.createRenderbuffer()!
-    this.gl.bindRenderbuffer(this.gl.RENDERBUFFER, this.pickDepth)
-    this.gl.renderbufferStorage(
-      this.gl.RENDERBUFFER,
-      this.gl.DEPTH_COMPONENT16,
-      this.width * dpr,
-      this.height * dpr,
-    )
+    this.picker.resize(this.width, this.height)
   }
 
-  /** Fit all nodes in view */
+  // ========== 相机控制 ==========
+
   fitView(padding = 40): void {
     if (this.nodes.length === 0) return
-
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -474,45 +307,36 @@ export class WebGLRenderer {
       maxX = Math.max(maxX, n.x + n.radius)
       maxY = Math.max(maxY, n.y + n.radius)
     }
-
     const graphW = maxX - minX + padding * 2
     const graphH = maxY - minY + padding * 2
-    const scaleX = this.width / graphW
-    const scaleY = this.height / graphH
-    const scale = Math.min(scaleX, scaleY, 2)
-
+    const k = Math.min(this.width / graphW, this.height / graphH, 2)
+    const t = this.interaction.transform
+    t.k = k
+    t.x = -(minX - padding) + (this.width / k - graphW) / 2
+    t.y = -(minY - padding) + (this.height / k - graphH) / 2
+    t.x /= k
+    t.y /= k
     this.camera.reset()
-    this.camera.setZoom(scale)
-    this.camera.pan(
-      -(minX - padding) + (this.width / scale - graphW) / 2,
-      -(minY - padding) + (this.height / scale - graphH) / 2,
-    )
-    this.onZoom?.(this.camera.state)
+    this.onZoom?.(t)
   }
 
-  /** Center on a specific node */
   focusNode(nodeId: string): void {
     const node = this.nodes.find((n) => n.id === nodeId)
     if (!node) return
-
-    const targetX = this.width / 2 / this.camera.k - node.x
-    const targetY = this.height / 2 / this.camera.k - node.y
-    this.camera.pan(targetX - this.camera.x, targetY - this.camera.y)
+    const t = this.interaction.transform
+    t.x = this.width / 2 / t.k - node.x
+    t.y = this.height / 2 / t.k - node.y
   }
 
   destroy(): void {
     this._destroyed = true
     if (this._rafId) cancelAnimationFrame(this._rafId)
-    this.canvas.removeEventListener("pointerdown", this.onPointerDown)
-    this.canvas.removeEventListener("pointermove", this.onPointerMove)
-    this.canvas.removeEventListener("pointerup", this.onPointerUp)
-    this.canvas.removeEventListener("wheel", this.onWheel)
+    this.interaction.detach()
+    this.interaction.reset()
     this.nodeRenderer.destroy()
     this.linkRenderer.destroy()
     this.labelRenderer.destroy()
-    if (this.pickFbo) this.gl.deleteFramebuffer(this.pickFbo)
-    if (this.pickTexture) this.gl.deleteTexture(this.pickTexture)
-    if (this.pickDepth) this.gl.deleteRenderbuffer(this.pickDepth)
+    this.picker.destroy()
     if (this.canvas.parentNode) this.container.removeChild(this.canvas)
   }
 }

@@ -17,6 +17,8 @@ export * from "./type"
 // New Canvas2D-based renderer and physics
 export { GraphView } from "./client/view-new.js"
 export type { GraphViewOptions } from "./client/view-new.js"
+export { GraphRenderer } from "./renderer/graph-renderer.js"
+export type { RendererBackend } from "./renderer/graph-renderer.js"
 export { Canvas2DRenderer } from "./renderer/canvas2d-renderer.js"
 export type { Canvas2DRendererOptions } from "./renderer/canvas2d-renderer.js"
 export { ForceSimulation } from "./physics/index.js"
