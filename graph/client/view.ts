@@ -130,7 +130,6 @@ export class ConnGraphView<
     this.nodeRenderProcessorMap = this.entityRegistry.getAll()
     this.linkRenderProcessorMap = this.linkRegistry.getAll()
 
-    // Canvas 2D 渲染模式（force-graph）
     this.initView()
     this.initStyle()
   }
@@ -310,7 +309,6 @@ export class ConnGraphView<
       .width(options.width ?? this.container.clientWidth)
       .height(options.height ?? this.container.clientHeight)
       .backgroundColor(options.backgroundColor || "#f6f6f6")
-      .autoPauseRedraw(false)
   }
 
   /**
@@ -505,6 +503,8 @@ export class ConnGraphView<
           "plusToolClick",
           obj.d as GraphNode<G["NO"], G["NT"], G["NS"]>,
         )
+        // 触发多帧渲染，让节点的 loading 动画能够播放
+        this.forceGraph.d3ReheatSimulation()
         break
     }
   }
@@ -639,6 +639,11 @@ export class ConnGraphView<
     globalScale: number
   }) {
     const transform = ctx.getTransform()
+
+    // 保持引擎运转：只要有节点还在加载，就持续重绘使 loading spinner 动画不间断
+    if (this.model.loadingManager.model.getLoadingCount() > 0) {
+      this.forceGraph.d3ReheatSimulation()
+    }
 
     // 清空所有层并调用各自的 onRender 回调
     this.shadowLayerManager.forEach((layer) => {
