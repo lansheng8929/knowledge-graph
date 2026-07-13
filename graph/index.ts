@@ -22,6 +22,6 @@ export type { RendererBackend } from "./renderer/graph-renderer.js"
 export { Canvas2DRenderer } from "./renderer/canvas2d-renderer.js"
 export type { Canvas2DRendererOptions } from "./renderer/canvas2d-renderer.js"
 export { ForceSimulation } from "./physics/index.js"
-export type { ForceConfig, SimNode, SimLink } from "./physics/index.js"
+export type { ForceConfig, SimNode, SimLink, Layout } from "./physics/index.js"
 
 export * as d3 from "d3-force"

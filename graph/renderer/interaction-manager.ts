@@ -51,6 +51,7 @@ export class InteractionManager {
   private boundPointerDown: (e: PointerEvent) => void
   private boundPointerMove: (e: PointerEvent) => void
   private boundPointerUp: (e: PointerEvent) => void
+  private boundPointerLeave: (e: PointerEvent) => void
   private boundWheel: (e: WheelEvent) => void
   private boundContextMenu: (e: Event) => void
 
@@ -67,6 +68,7 @@ export class InteractionManager {
     this.boundPointerDown = this.onPointerDown.bind(this)
     this.boundPointerMove = this.onPointerMove.bind(this)
     this.boundPointerUp = this.onPointerUp.bind(this)
+    this.boundPointerLeave = this.onPointerLeave.bind(this)
     this.boundWheel = this.onWheel.bind(this)
     this.boundContextMenu = (e: Event) => e.preventDefault()
 
@@ -80,6 +82,7 @@ export class InteractionManager {
     this.canvas.addEventListener("pointerdown", this.boundPointerDown)
     this.canvas.addEventListener("pointermove", this.boundPointerMove)
     this.canvas.addEventListener("pointerup", this.boundPointerUp)
+    this.canvas.addEventListener("pointerleave", this.boundPointerLeave)
     this.canvas.addEventListener("wheel", this.boundWheel, { passive: false })
     this.canvas.addEventListener("contextmenu", this.boundContextMenu)
   }
@@ -89,6 +92,7 @@ export class InteractionManager {
     this.canvas.removeEventListener("pointerdown", this.boundPointerDown)
     this.canvas.removeEventListener("pointermove", this.boundPointerMove)
     this.canvas.removeEventListener("pointerup", this.boundPointerUp)
+    this.canvas.removeEventListener("pointerleave", this.boundPointerLeave)
     this.canvas.removeEventListener("wheel", this.boundWheel)
     this.canvas.removeEventListener("contextmenu", this.boundContextMenu)
   }
@@ -175,6 +179,15 @@ export class InteractionManager {
     this.dragNodeId = null
     this.isPanning = false
     this.canvas.releasePointerCapture(e.pointerId)
+  }
+
+  /** 指针离开 canvas → 清除 hover 状态 */
+  private onPointerLeave(_e: PointerEvent): void {
+    if (this.hoveredId !== null) {
+      this.hoveredId = null
+      this.canvas.style.cursor = "default"
+      this.callbacks.onNodeHover?.(null)
+    }
   }
 
   private onWheel(e: WheelEvent): void {

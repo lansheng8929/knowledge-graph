@@ -285,10 +285,8 @@ export class Canvas2DRenderer {
     const k = Math.min(this.width / graphW, this.height / graphH, 2)
     const t = this.interaction.transform
     t.k = k
-    t.x = -(minX - padding) + (this.width / k - graphW) / 2
-    t.y = -(minY - padding) + (this.height / k - graphH) / 2
-    t.x /= k
-    t.y /= k
+    t.x = this.width / (2 * k) - (minX + maxX) / 2
+    t.y = this.height / (2 * k) - (minY + maxY) / 2
     this.onZoom?.(t)
   }
 

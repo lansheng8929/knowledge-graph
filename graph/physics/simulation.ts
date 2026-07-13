@@ -20,6 +20,7 @@ import {
   type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from "d3-force"
+import type { Layout } from "./layout.js"
 
 export interface SimNode extends SimulationNodeDatum {
   id: string
@@ -65,7 +66,7 @@ const DEFAULT_CONFIG: Required<ForceConfig> = {
   linkIterations: 1,
 }
 
-export class ForceSimulation {
+export class ForceSimulation implements Layout {
   private simulation: Simulation<SimNode, SimLink> | null = null
   private nodes: SimNode[] = []
   private links: SimLink[] = []

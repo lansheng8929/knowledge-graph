@@ -8,7 +8,7 @@
   "scripts": {
     "tsc": "tsc --noEmit --pretty",
     "create-entity": "node graph/entity/create-entity.js",
-    "dev": "cd vite-test && vite",
+    "dev": "cd vite-test && npm run dev",
     "build:test": "cd vite-test && vite build"
   },
   "dependencies": {

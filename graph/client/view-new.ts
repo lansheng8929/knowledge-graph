@@ -4,6 +4,10 @@
  * Supports switching render backend via `renderer` option:
  * - "canvas" (default): Canvas2DRenderer + CanvasColorPicker
  * - "webgl":           WebGLRenderer      + WebGLPicker
+ *
+ * Supports pluggable layout via `layout` option:
+ * - default: ForceSimulation (d3-force)
+ * - custom: implement Layout interface
  */
 
 import { GraphModel } from "../model.js"
@@ -15,6 +19,7 @@ import {
   type SimLink,
   type ForceConfig,
 } from "../physics/simulation.js"
+import type { Layout } from "../physics/layout.js"
 import type {
   DefaultGraphDataGenerics,
   GraphDataGenerics,
@@ -38,8 +43,11 @@ export interface GraphViewOptions<
   debug?: boolean
   arrowDisplay?: boolean
 
-  /** d3-force configuration */
+  /** d3-force configuration (used when layout is not provided) */
   forceConfig?: ForceConfig
+
+  /** 自定义布局引擎（默认使用 d3-force ForceSimulation） */
+  layout?: Layout
 
   /** 渲染后端: "canvas" (默认) 或 "webgl" */
   renderer?: RendererBackend
@@ -59,7 +67,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   model: GraphModel<G>
   /** 渲染器代理门面 */
   renderer: GraphRenderer
-  private physics: ForceSimulation
+  /** 当前布局引擎 */
+  layout: Layout
 
   // Node/link lookup
   private nodeMap = new Map<string, GraphNode<G["NO"], G["NT"], G["NS"]>>()
@@ -90,9 +99,9 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       renderer: opts.renderer ?? "canvas",
     })
 
-    // Initialize physics
-    this.physics = new ForceSimulation(opts.forceConfig)
-    this.physics.onTick = (simNodes) => {
+    // Initialize layout: use custom layout or default to d3-force
+    this.layout = opts.layout ?? new ForceSimulation(opts.forceConfig)
+    this.layout.onTick = (simNodes) => {
       this.onPhysicsTick(simNodes)
     }
 
@@ -130,11 +139,11 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     }
 
     this.renderer.onNodeDrag = (nodeId, x, y) => {
-      this.physics.fixNode(nodeId, x, y)
+      this.layout.fixNode(nodeId, x, y)
       // 重新加热物理引擎，让其他节点被力牵引
-      this.physics.reheat(0.3)
+      this.layout.reheat(0.3)
       // Update render node
-      const simNodes = this.physics["nodes"] as SimNode[]
+      const simNodes = (this.layout as any).nodes as SimNode[]
       const simNode = simNodes.find((n) => n.id === nodeId)
       if (simNode) {
         simNode.x = x
@@ -143,7 +152,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     }
 
     this.renderer.onNodeDragEnd = (nodeId) => {
-      this.physics.releaseNode(nodeId)
+      this.layout.releaseNode(nodeId)
       const node = this.nodeMap.get(nodeId) ?? null
       this.events.publish("nodeDragEnd", node)
     }
@@ -296,8 +305,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
     // Update renderer & physics
     this.renderer.updateData(renderNodes, renderLinks)
-    this.physics.setData(simNodes, simLinks)
-    this.physics.start()
+    this.layout.setData(simNodes, simLinks)
+    this.layout.start()
 
     // Fit view initially
     requestAnimationFrame(() => {
@@ -414,19 +423,21 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     return this.renderer
   }
 
-  /** Get the physics simulation */
-  getPhysics(): ForceSimulation {
-    return this.physics
+  /** Get the current layout engine */
+  getLayout(): Layout {
+    return this.layout
   }
 
-  /** Update physics config */
+  /** Update force config (only works with ForceSimulation) */
   updatePhysics(config: Partial<ForceConfig>): void {
-    this.physics.updateConfig(config)
+    if (this.layout instanceof ForceSimulation) {
+      this.layout.updateConfig(config)
+    }
   }
 
-  /** Reheat the simulation */
+  /** Reheat the layout */
   reheat(alpha?: number): void {
-    this.physics.reheat(alpha)
+    this.layout.reheat(alpha)
   }
 
   /** Get underlying canvas */
@@ -434,9 +445,17 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     return this.renderer.canvas
   }
 
+  /** Clear hover state (visual + state) */
+  clearHover(): void {
+    this.updateHoverVisuals(null)
+    this.hoveredNodeId = null
+    this.model.stateManager.clearHoveredNodes()
+    this.events.publish("nodeHover", null)
+  }
+
   /** Destroy and clean up */
   destroy(): void {
-    this.physics.destroy()
+    this.layout.destroy()
     this.renderer.destroy()
   }
 }
