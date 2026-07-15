@@ -1,60 +1,26 @@
 /**
- * NodeBatchRenderer — instanced circle rendering with WebGL2
- * Simplified version for debugging
+ * NodeBatchRenderer — instanced circle rendering with WebGL2 + SDF.
+ *
+ * All nodes rendered in a single instanced draw call.
  */
 
-// Ultra-simple shaders for testing
-const SIMPLE_VS = `#version 300 es
-precision highp float;
-layout(location = 0) in vec2 a_position;
-layout(location = 1) in vec2 a_center;
-layout(location = 2) in float a_radius;
-layout(location = 3) in vec4 a_color;
-uniform vec2 u_resolution;
-uniform vec2 u_translation;
-uniform float u_scale;
-out vec4 v_color;
-out vec2 v_center;
-out float v_radius;
-out vec2 v_pos;
+import { NODE_VS, NODE_FS, PICK_NODE_VS, PICK_NODE_FS } from "./shaders.js"
 
-void main() {
-  vec2 p = a_position;
-  vec2 screenPos = (a_center + u_translation) * u_scale + p * a_radius * u_scale;
-  vec2 clip = (screenPos / u_resolution) * 2.0 - 1.0;
-  clip.y = -clip.y;
-  gl_Position = vec4(clip, 0.0, 1.0);
-  v_color = a_color;
-  v_center = a_center;
-  v_radius = a_radius;
-  v_pos = p * a_radius;
+/** Shape type → float for shader uniform (always circle) */
+export function shapeToType(_shape?: string): number {
+  return 0
 }
-`
 
-const SIMPLE_FS = `#version 300 es
-precision highp float;
-in vec4 v_color;
-in vec2 v_center;
-in float v_radius;
-in vec2 v_pos;
-out vec4 fragColor;
-
-void main() {
-  // Debug: render entire quad as solid color (no SDF discard)
-  fragColor = v_color;
-}
-`
-
-/** Per-instance attribute data */
-interface NodeInstanceData {
-  buffers: {
-    center: Float32Array
-    radius: Float32Array
-    color: Float32Array
-    strokeColor: Float32Array
-    strokeWidth: Float32Array
-  }
-  count: number
+/** Node interface accepted by the batch renderer */
+export interface BatchNode {
+  x: number
+  y: number
+  radius: number
+  color: [number, number, number, number]
+  strokeColor: [number, number, number, number]
+  strokeWidth: number
+  shape?: string
+  shapeParam?: number
 }
 
 export class NodeBatchRenderer {
@@ -69,32 +35,18 @@ export class NodeBatchRenderer {
   private uResolution: WebGLUniformLocation | null = null
   private uTranslation: WebGLUniformLocation | null = null
   private uScale: WebGLUniformLocation | null = null
+  private uZOffset: WebGLUniformLocation | null = null
 
   // Uniform locations (pick)
   private uPickResolution: WebGLUniformLocation | null = null
   private uPickTranslation: WebGLUniformLocation | null = null
   private uPickScale: WebGLUniformLocation | null = null
-  private uPickColor: WebGLUniformLocation | null = null
+  private uPickZOffset: WebGLUniformLocation | null = null
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl
-    this.program = this.compileProgram(SIMPLE_VS, SIMPLE_FS)
-    this.pickProgram = this.compileProgram(
-      SIMPLE_VS,
-      `#version 300 es
-precision highp float;
-in vec4 v_color;
-in float v_radius;
-in vec2 v_pos;
-uniform vec4 u_pickColor;
-out vec4 fragColor;
-void main() {
-  float dist = length(v_pos);
-  if (dist > v_radius) discard;
-  fragColor = u_pickColor;
-}
-`,
-    )
+    this.program = this.compileProgram(NODE_VS, NODE_FS)
+    this.pickProgram = this.compileProgram(PICK_NODE_VS, PICK_NODE_FS)
     this.initQuadGeometry()
     this.cacheUniforms()
   }
@@ -129,6 +81,7 @@ void main() {
     this.uResolution = gl.getUniformLocation(this.program, "u_resolution")
     this.uTranslation = gl.getUniformLocation(this.program, "u_translation")
     this.uScale = gl.getUniformLocation(this.program, "u_scale")
+    this.uZOffset = gl.getUniformLocation(this.program, "u_zOffset")
 
     this.uPickResolution = gl.getUniformLocation(
       this.pickProgram,
@@ -139,12 +92,11 @@ void main() {
       "u_translation",
     )
     this.uPickScale = gl.getUniformLocation(this.pickProgram, "u_scale")
-    this.uPickColor = gl.getUniformLocation(this.pickProgram, "u_pickColor")
+    this.uPickZOffset = gl.getUniformLocation(this.pickProgram, "u_zOffset")
   }
 
   private initQuadGeometry(): void {
     const gl = this.gl
-    // Quad covering [-1, -1] to [1, 1] for circle SDF
     const positions = new Float32Array([
       -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
     ])
@@ -157,90 +109,128 @@ void main() {
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
-    // instanced (divisor 0)
 
     gl.bindVertexArray(null)
     this.quadVao = vao
   }
 
-  /** Render all nodes (simplified: no stroke) */
+  /** Render all nodes in one instanced draw call */
   render(
-    nodes: {
-      x: number
-      y: number
-      radius: number
-      color: [number, number, number, number]
-    }[],
+    nodes: BatchNode[],
     width: number,
     height: number,
     tx: number,
     ty: number,
     scale: number,
+    zOffset = 0,
   ): void {
     if (nodes.length === 0) return
     const gl = this.gl
+    const N = nodes.length
+
     gl.useProgram(this.program)
     gl.uniform2f(this.uResolution, width, height)
     gl.uniform2f(this.uTranslation, tx, ty)
     gl.uniform1f(this.uScale, scale)
+    gl.uniform1f(this.uZOffset, zOffset)
     gl.bindVertexArray(this.quadVao)
-    const N = nodes.length
-    const c = new Float32Array(N * 2)
-    const r = new Float32Array(N)
-    const col = new Float32Array(N * 4)
+
+    // Build instance data arrays
+    const center = new Float32Array(N * 2)
+    const radius = new Float32Array(N)
+    const color = new Float32Array(N * 4)
+    const strokeColor = new Float32Array(N * 4)
+    const strokeWidth = new Float32Array(N)
+    const shapeType = new Float32Array(N)
+    const shapeParam = new Float32Array(N)
+
     for (let i = 0; i < N; i++) {
-      c[i * 2] = nodes[i].x
-      c[i * 2 + 1] = nodes[i].y
-      r[i] = nodes[i].radius
-      col[i * 4] = nodes[i].color[0]
-      col[i * 4 + 1] = nodes[i].color[1]
-      col[i * 4 + 2] = nodes[i].color[2]
-      col[i * 4 + 3] = nodes[i].color[3]
+      const n = nodes[i]
+      center[i * 2] = n.x
+      center[i * 2 + 1] = n.y
+      radius[i] = n.radius
+      color[i * 4] = n.color[0]
+      color[i * 4 + 1] = n.color[1]
+      color[i * 4 + 2] = n.color[2]
+      color[i * 4 + 3] = n.color[3]
+      strokeColor[i * 4] = n.strokeColor[0]
+      strokeColor[i * 4 + 1] = n.strokeColor[1]
+      strokeColor[i * 4 + 2] = n.strokeColor[2]
+      strokeColor[i * 4 + 3] = n.strokeColor[3]
+      strokeWidth[i] = n.strokeWidth
+      shapeType[i] = shapeToType(n.shape)
+      shapeParam[i] = n.shapeParam ?? 0.25
     }
-    this.setupInstanceBuffer(1, c, 2)
-    this.setupInstanceBuffer(2, r, 1)
-    this.setupInstanceBuffer(3, col, 4)
+
+    this.setupInstanceBuffer(1, center, 2)
+    this.setupInstanceBuffer(2, radius, 1)
+    this.setupInstanceBuffer(3, color, 4)
+    this.setupInstanceBuffer(4, strokeColor, 4)
+    this.setupInstanceBuffer(5, strokeWidth, 1)
+    this.setupInstanceBuffer(6, shapeType, 1)
+    this.setupInstanceBuffer(7, shapeParam, 1)
+
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, N)
-    gl.vertexAttribDivisor(1, 0)
-    gl.vertexAttribDivisor(2, 0)
-    gl.vertexAttribDivisor(3, 0)
+
+    // Reset divisors to 0 for non-instanced attributes
+    for (let loc = 1; loc <= 7; loc++) {
+      gl.vertexAttribDivisor(loc, 0)
+    }
     gl.bindVertexArray(null)
   }
 
-  /** Render nodes for picking (simplified) */
+  /** Batch-render all nodes for FBO picking (single draw call, gl_InstanceID encodes index) */
   renderPicking(
-    nodes: { x: number; y: number; radius: number }[],
+    nodes: BatchNode[],
     width: number,
     height: number,
     tx: number,
     ty: number,
     scale: number,
-    pickColor: [number, number, number, number],
+    zOffset = 0,
   ): void {
     if (nodes.length === 0) return
     const gl = this.gl
+    const N = nodes.length
+
     gl.useProgram(this.pickProgram)
     gl.uniform2f(this.uPickResolution, width, height)
     gl.uniform2f(this.uPickTranslation, tx, ty)
     gl.uniform1f(this.uPickScale, scale)
-    gl.uniform4f(this.uPickColor, ...pickColor)
+    gl.uniform1f(this.uPickZOffset, zOffset)
     gl.bindVertexArray(this.quadVao)
-    const N = nodes.length
-    const c = new Float32Array(N * 2)
-    const r = new Float32Array(N)
-    const dummy = new Float32Array(N * 4)
+
+    const center = new Float32Array(N * 2)
+    const radius = new Float32Array(N)
+    const dummyColor = new Float32Array(N * 4)
+    const dummyStrokeColor = new Float32Array(N * 4)
+    const strokeWidth = new Float32Array(N)
+    const shapeType = new Float32Array(N)
+    const shapeParam = new Float32Array(N)
+
     for (let i = 0; i < N; i++) {
-      c[i * 2] = nodes[i].x
-      c[i * 2 + 1] = nodes[i].y
-      r[i] = nodes[i].radius
+      const n = nodes[i]
+      center[i * 2] = n.x
+      center[i * 2 + 1] = n.y
+      radius[i] = n.radius
+      strokeWidth[i] = n.strokeWidth
+      shapeType[i] = shapeToType(n.shape)
+      shapeParam[i] = n.shapeParam ?? 0.25
     }
-    this.setupInstanceBuffer(1, c, 2)
-    this.setupInstanceBuffer(2, r, 1)
-    this.setupInstanceBuffer(3, dummy, 4)
+
+    this.setupInstanceBuffer(1, center, 2)
+    this.setupInstanceBuffer(2, radius, 1)
+    this.setupInstanceBuffer(3, dummyColor, 4)
+    this.setupInstanceBuffer(4, dummyStrokeColor, 4)
+    this.setupInstanceBuffer(5, strokeWidth, 1)
+    this.setupInstanceBuffer(6, shapeType, 1)
+    this.setupInstanceBuffer(7, shapeParam, 1)
+
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, N)
-    gl.vertexAttribDivisor(1, 0)
-    gl.vertexAttribDivisor(2, 0)
-    gl.vertexAttribDivisor(3, 0)
+
+    for (let loc = 1; loc <= 7; loc++) {
+      gl.vertexAttribDivisor(loc, 0)
+    }
     gl.bindVertexArray(null)
   }
 

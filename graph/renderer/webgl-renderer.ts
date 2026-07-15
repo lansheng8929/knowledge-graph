@@ -10,11 +10,13 @@ import { NodeBatchRenderer } from "./node-batch.js"
 import { LinkBatchRenderer } from "./link-batch.js"
 import { TextLabelRenderer, type LabelInfo } from "./text-label.js"
 import { WebGLPicker } from "./webgl-picker.js"
+import { CpuPicker } from "./cpu-picker.js"
 import {
   InteractionManager,
   type ViewTransform,
   type InteractionCallbacks,
 } from "./interaction-manager.js"
+import type { Picker } from "./picker.js"
 import type { RenderNode, RenderLink } from "./types.js"
 
 export interface WebGLRendererOptions {
@@ -27,6 +29,8 @@ export interface WebGLRendererOptions {
   labelMinScale?: number
   /** Font size for labels (affects atlas) */
   labelFontSize?: number
+  /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
+  pickerMode?: "gpu" | "cpu"
 }
 
 /** Color-coded ID for picking: encodes an index into RGBA */
@@ -54,7 +58,8 @@ export class WebGLRenderer {
   readonly container: HTMLElement
   readonly canvas: HTMLCanvasElement
   readonly interaction: InteractionManager
-  readonly picker: WebGLPicker
+  readonly picker: Picker
+  readonly pickerMode: "gpu" | "cpu"
 
   private gl: WebGL2RenderingContext
   private camera = new Camera()
@@ -63,14 +68,14 @@ export class WebGLRenderer {
   private labelRenderer: TextLabelRenderer
 
   // Current data
-  private nodes: RenderNode[] = []
-  private links: RenderLink[] = []
+  nodes: RenderNode[] = []
+  links: RenderLink[] = []
   private labels: LabelInfo[] = []
 
   // Options
   private bgColor: [number, number, number, number] = [0.1, 0.1, 0.12, 1]
   private showArrows = false
-  private labelMinScale = 0.5
+  private labelMinScale = 0.2
   private width: number
   private height: number
   private _destroyed = false
@@ -112,6 +117,8 @@ export class WebGLRenderer {
     this.gl = gl
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+    gl.enable(gl.DEPTH_TEST)
+    gl.depthFunc(gl.LEQUAL)
 
     if (opts.backgroundColor) {
       const hex = opts.backgroundColor
@@ -128,20 +135,21 @@ export class WebGLRenderer {
 
     this.nodeRenderer = new NodeBatchRenderer(gl)
     this.linkRenderer = new LinkBatchRenderer(gl)
-    this.labelRenderer = new TextLabelRenderer(
-      gl,
-      2048,
-      opts.labelFontSize ?? 24,
-    )
+    this.labelRenderer = new TextLabelRenderer(gl, 2048, opts.labelFontSize)
 
-    // WebGL 拾取器
-    this.picker = new WebGLPicker({
-      gl,
-      nodeRenderer: this.nodeRenderer,
-      linkRenderer: this.linkRenderer,
-      width: this.width,
-      height: this.height,
-    })
+    // 拾取器（可切换 GPU/FBO 或 CPU/SDF 模式）
+    this.pickerMode = opts.pickerMode ?? "gpu"
+    if (this.pickerMode === "cpu") {
+      this.picker = new CpuPicker()
+    } else {
+      this.picker = new WebGLPicker({
+        gl,
+        nodeRenderer: this.nodeRenderer,
+        linkRenderer: this.linkRenderer,
+        width: this.width,
+        height: this.height,
+      })
+    }
 
     // 交互管理器
     this.interaction = new InteractionManager(
@@ -243,11 +251,11 @@ export class WebGLRenderer {
     const t = this.interaction.transform
     const { x, y, k } = t
 
-    // Render links
-    this.linkRenderer.render(this.links, w, h, x, y, k, this.showArrows)
+    // Render links (z = 0.0, behind nodes)
+    this.linkRenderer.render(this.links, w, h, x, y, k, this.showArrows, 0)
 
-    // Render nodes
-    this.nodeRenderer.render(this.nodes, w, h, x, y, k)
+    // Render nodes (z = -0.5, in front of links)
+    this.nodeRenderer.render(this.nodes, w, h, x, y, k, -0.5)
 
     // Render labels
     this.labels = this.labelRenderer.buildNodeLabels(
@@ -255,7 +263,7 @@ export class WebGLRenderer {
       k,
       this.labelMinScale,
     )
-    this.labelRenderer.render(this.labels, w, h, x, y, k)
+    this.labelRenderer.render(this.labels, w, h, x, y, k, -1.0)
 
     // 同步拾取器的相机
     this.picker.tx = x

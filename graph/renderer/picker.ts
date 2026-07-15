@@ -11,6 +11,20 @@ export interface PickHit {
 }
 
 export interface Picker {
+  /** 相机变换（由渲染器每帧同步） */
+  tx: number
+  ty: number
+  k: number
+
+  /** 节点/边数据同步 */
+  syncData(nodes: unknown[], links: unknown[]): void
+
+  /** 调整拾取缓冲区尺寸（GPU 版重建 FBO，CPU 版无操作） */
+  resize(width: number, height: number): void
+
+  /** 销毁释放资源 */
+  destroy(): void
+
   /**
    * 在屏幕坐标 (screenX, screenY) 处检测命中对象。
    * 坐标原点为 canvas 左上角 CSS 像素。

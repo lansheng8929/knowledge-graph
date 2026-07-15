@@ -30,12 +30,14 @@ export class LinkBatchRenderer {
   private uResolution: WebGLUniformLocation | null = null
   private uTranslation: WebGLUniformLocation | null = null
   private uScale: WebGLUniformLocation | null = null
+  private uZOffset: WebGLUniformLocation | null = null
 
   // Uniforms (line pick)
   private uPickResolution: WebGLUniformLocation | null = null
   private uPickTranslation: WebGLUniformLocation | null = null
   private uPickScale: WebGLUniformLocation | null = null
-  private uPickColor: WebGLUniformLocation | null = null
+  private uPickZOffset: WebGLUniformLocation | null = null
+  private uPickIdOffset: WebGLUniformLocation | null = null
 
   // Uniforms (arrow render)
   private uArrowResolution: WebGLUniformLocation | null = null
@@ -84,6 +86,7 @@ export class LinkBatchRenderer {
     this.uResolution = gl.getUniformLocation(this.program, "u_resolution")
     this.uTranslation = gl.getUniformLocation(this.program, "u_translation")
     this.uScale = gl.getUniformLocation(this.program, "u_scale")
+    this.uZOffset = gl.getUniformLocation(this.program, "u_zOffset")
 
     this.uPickResolution = gl.getUniformLocation(
       this.pickProgram,
@@ -94,7 +97,8 @@ export class LinkBatchRenderer {
       "u_translation",
     )
     this.uPickScale = gl.getUniformLocation(this.pickProgram, "u_scale")
-    this.uPickColor = gl.getUniformLocation(this.pickProgram, "u_pickColor")
+    this.uPickZOffset = gl.getUniformLocation(this.pickProgram, "u_zOffset")
+    this.uPickIdOffset = gl.getUniformLocation(this.pickProgram, "u_idOffset")
 
     this.uArrowResolution = gl.getUniformLocation(
       this.arrowProgram,
@@ -170,6 +174,7 @@ export class LinkBatchRenderer {
     ty: number,
     scale: number,
     showArrows = false,
+    zOffset = 0,
   ): void {
     if (links.length === 0) return
 
@@ -180,6 +185,7 @@ export class LinkBatchRenderer {
     gl.uniform2f(this.uResolution, width, height)
     gl.uniform2f(this.uTranslation, tx, ty)
     gl.uniform1f(this.uScale, scale)
+    gl.uniform1f(this.uZOffset, zOffset)
 
     gl.bindVertexArray(this.lineVao)
 
@@ -247,7 +253,7 @@ export class LinkBatchRenderer {
     }
   }
 
-  /** Render links for picking */
+  /** Batch-render links for FBO picking (gl_InstanceID + idOffset encodes index) */
   renderPicking(
     links: RenderLink[],
     width: number,
@@ -255,18 +261,19 @@ export class LinkBatchRenderer {
     tx: number,
     ty: number,
     scale: number,
-    pickColor: [number, number, number, number],
+    idOffset = 0,
+    zOffset = 0,
   ): void {
     if (links.length === 0) return
 
     const gl = this.gl
 
-    // Lines picking
     gl.useProgram(this.pickProgram)
     gl.uniform2f(this.uPickResolution, width, height)
     gl.uniform2f(this.uPickTranslation, tx, ty)
     gl.uniform1f(this.uPickScale, scale)
-    gl.uniform4f(this.uPickColor, ...pickColor)
+    gl.uniform1f(this.uPickZOffset, zOffset)
+    gl.uniform1ui(this.uPickIdOffset, idOffset)
 
     gl.bindVertexArray(this.lineVao)
 
@@ -281,7 +288,7 @@ export class LinkBatchRenderer {
       srcData[i * 2 + 1] = l.sourceY
       tgtData[i * 2] = l.targetX
       tgtData[i * 2 + 1] = l.targetY
-      widthData[i] = l.width + 4 // wider for easier picking
+      widthData[i] = l.width + 4
     }
 
     this.instancedAttrib(1, srcData, 2)

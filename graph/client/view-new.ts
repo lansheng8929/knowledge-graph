@@ -1,9 +1,7 @@
 /**
- * GraphView — main graph view with configurable renderer + d3-force physics.
+ * GraphView — main graph view with WebGL2 + d3-force physics.
  *
- * Supports switching render backend via `renderer` option:
- * - "canvas" (default): Canvas2DRenderer + CanvasColorPicker
- * - "webgl":           WebGLRenderer      + WebGLPicker
+ * Uses WebGLRenderer for high-performance multi-shape SDF rendering.
  *
  * Supports pluggable layout via `layout` option:
  * - default: ForceSimulation (d3-force)
@@ -12,7 +10,6 @@
 
 import { GraphModel } from "../model.js"
 import { GraphRenderer } from "../renderer/graph-renderer.js"
-import type { RendererBackend } from "../renderer/graph-renderer.js"
 import {
   ForceSimulation,
   type SimNode,
@@ -49,8 +46,11 @@ export interface GraphViewOptions<
   /** 自定义布局引擎（默认使用 d3-force ForceSimulation） */
   layout?: Layout
 
-  /** 渲染后端: "canvas" (默认) 或 "webgl" */
-  renderer?: RendererBackend
+  /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
+  pickerMode?: "gpu" | "cpu"
+
+  /** 标签字号 (默认 32) */
+  labelFontSize?: number
 
   /** Custom node-to-render mapping */
   mapNode?: (
@@ -96,7 +96,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       height: opts.height,
       backgroundColor: opts.backgroundColor,
       showArrows: opts.arrowDisplay,
-      renderer: opts.renderer ?? "canvas",
+      pickerMode: opts.pickerMode,
+      labelFontSize: opts.labelFontSize,
     })
 
     // Initialize layout: use custom layout or default to d3-force
@@ -189,8 +190,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       const prev = renderNodes.find((n) => n.id === this.hoveredNodeId)
       if (prev) {
         prev.radius = 8
-        prev.color = [0.357, 0.608, 0.835, 1.0]
-        prev.strokeWidth = 2
+        prev.color = [1.0, 1.0, 1.0, 1.0]
+        prev.strokeWidth = 0
       }
     }
 
@@ -204,12 +205,12 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       return
     }
 
-    // 高亮当前悬浮节点
+    // 高亮当前悬浮节点（变大 + 变色，无描边）
     const curr = renderNodes.find((n) => n.id === nodeId)
     if (curr) {
       curr.radius = 12
       curr.color = [1.0, 0.6, 0.2, 1.0]
-      curr.strokeWidth = 3
+      curr.strokeWidth = 0
     }
 
     // 通过 model 数据找到关联边的 ID
@@ -324,9 +325,9 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       x: gn.x ?? 0,
       y: gn.y ?? 0,
       radius: 8,
-      color: [0.357, 0.608, 0.835, 1.0],
+      color: [1.0, 1.0, 1.0, 1.0],
       strokeColor: [1.0, 1.0, 1.0, 1.0],
-      strokeWidth: 2,
+      strokeWidth: 0,
       id: gn.id,
       label: gn.data?.label,
     }

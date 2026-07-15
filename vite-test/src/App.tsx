@@ -157,7 +157,7 @@ export default function App() {
     y: number
   } | null>(null)
   const [useRadialLayout, setUseRadialLayout] = useState(false)
-
+  const [useCpuPicker, setUseCpuPicker] = useState(false)
   // Keep ref in sync for use inside event listeners
   hoveredNodeRef.current = hoveredNode
 
@@ -197,6 +197,17 @@ export default function App() {
       backgroundColor: "#1a1a2e",
       arrowDisplay: false,
       layout,
+      pickerMode: useCpuPicker ? "cpu" : "gpu",
+      mapNode: (node) => ({
+        x: node.x ?? 0,
+        y: node.y ?? 0,
+        radius: 8,
+        color: [1.0, 1.0, 1.0, 1.0],
+        strokeColor: [1.0, 1.0, 1.0, 1.0],
+        strokeWidth: 0,
+        id: node.id,
+        label: node.data?.label,
+      }),
       forceConfig: {
         repulsion: -200,
         linkDistance: 100,
@@ -241,7 +252,7 @@ export default function App() {
       graphView.destroy()
       viewRef.current = null
     }
-  }, [nodeCount, useRadialLayout])
+  }, [nodeCount, useRadialLayout, useCpuPicker])
 
   const handleReset = useCallback(() => {
     if (!view) return
@@ -333,6 +344,15 @@ export default function App() {
           }}
         >
           {useRadialLayout ? "🔴 Radial Layout" : "⚫ d3-force"}
+        </button>
+        <button
+          onClick={() => setUseCpuPicker((v) => !v)}
+          style={{
+            ...btnStyle,
+            background: useCpuPicker ? "#e94560" : "#0f3460",
+          }}
+        >
+          {useCpuPicker ? "🟡 CPU Pick" : "🔵 GPU Pick"}
         </button>
         {selectedNode && (
           <span

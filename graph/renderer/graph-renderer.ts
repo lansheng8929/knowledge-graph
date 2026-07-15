@@ -1,23 +1,17 @@
 /**
- * GraphRenderer — 渲染器代理门面。
+ * GraphRenderer — WebGL 渲染器门面。
  *
  * 职责：
- * - 根据配置选择 Canvas2D 或 WebGL 渲染后端
- * - 确保 Canvas2D ↔ CanvasColorPicker、WebGL ↔ WebGLPicker 的正确绑定
- * - 对外暴露统一 API
+ * - 创建 WebGLRenderer 并对外暴露统一 API
  */
 
-import { Canvas2DRenderer } from "./canvas2d-renderer.js"
 import { WebGLRenderer } from "./webgl-renderer.js"
 import {
   InteractionManager,
   type ViewTransform,
 } from "./interaction-manager.js"
-import type { CanvasColorPicker } from "./canvas-picker.js"
-import type { WebGLPicker } from "./webgl-picker.js"
+import type { Picker } from "./picker.js"
 import type { RenderNode, RenderLink } from "./types.js"
-
-export type RendererBackend = "canvas" | "webgl"
 
 export interface GraphRendererOptions {
   container: HTMLElement
@@ -27,8 +21,8 @@ export interface GraphRendererOptions {
   showArrows?: boolean
   labelMinScale?: number
   labelFontSize?: number
-  /** 渲染后端，默认 "canvas" */
-  renderer?: RendererBackend
+  /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
+  pickerMode?: "gpu" | "cpu"
 }
 
 /**
@@ -46,36 +40,31 @@ export interface GraphRendererCallbacks {
 
 export class GraphRenderer {
   /** 实际渲染器 */
-  readonly backend: Canvas2DRenderer | WebGLRenderer
-  /** 渲染后端类型 */
-  readonly backendType: RendererBackend
+  readonly backend: WebGLRenderer
 
   /** 画布元素 */
   get canvas(): HTMLCanvasElement {
     return this.backend.canvas
   }
 
-  /** 交互管理器（WebGL 与 Canvas2D 共享同一接口） */
+  /** 交互管理器 */
   get interaction(): InteractionManager {
     return this.backend.interaction
   }
 
-  /**
-   * 当前绑定的拾取器。
-   * Canvas2D 模式下为 CanvasColorPicker，WebGL 模式下为 WebGLPicker。
-   */
-  get picker(): CanvasColorPicker | WebGLPicker {
+  /** 当前绑定的拾取器 */
+  get picker(): Picker {
     return this.backend.picker
   }
 
   /** 渲染器内部节点数据 */
   get nodes(): RenderNode[] {
-    return (this.backend as any).nodes ?? []
+    return this.backend.nodes
   }
 
   /** 渲染器内部边数据 */
   get links(): RenderLink[] {
-    return (this.backend as any).links ?? []
+    return this.backend.links
   }
 
   // ========== 回调桥接 ==========
@@ -89,35 +78,17 @@ export class GraphRenderer {
   onZoom?: GraphRendererCallbacks["onZoom"]
 
   constructor(opts: GraphRendererOptions) {
-    const backend = opts.renderer ?? "canvas"
+    this.backend = new WebGLRenderer({
+      container: opts.container,
+      width: opts.width,
+      height: opts.height,
+      backgroundColor: opts.backgroundColor,
+      showArrows: opts.showArrows,
+      labelMinScale: opts.labelMinScale,
+      labelFontSize: opts.labelFontSize,
+      pickerMode: opts.pickerMode,
+    })
 
-    if (backend === "webgl") {
-      // WebGL 模式：WebGLRenderer ← 绑定 → WebGLPicker
-      this.backendType = "webgl"
-      this.backend = new WebGLRenderer({
-        container: opts.container,
-        width: opts.width,
-        height: opts.height,
-        backgroundColor: opts.backgroundColor,
-        showArrows: opts.showArrows,
-        labelMinScale: opts.labelMinScale,
-        labelFontSize: opts.labelFontSize,
-      })
-    } else {
-      // Canvas 2D 模式：Canvas2DRenderer ← 绑定 → CanvasColorPicker
-      this.backendType = "canvas"
-      this.backend = new Canvas2DRenderer({
-        container: opts.container,
-        width: opts.width,
-        height: opts.height,
-        backgroundColor: opts.backgroundColor,
-        showArrows: opts.showArrows,
-        labelMinScale: opts.labelMinScale,
-        labelFontSize: opts.labelFontSize,
-      })
-    }
-
-    // 桥接渲染器的回收到外层
     this.backend.onNodeClick = (...args) => this.onNodeClick?.(...args)
     this.backend.onNodeHover = (...args) => this.onNodeHover?.(...args)
     this.backend.onNodeDrag = (...args) => this.onNodeDrag?.(...args)

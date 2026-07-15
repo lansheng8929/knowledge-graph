@@ -19,6 +19,9 @@ export interface Viewport {
   height: number
 }
 
+/** Node shape type */
+export type NodeShape = "circle"
+
 export interface RenderNode {
   x: number
   y: number
@@ -29,6 +32,15 @@ export interface RenderNode {
   id: string
   label?: string
   iconUrl?: string
+  /** Node shape (default: "circle") */
+  shape?: NodeShape
+  /**
+   * Shape-specific parameter:
+   * - "rounded-rect": corner radius ratio (0-1, default 0.25)
+   * - "star": inner radius ratio (0-1, default 0.4)
+   * - other shapes: unused
+   */
+  shapeParam?: number
 }
 
 export interface RenderLink {

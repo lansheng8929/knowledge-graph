@@ -6,24 +6,13 @@
  * - pick() 时绑定 FBO，用唯一颜色绘制所有对象到纹理
  * - readPixels(1,1) 读回像素颜色 → 解码 → O(1) 获取对象
  *
- * 注意：每次 pick() 都会触发一次完整 GPU 渲染，适合 pointerdown
- * 等低频事件。如需每帧持续检测（如 hover），建议用 CanvasColorPicker。
+ * 注意：每次 pick() 都会触发一次完整 GPU 渲染，适合 pointerdown 等低频事件。
  */
 
 import type { Picker, PickHit } from "./picker.js"
 import type { RenderNode, RenderLink } from "./types.js"
 import type { NodeBatchRenderer } from "./node-batch.js"
 import type { LinkBatchRenderer } from "./link-batch.js"
-
-/** 24-bit 整数 → [r/255, g/255, b/255, 1] 用于 uniform */
-function encodePickColor(index: number): [number, number, number, number] {
-  return [
-    ((index >> 16) & 0xff) / 255,
-    ((index >> 8) & 0xff) / 255,
-    (index & 0xff) / 255,
-    1.0,
-  ]
-}
 
 /** RGBA → 24-bit 索引 */
 function decodePickColor(r: number, g: number, b: number): number {
@@ -124,8 +113,6 @@ export class WebGLPicker implements Picker {
     this.pickerHeight = h
 
     if (this.pickTexture) gl.deleteTexture(this.pickTexture)
-    if (this.pickDepth) gl.deleteRenderbuffer(this.pickDepth)
-
     this.pickTexture = gl.createTexture()!
     gl.bindTexture(gl.TEXTURE_2D, this.pickTexture)
     gl.texImage2D(
@@ -142,6 +129,7 @@ export class WebGLPicker implements Picker {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
+    if (this.pickDepth) gl.deleteRenderbuffer(this.pickDepth)
     this.pickDepth = gl.createRenderbuffer()!
     gl.bindRenderbuffer(gl.RENDERBUFFER, this.pickDepth)
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h)
@@ -182,34 +170,33 @@ export class WebGLPicker implements Picker {
     gl.viewport(0, 0, w, h)
     gl.clearColor(0, 0, 0, 0)
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+    gl.enable(gl.DEPTH_TEST)
+    gl.depthFunc(gl.LEQUAL)
 
-    // 逐节点绘制到 FBO
-    for (let i = 0; i < this.nodes.length; i++) {
-      const color = encodePickColor(i)
-      this.nodeRenderer.renderPicking(
-        [this.nodes[i]],
+    // 1) Render links (z = 0.0, behind nodes)
+    if (this.linkRenderer) {
+      this.linkRenderer.renderPicking(
+        this.links,
         w,
         h,
         this.tx,
         this.ty,
         this.k,
-        color,
+        this.linkOffset,
+        0, // zOffset = 0
       )
     }
 
-    // 逐边绘制到 FBO
-    for (let i = 0; i < this.links.length; i++) {
-      const color = encodePickColor(this.linkOffset + i)
-      this.linkRenderer?.renderPicking(
-        [this.links[i]],
-        w,
-        h,
-        this.tx,
-        this.ty,
-        this.k,
-        color,
-      )
-    }
+    // 2) Render nodes (z = -0.5, in front of links)
+    this.nodeRenderer.renderPicking(
+      this.nodes,
+      w,
+      h,
+      this.tx,
+      this.ty,
+      this.k,
+      -0.5,
+    )
 
     // 读像素
     const px = Math.round(screenX * dpr)
@@ -221,6 +208,7 @@ export class WebGLPicker implements Picker {
 
     if (pixel[3] === 0) return null
 
+    // Decode gl_InstanceID from RGBA (R=high 8 bits, G=middle 8 bits, B=low 8 bits)
     const index = decodePickColor(
       pixel[0] / 255,
       pixel[1] / 255,
