@@ -962,9 +962,20 @@ export class ConnGraphView<
     // 渲染连线主体
     this.renderLinkLine(start, end, link, ctx, globalScale, style, curveOffset)
 
-    // 渲染箭头
+    // 渲染箭头（根据 direction 属性决定方向）
     if (this.options.arrowDisplay) {
-      this.renderArrow(start, end, link, ctx, globalScale, style, curveOffset)
+      const dir = link.data?.direction
+      if (!dir || dir === "target") {
+        // 默认：箭头指向目标节点
+        this.renderArrow(start, end, link, ctx, globalScale, style, curveOffset)
+      } else if (dir === "source") {
+        // 箭头指向源节点（反向）
+        this.renderArrow(end, start, link, ctx, globalScale, style, curveOffset)
+      } else if (dir === "both") {
+        // 双向箭头
+        this.renderArrow(start, end, link, ctx, globalScale, style, curveOffset)
+        this.renderArrow(end, start, link, ctx, globalScale, style, curveOffset)
+      }
     }
 
     // 渲染光晕效果
@@ -1151,48 +1162,62 @@ export class ConnGraphView<
     ctx.stroke()
     ctx.closePath()
 
-    // 光晕箭头
+    // 光晕箭头（根据 direction 属性决定方向）
     if (this.options.arrowDisplay) {
-      const endRadius = this.getCollisionRadius(end, globalScale)
+      const renderLightArrow = (
+        from: GraphNode<G["NO"], G["NT"], G["NS"]>,
+        to: GraphNode<G["NO"], G["NT"], G["NS"]>,
+      ) => {
+        const endRadius = this.getCollisionRadius(to, globalScale)
 
-      let angle: number
+        let angle: number
 
-      if (curveOffset === 0) {
-        angle = Math.atan2(end.y! - start.y!, end.x! - start.x!)
-      } else {
-        const dx = end.x! - start.x!
-        const dy = end.y! - start.y!
-        const distance = Math.sqrt(dx * dx + dy * dy)
+        if (curveOffset === 0) {
+          angle = Math.atan2(to.y! - from.y!, to.x! - from.x!)
+        } else {
+          const dx = to.x! - from.x!
+          const dy = to.y! - from.y!
+          const distance = Math.sqrt(dx * dx + dy * dy)
 
-        const controlX =
-          (start.x! + end.x!) / 2 + (-dy / distance) * curveOffset
-        const controlY = (start.y! + end.y!) / 2 + (dx / distance) * curveOffset
+          const controlX =
+            (from.x! + to.x!) / 2 + (-dy / distance) * curveOffset
+          const controlY = (from.y! + to.y!) / 2 + (dx / distance) * curveOffset
 
-        // 在终点处计算切线方向
-        const tangentX = 2 * (end.x! - controlX)
-        const tangentY = 2 * (end.y! - controlY)
-        angle = Math.atan2(tangentY, tangentX)
+          const tangentX = 2 * (to.x! - controlX)
+          const tangentY = 2 * (to.y! - controlY)
+          angle = Math.atan2(tangentY, tangentX)
+        }
+
+        const arrowLength = ARROW_SIZE * sw
+        const arrowWidth = arrowLength * 0.8
+
+        const arrowPoints = this.calculateArrowPoints(
+          to.x!,
+          to.y!,
+          arrowLength,
+          arrowWidth,
+          angle,
+          endRadius,
+        )
+
+        ctx.beginPath()
+        ctx.moveTo(arrowPoints.tip.x, arrowPoints.tip.y)
+        ctx.lineTo(arrowPoints.left.x, arrowPoints.left.y)
+        ctx.lineTo(arrowPoints.right.x, arrowPoints.right.y)
+        ctx.closePath()
+        ctx.fillStyle = light
+        ctx.fill()
       }
 
-      const arrowLength = ARROW_SIZE * sw
-      const arrowWidth = arrowLength * 0.8
-
-      const arrowPoints = this.calculateArrowPoints(
-        end.x!,
-        end.y!,
-        arrowLength,
-        arrowWidth,
-        angle,
-        endRadius,
-      )
-
-      ctx.beginPath()
-      ctx.moveTo(arrowPoints.tip.x, arrowPoints.tip.y)
-      ctx.lineTo(arrowPoints.left.x, arrowPoints.left.y)
-      ctx.lineTo(arrowPoints.right.x, arrowPoints.right.y)
-      ctx.closePath()
-      ctx.fillStyle = light
-      ctx.fill()
+      const dir = link.data?.direction
+      if (!dir || dir === "target") {
+        renderLightArrow(start, end)
+      } else if (dir === "source") {
+        renderLightArrow(end, start)
+      } else if (dir === "both") {
+        renderLightArrow(start, end)
+        renderLightArrow(end, start)
+      }
     }
 
     ctx.restore()

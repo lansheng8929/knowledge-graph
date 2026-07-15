@@ -129,4 +129,6 @@ export type GraphLinkInfo<
   stateType?: S
   color?: string
   lineWidth?: number
+  /** 箭头方向。target-指向目标节点(默认), source-指向源节点, both-两端都有箭头 */
+  direction?: "source" | "target" | "both"
 } & D
