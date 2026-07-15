@@ -9,6 +9,7 @@ import {
   DEFAULT_LINK_LABEL_SCALE_THRESHOLD,
   DEFAULT_STROKE_COLOR,
   MAX_FONT_SIZE,
+  VERSION,
 } from "./constants"
 import { ConnGraphModel } from "../model"
 import {
@@ -130,6 +131,7 @@ export class ConnGraphView<
     this.nodeRenderProcessorMap = this.entityRegistry.getAll()
     this.linkRenderProcessorMap = this.linkRegistry.getAll()
 
+    console.log(`[ConnGraphView] version: ${VERSION}`)
     this.initView()
     this.initStyle()
   }
@@ -1073,8 +1075,8 @@ export class ConnGraphView<
     const { color = DEFAULT_STROKE_COLOR } = style
 
     const sw = style.strokeWidth || DEFAULT_LINE_WIDTH
-
-    const endRadius = this.getCollisionRadius(end, globalScale)
+    const endRadius =
+      this.getCollisionRadius(end, globalScale) || this.getNodeRadius(end)
 
     let angle: number
 
@@ -1168,7 +1170,8 @@ export class ConnGraphView<
         from: GraphNode<G["NO"], G["NT"], G["NS"]>,
         to: GraphNode<G["NO"], G["NT"], G["NS"]>,
       ) => {
-        const endRadius = this.getCollisionRadius(to, globalScale)
+        const endRadius =
+          this.getCollisionRadius(to, globalScale) || this.getNodeRadius(to)
 
         let angle: number
 

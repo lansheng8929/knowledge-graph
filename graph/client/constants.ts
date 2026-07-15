@@ -1,3 +1,4 @@
+import { version } from "../../package.json"
 import type { EntityCreator } from "./entity-types"
 import * as Entity from "../entity/index.client"
 import type { NodeType } from "../type"
@@ -21,6 +22,9 @@ export const DEFAULT_RADIUS = 4
 export const DEFAULT_FONT_SIZE = 2
 export const DEFAULT_NODE_LABEL_SCALE_THRESHOLD = 4
 export const DEFAULT_LINK_LABEL_SCALE_THRESHOLD = 5
+
+/** 当前库版本号，自动从 package.json 读取 */
+export const VERSION = version
 
 /**
  * 获取默认的实体创建器映射
