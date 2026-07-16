@@ -39,13 +39,20 @@ export interface ExpansionRequest {
 
 export interface ExpansionResponse {
   nodes: Array<{ id: string; data?: Record<string, unknown> }>
-  links: Array<{ id: string; source: string; target: string; data?: Record<string, unknown> }>
+  links: Array<{
+    id: string
+    source: string
+    target: string
+    data?: Record<string, unknown>
+  }>
   total: number
   pageIndex: number
   hasMore: boolean
 }
 
-export type ExpansionFetcher = (request: ExpansionRequest) => Promise<ExpansionResponse>
+export type ExpansionFetcher = (
+  request: ExpansionRequest,
+) => Promise<ExpansionResponse>
 
 // ─── 事件类型 ────────────────────────────────────────
 
@@ -53,9 +60,17 @@ export interface ExpansionEvents {
   /** 拓出开始 */
   onExpandStart?: (params: { nodeId: NodeId; rule: ExpansionRule }) => void
   /** 拓出成功 */
-  onExpandSuccess?: (params: { nodeId: NodeId; rule: ExpansionRule; response: ExpansionResponse }) => void
+  onExpandSuccess?: (params: {
+    nodeId: NodeId
+    rule: ExpansionRule
+    response: ExpansionResponse
+  }) => void
   /** 拓出失败 */
-  onExpandError?: (params: { nodeId: NodeId; rule: ExpansionRule; error: Error }) => void
+  onExpandError?: (params: {
+    nodeId: NodeId
+    rule: ExpansionRule
+    error: Error
+  }) => void
   /** 拓出完成（无论成功失败） */
   onExpandComplete?: (params: { nodeId: NodeId; rule: ExpansionRule }) => void
 }
@@ -107,17 +122,24 @@ export class ExpansionService {
 
     const rule = ruleId ? rules.find((r) => r.id === ruleId) : rules[0]
     if (!rule) {
-      console.warn(`[ExpansionService] Rule "${ruleId}" not found for node ${nodeId}`)
+      console.warn(
+        `[ExpansionService] Rule "${ruleId}" not found for node ${nodeId}`,
+      )
       return
     }
 
     // 2. 获取分页信息
-    const pagination = this.metadataManager.getPagination({ id: nodeId, type: "node" })
+    const pagination = this.metadataManager.getPagination({
+      id: nodeId,
+      type: "node",
+    })
     const pageIndex = (pagination.pageIndex ?? 0) + 1
     const pageSize = rule.limit ?? 20
 
     // 3. 设置加载状态
-    this.loadingManager.model.startLoading(nodeId, { message: `正在拓出 ${rule.name}...` })
+    this.loadingManager.model.startLoading(nodeId, {
+      message: `正在拓出 ${rule.name}...`,
+    })
 
     // 4. 触发开始事件
     this.events.onExpandStart?.({ nodeId, rule })
@@ -165,7 +187,10 @@ export class ExpansionService {
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err))
       this.events.onExpandError?.({ nodeId, rule, error })
-      console.error(`[ExpansionService] Expand failed for node ${nodeId}:`, error)
+      console.error(
+        `[ExpansionService] Expand failed for node ${nodeId}:`,
+        error,
+      )
       throw error
     } finally {
       this.loadingManager.model.stopLoading(nodeId)
@@ -179,8 +204,12 @@ export class ExpansionService {
    */
   private mergeExpansionData(response: ExpansionResponse): void {
     const currentData = this.model.getGraphModelData().graphData
-    const existingNodeIds = new Set(currentData.nodes.map((n: GraphNode) => n.id))
-    const existingLinkIds = new Set(currentData.links.map((l: GraphLink) => l.id))
+    const existingNodeIds = new Set(
+      currentData.nodes.map((n: GraphNode) => n.id),
+    )
+    const existingLinkIds = new Set(
+      currentData.links.map((l: GraphLink) => l.id),
+    )
 
     // 去重新节点
     const newNodes: GraphNode[] = []
@@ -223,7 +252,9 @@ export class ExpansionService {
       return
     }
 
-    console.log(`[ExpansionService] Merging ${newNodes.length} nodes and ${newLinks.length} links`)
+    console.log(
+      `[ExpansionService] Merging ${newNodes.length} nodes and ${newLinks.length} links`,
+    )
 
     // 全量替换图数据（触发 dataChange 事件 → 视图自动刷新）
     this.model.updateGraphData({
@@ -246,7 +277,10 @@ export class ExpansionService {
    * 为节点设置规则
    */
   setRules(nodeId: NodeId, rules: ExpansionRule[]): void {
-    this.metadataManager.setRules({ id: nodeId, type: "node" }, rules as unknown as Record<string, unknown>[])
+    this.metadataManager.setRules(
+      { id: nodeId, type: "node" },
+      rules as unknown as Record<string, unknown>[],
+    )
   }
 
   /**
@@ -274,7 +308,9 @@ export class ExpansionService {
     const maxNodes = options?.maxNodes ?? 200
     const autoOnly = options?.autoOnly ?? true
 
-    const queue: Array<{ nodeId: string; depth: number }> = [{ nodeId: rootNodeId, depth: 0 }]
+    const queue: Array<{ nodeId: string; depth: number }> = [
+      { nodeId: rootNodeId, depth: 0 },
+    ]
     const visited = new Set<string>()
     let totalNodes = 0
 
@@ -283,7 +319,9 @@ export class ExpansionService {
       if (visited.has(nodeId) || depth >= maxDepth) continue
       visited.add(nodeId)
 
-      const rules = this.getRules(nodeId).filter((r) => !autoOnly || r.autoExpand)
+      const rules = this.getRules(nodeId).filter(
+        (r) => !autoOnly || r.autoExpand,
+      )
       if (rules.length === 0) continue
 
       for (const rule of rules) {
@@ -292,7 +330,10 @@ export class ExpansionService {
 
         // 获取这次拓出加入的新节点 ID，继续 BFS
         const meta = this.metadataManager.getMeta({ id: nodeId, type: "node" })
-        const pagination = this.metadataManager.getPagination({ id: nodeId, type: "node" })
+        const pagination = this.metadataManager.getPagination({
+          id: nodeId,
+          type: "node",
+        })
         const currentData = this.model.getGraphModelData().graphData
 
         for (const node of currentData.nodes) {
@@ -307,6 +348,8 @@ export class ExpansionService {
       }
     }
 
-    console.log(`[ExpansionService] Auto-expand complete, visited ${visited.size} nodes`)
+    console.log(
+      `[ExpansionService] Auto-expand complete, visited ${visited.size} nodes`,
+    )
   }
 }

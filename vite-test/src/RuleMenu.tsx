@@ -20,7 +20,14 @@ const directionLabels: Record<string, string> = {
   both: "↔",
 }
 
-export function RuleMenu({ node, rules, x, y, onSelect, onClose }: RuleMenuProps) {
+export function RuleMenu({
+  node,
+  rules,
+  x,
+  y,
+  onSelect,
+  onClose,
+}: RuleMenuProps) {
   return (
     <div
       style={{
@@ -76,25 +83,25 @@ export function RuleMenu({ node, rules, x, y, onSelect, onClose }: RuleMenuProps
             e.currentTarget.style.background = "transparent"
           }}
         >
-          <span style={{
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: 24,
-            height: 24,
-            borderRadius: "50%",
-            background: "#0f3460",
-            color: "#e94560",
-            fontSize: "12px",
-            fontWeight: "bold",
-            flexShrink: 0,
-          }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 24,
+              height: 24,
+              borderRadius: "50%",
+              background: "#0f3460",
+              color: "#e94560",
+              fontSize: "12px",
+              fontWeight: "bold",
+              flexShrink: 0,
+            }}
+          >
             {directionLabels[rule.direction] ?? "•"}
           </span>
           <div style={{ flex: 1 }}>
-            <div style={{ color: "#fff", fontWeight: "bold" }}>
-              {rule.name}
-            </div>
+            <div style={{ color: "#fff", fontWeight: "bold" }}>{rule.name}</div>
             <div style={{ color: "#667", fontSize: "11px", marginTop: 2 }}>
               {rule.relationType} → {rule.targetNodeType}
               {rule.limit ? ` (limit: ${rule.limit})` : ""}

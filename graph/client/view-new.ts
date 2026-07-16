@@ -217,7 +217,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     const curr = renderNodes.find((n) => n.id === nodeId)
     if (curr) {
       // 保持原有大小，添加发光描边
-      curr.strokeColor = [1.0, 0.6, 0.2, 1.0]  // 橙色发光
+      curr.strokeColor = [1.0, 0.6, 0.2, 1.0] // 橙色发光
       curr.strokeWidth = 3
       // 略微提高节点亮度
       curr.color = [1.0, 0.85, 0.7, 1.0]

@@ -22,9 +22,30 @@ function parseCSV(filePath: string): Record<string, string>[] {
 
 const DATA_DIR = path.resolve(__dirname, "mock-data")
 
-interface RawNode { id: string; nodeType: string; label: string; icon: string; extra: string }
-interface RawLink { id: string; source: string; target: string; linkType: string; label: string }
-interface RawRule { nodeType: string; ruleId: string; ruleName: string; targetNodeType: string; relationType: string; direction: string; limit: string; autoExpand: string }
+interface RawNode {
+  id: string
+  nodeType: string
+  label: string
+  icon: string
+  extra: string
+}
+interface RawLink {
+  id: string
+  source: string
+  target: string
+  linkType: string
+  label: string
+}
+interface RawRule {
+  nodeType: string
+  ruleId: string
+  ruleName: string
+  targetNodeType: string
+  relationType: string
+  direction: string
+  limit: string
+  autoExpand: string
+}
 
 let _nodes: RawNode[] | null = null
 let _links: RawLink[] | null = null
@@ -57,17 +78,43 @@ function toGraphNode(raw: RawNode) {
   }
   return {
     id: raw.id,
-    data: { nodeType: raw.nodeType, label: raw.label, icon: raw.icon, count: 0, total: 0, ...extraObj },
+    data: {
+      nodeType: raw.nodeType,
+      label: raw.label,
+      icon: raw.icon,
+      count: 0,
+      total: 0,
+      ...extraObj,
+    },
   }
 }
 
 function toGraphLink(raw: RawLink) {
-  return { id: raw.id, source: raw.source, target: raw.target, data: { linkType: raw.linkType, label: raw.label } }
+  return {
+    id: raw.id,
+    source: raw.source,
+    target: raw.target,
+    data: { linkType: raw.linkType, label: raw.label },
+  }
 }
 
-function executeExpand(req: { sourceNodeId: string; ruleId: string; pageIndex: number; pageSize: number; existingNodeIds: string[]; existingLinkIds: string[] }) {
+function executeExpand(req: {
+  sourceNodeId: string
+  ruleId: string
+  pageIndex: number
+  pageSize: number
+  existingNodeIds: string[]
+  existingLinkIds: string[]
+}) {
   const rule = getRules().find((r) => r.ruleId === req.ruleId)
-  if (!rule) return { nodes: [], links: [], total: 0, pageIndex: req.pageIndex, hasMore: false }
+  if (!rule)
+    return {
+      nodes: [],
+      links: [],
+      total: 0,
+      pageIndex: req.pageIndex,
+      hasMore: false,
+    }
 
   const allLinks = getLinks()
   const existNodeSet = new Set(req.existingNodeIds)
@@ -76,24 +123,41 @@ function executeExpand(req: { sourceNodeId: string; ruleId: string; pageIndex: n
 
   if (rule.direction === "out") {
     for (const link of allLinks) {
-      if (link.source === req.sourceNodeId && link.linkType === rule.relationType && !existLinkSet.has(link.id)) {
+      if (
+        link.source === req.sourceNodeId &&
+        link.linkType === rule.relationType &&
+        !existLinkSet.has(link.id)
+      ) {
         const targetNode = getNodes().find((n) => n.id === link.target)
-        if (targetNode && targetNode.nodeType === rule.targetNodeType) matchedLinks.push(link)
+        if (targetNode && targetNode.nodeType === rule.targetNodeType)
+          matchedLinks.push(link)
       }
     }
   } else if (rule.direction === "in") {
     for (const link of allLinks) {
-      if (link.target === req.sourceNodeId && link.linkType === rule.relationType && !existLinkSet.has(link.id)) {
+      if (
+        link.target === req.sourceNodeId &&
+        link.linkType === rule.relationType &&
+        !existLinkSet.has(link.id)
+      ) {
         const sourceNode = getNodes().find((n) => n.id === link.source)
-        if (sourceNode && sourceNode.nodeType === rule.targetNodeType) matchedLinks.push(link)
+        if (sourceNode && sourceNode.nodeType === rule.targetNodeType)
+          matchedLinks.push(link)
       }
     }
   } else if (rule.direction === "both") {
     for (const link of allLinks) {
-      if ((link.source === req.sourceNodeId || link.target === req.sourceNodeId) && link.linkType === rule.relationType && !existLinkSet.has(link.id)) {
-        const otherId = link.source === req.sourceNodeId ? link.target : link.source
+      if (
+        (link.source === req.sourceNodeId ||
+          link.target === req.sourceNodeId) &&
+        link.linkType === rule.relationType &&
+        !existLinkSet.has(link.id)
+      ) {
+        const otherId =
+          link.source === req.sourceNodeId ? link.target : link.source
         const otherNode = getNodes().find((n) => n.id === otherId)
-        if (otherNode && otherNode.nodeType === rule.targetNodeType) matchedLinks.push(link)
+        if (otherNode && otherNode.nodeType === rule.targetNodeType)
+          matchedLinks.push(link)
       }
     }
   }
@@ -105,7 +169,10 @@ function executeExpand(req: { sourceNodeId: string; ruleId: string; pageIndex: n
   }
   const total = targetNodeIds.size
   const skip = req.pageIndex * req.pageSize
-  const pagedTargetIds = Array.from(targetNodeIds).slice(skip, skip + req.pageSize)
+  const pagedTargetIds = Array.from(targetNodeIds).slice(
+    skip,
+    skip + req.pageSize,
+  )
 
   const resultNodes: ReturnType<typeof toGraphNode>[] = []
   const resultLinks: ReturnType<typeof toGraphLink>[] = []
@@ -119,14 +186,24 @@ function executeExpand(req: { sourceNodeId: string; ruleId: string; pageIndex: n
         const targetRules = getRulesForNodeType(targetRaw.nodeType)
         resultNodes.push({
           ...toGraphNode(targetRaw),
-          data: { ...toGraphNode(targetRaw).data, count: 0, total: targetRules.length > 0 ? 100 : 0 },
+          data: {
+            ...toGraphNode(targetRaw).data,
+            count: 0,
+            total: targetRules.length > 0 ? 100 : 0,
+          },
         })
         existNodeSet.add(targetId)
       }
     }
   }
 
-  return { nodes: resultNodes, links: resultLinks, total, pageIndex: req.pageIndex, hasMore: skip + req.pageSize < total }
+  return {
+    nodes: resultNodes,
+    links: resultLinks,
+    total,
+    pageIndex: req.pageIndex,
+    hasMore: skip + req.pageSize < total,
+  }
 }
 
 export default defineConfig({
@@ -138,25 +215,47 @@ export default defineConfig({
         // GET /api/graph/init — 返回初始种子数据
         server.middlewares.use("/api/graph/init", (_req, res) => {
           const seedIds = ["person-1", "person-2", "person-6"]
-          const seedNodes = seedIds.map((id) => getNodes().find((n) => n.id === id)!).filter(Boolean)
+          const seedNodes = seedIds
+            .map((id) => getNodes().find((n) => n.id === id)!)
+            .filter(Boolean)
           const nodes = seedNodes.map((raw) => {
             const rules = getRulesForNodeType(raw.nodeType)
-            return { ...toGraphNode(raw), data: { ...toGraphNode(raw).data, count: 0, total: rules.length > 0 ? 100 : 0 } }
+            return {
+              ...toGraphNode(raw),
+              data: {
+                ...toGraphNode(raw).data,
+                count: 0,
+                total: rules.length > 0 ? 100 : 0,
+              },
+            }
           })
           const nodeIdSet = new Set(seedIds)
-          const links = getLinks().filter((l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target)).map(toGraphLink)
+          const links = getLinks()
+            .filter((l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target))
+            .map(toGraphLink)
 
           const rulesMap: Record<string, unknown[]> = {}
           for (const node of nodes) {
-            rulesMap[node.id] = getRulesForNodeType(node.data.nodeType).map((r) => ({
-              id: r.ruleId, name: r.ruleName, targetNodeType: r.targetNodeType,
-              relationType: r.relationType, direction: r.direction,
-              limit: parseInt(r.limit, 10), autoExpand: r.autoExpand === "true",
-            }))
+            rulesMap[node.id] = getRulesForNodeType(node.data.nodeType).map(
+              (r) => ({
+                id: r.ruleId,
+                name: r.ruleName,
+                targetNodeType: r.targetNodeType,
+                relationType: r.relationType,
+                direction: r.direction,
+                limit: parseInt(r.limit, 10),
+                autoExpand: r.autoExpand === "true",
+              }),
+            )
           }
 
           res.setHeader("Content-Type", "application/json")
-          res.end(JSON.stringify({ success: true, data: { graphData: { nodes, links }, rulesMap } }))
+          res.end(
+            JSON.stringify({
+              success: true,
+              data: { graphData: { nodes, links }, rulesMap },
+            }),
+          )
         })
 
         // GET /api/graph/rules?nodeId=xxx — 获取节点规则
@@ -166,9 +265,13 @@ export default defineConfig({
           const node = getNodes().find((n) => n.id === nodeId)
           const rules = node ? getRulesForNodeType(node.nodeType) : []
           const data = rules.map((r) => ({
-            id: r.ruleId, name: r.ruleName, targetNodeType: r.targetNodeType,
-            relationType: r.relationType, direction: r.direction,
-            limit: parseInt(r.limit, 10), autoExpand: r.autoExpand === "true",
+            id: r.ruleId,
+            name: r.ruleName,
+            targetNodeType: r.targetNodeType,
+            relationType: r.relationType,
+            direction: r.direction,
+            limit: parseInt(r.limit, 10),
+            autoExpand: r.autoExpand === "true",
           }))
           res.setHeader("Content-Type", "application/json")
           res.end(JSON.stringify({ success: true, data }))
@@ -177,19 +280,36 @@ export default defineConfig({
         // POST /api/graph/expand — 执行拓出
         server.middlewares.use("/api/graph/expand", (req, res) => {
           let body = ""
-          req.on("data", (chunk: string) => { body += chunk })
+          req.on("data", (chunk: string) => {
+            body += chunk
+          })
           req.on("end", () => {
             const json = JSON.parse(body)
             const result = executeExpand(json)
             const enrichedNodes = result.nodes.map((node) => {
               const rules = getRulesForNodeType(node.data.nodeType)
-              return { ...node, data: { ...node.data, total: rules.length > 0 ? 100 : 0, count: 0 } }
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  total: rules.length > 0 ? 100 : 0,
+                  count: 0,
+                },
+              }
             })
             res.setHeader("Content-Type", "application/json")
-            res.end(JSON.stringify({
-              success: true,
-              data: { nodes: enrichedNodes, links: result.links, total: result.total, pageIndex: result.pageIndex, hasMore: result.hasMore },
-            }))
+            res.end(
+              JSON.stringify({
+                success: true,
+                data: {
+                  nodes: enrichedNodes,
+                  links: result.links,
+                  total: result.total,
+                  pageIndex: result.pageIndex,
+                  hasMore: result.hasMore,
+                },
+              }),
+            )
           })
         })
       },

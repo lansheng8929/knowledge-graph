@@ -155,7 +155,13 @@ interface ExpandResponse {
 function executeExpand(req: ExpandRequest): ExpandResponse {
   const rule = getRules().find((r) => r.ruleId === req.ruleId)
   if (!rule) {
-    return { nodes: [], links: [], total: 0, pageIndex: req.pageIndex, hasMore: false }
+    return {
+      nodes: [],
+      links: [],
+      total: 0,
+      pageIndex: req.pageIndex,
+      hasMore: false,
+    }
   }
 
   const allLinks = getLinks()
@@ -195,11 +201,13 @@ function executeExpand(req: ExpandRequest): ExpandResponse {
   } else if (rule.direction === "both") {
     for (const link of allLinks) {
       if (
-        (link.source === req.sourceNodeId || link.target === req.sourceNodeId) &&
+        (link.source === req.sourceNodeId ||
+          link.target === req.sourceNodeId) &&
         link.linkType === rule.relationType &&
         !existLinkSet.has(link.id)
       ) {
-        const otherId = link.source === req.sourceNodeId ? link.target : link.source
+        const otherId =
+          link.source === req.sourceNodeId ? link.target : link.source
         const otherNode = getNodes().find((n) => n.id === otherId)
         if (otherNode && otherNode.nodeType === rule.targetNodeType) {
           matchedLinks.push(link)
@@ -220,7 +228,10 @@ function executeExpand(req: ExpandRequest): ExpandResponse {
 
   // 分页
   const skip = req.pageIndex * req.pageSize
-  const pagedTargetIds = Array.from(targetNodeIds).slice(skip, skip + req.pageSize)
+  const pagedTargetIds = Array.from(targetNodeIds).slice(
+    skip,
+    skip + req.pageSize,
+  )
 
   // 收集结果
   const resultNodes: ReturnType<typeof toGraphNode>[] = []

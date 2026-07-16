@@ -1,9 +1,21 @@
 import { useRef, useEffect, useState, useCallback } from "react"
-import { GraphModel, GraphView, type Layout, ExpansionService } from "@ra-sdk/knowledge-graph"
+import {
+  GraphModel,
+  GraphView,
+  type Layout,
+  ExpansionService,
+} from "@ra-sdk/knowledge-graph"
 import { MetadataManager } from "@ra-sdk/knowledge-graph/meta-manager"
 import { HistoryManager } from "@ra-sdk/knowledge-graph/history-manager"
-import type { GraphNode, GraphViewModel, DefaultGraphDataGenerics } from "@ra-sdk/knowledge-graph/client/type"
-import type { ExpansionRule, ExpansionFetcher } from "@ra-sdk/knowledge-graph/expansion/expansion-service"
+import type {
+  GraphNode,
+  GraphViewModel,
+  DefaultGraphDataGenerics,
+} from "@ra-sdk/knowledge-graph/client/type"
+import type {
+  ExpansionRule,
+  ExpansionFetcher,
+} from "@ra-sdk/knowledge-graph/expansion/expansion-service"
 import { RuleMenu } from "./RuleMenu"
 
 // ─── 从 init API 获取规则并注册 ──────────────────────
@@ -231,92 +243,98 @@ export default function App() {
 
         setNodeCount(initData.graphData.nodes.length)
 
-      const graphView = new GraphView({
-        container,
-        graphModel: model,
-        backgroundColor: "#1a1a2e",
-        arrowDisplay: false,
-        pickerMode: "gpu",
-        mapNode: (node) => {
-          const nd = node.data as Record<string, unknown> | undefined
-          const count = typeof nd?.count === "number" ? nd.count : 0
-          const total = typeof nd?.total === "number" ? nd.total : 0
-          const canExpand = count < total
-          return {
-            x: node.x ?? 0,
-            y: node.y ?? 0,
-            radius: 8,
-            color: [1.0, 1.0, 1.0, 1.0],
-            strokeColor: canExpand ? [0.913, 0.271, 0.376, 1.0] as const : [1.0, 1.0, 1.0, 1.0] as const,
-            strokeWidth: canExpand ? 1.5 : 0,
-            id: node.id,
-            label: node.data?.label,
-            showPlus: canExpand,
-            // Plus 按钮位置：相对于节点半径的比例
-            // 右上角: (0.5, -0.5), 右下角: (0.5, 0.5),
-            // 左上角: (-0.5, -0.5), 左下角: (-0.5, 0.5),
-            // 正上方: (0, -0.6), 正右方: (0.6, 0)
-            plusOffsetX: 0.55,
-            plusOffsetY: -0.55,
-            plusScale: 0.30,
-          }
-        },
-        forceConfig: {
-          repulsion: -200,
-          linkDistance: 100,
-          linkStrength: 0.2,
-          centerStrength: 0.1,
-          velocityDecay: 0.4,
-        },
-      })
+        const graphView = new GraphView({
+          container,
+          graphModel: model,
+          backgroundColor: "#1a1a2e",
+          arrowDisplay: false,
+          pickerMode: "gpu",
+          mapNode: (node) => {
+            const nd = node.data as Record<string, unknown> | undefined
+            const count = typeof nd?.count === "number" ? nd.count : 0
+            const total = typeof nd?.total === "number" ? nd.total : 0
+            const canExpand = count < total
+            return {
+              x: node.x ?? 0,
+              y: node.y ?? 0,
+              radius: 8,
+              color: [1.0, 1.0, 1.0, 1.0],
+              strokeColor: canExpand
+                ? ([0.913, 0.271, 0.376, 1.0] as const)
+                : ([1.0, 1.0, 1.0, 1.0] as const),
+              strokeWidth: canExpand ? 1.5 : 0,
+              id: node.id,
+              label: node.data?.label,
+              showPlus: canExpand,
+              // Plus 按钮位置：相对于节点半径的比例
+              // 右上角: (0.5, -0.5), 右下角: (0.5, 0.5),
+              // 左上角: (-0.5, -0.5), 左下角: (-0.5, 0.5),
+              // 正上方: (0, -0.6), 正右方: (0.6, 0)
+              plusOffsetX: 0.55,
+              plusOffsetY: -0.55,
+              plusScale: 0.3,
+            }
+          },
+          forceConfig: {
+            repulsion: -200,
+            linkDistance: 100,
+            linkStrength: 0.2,
+            centerStrength: 0.1,
+            velocityDecay: 0.4,
+          },
+        })
 
-      viewRef.current = graphView
+        viewRef.current = graphView
 
-      // 4. 订阅事件
-      model.events.subscribe("nodeHover", (node) => { setHoveredNode(node) })
-      model.events.subscribe("dataChange", ({ graphData }) => {
-        setNodeCount(graphData.nodes.length)
-      })
-      // "+" 徽标点击 → 执行拓出
-      model.events.subscribe("plusToolClick", (node) => {
-        if (node) handlePlusClick(node.id)
-      })
+        // 4. 订阅事件
+        model.events.subscribe("nodeHover", (node) => {
+          setHoveredNode(node)
+        })
+        model.events.subscribe("dataChange", ({ graphData }) => {
+          setNodeCount(graphData.nodes.length)
+        })
+        // "+" 徽标点击 → 执行拓出
+        model.events.subscribe("plusToolClick", (node) => {
+          if (node) handlePlusClick(node.id)
+        })
 
-      container.addEventListener("mousemove", handleMouseMove)
+        container.addEventListener("mousemove", handleMouseMove)
 
-      const handleContextMenu = (e: MouseEvent) => {
-        e.preventDefault()
-        const node = hoveredNodeRef.current
-        if (node) {
-          const rules = expansionService.getRules(node.id)
-          if (rules.length > 0) {
-            setRuleMenu({ node, rules, x: e.clientX, y: e.clientY })
-          } else {
-            setContextMenu({ node, x: e.clientX, y: e.clientY })
+        const handleContextMenu = (e: MouseEvent) => {
+          e.preventDefault()
+          const node = hoveredNodeRef.current
+          if (node) {
+            const rules = expansionService.getRules(node.id)
+            if (rules.length > 0) {
+              setRuleMenu({ node, rules, x: e.clientX, y: e.clientY })
+            } else {
+              setContextMenu({ node, x: e.clientX, y: e.clientY })
+            }
           }
         }
+        container.addEventListener("contextmenu", handleContextMenu)
+
+        // 节点计数已在前面设置
+
+        setView(graphView)
+        setLoading(false)
+
+        return () => {
+          container.removeEventListener("mousemove", handleMouseMove)
+          container.removeEventListener("contextmenu", handleContextMenu)
+          graphView.destroy()
+          viewRef.current = null
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error("Init failed:", err)
+        setInitError(msg)
+        setLoading(false)
       }
-      container.addEventListener("contextmenu", handleContextMenu)
-
-      // 节点计数已在前面设置
-
-      setView(graphView)
-      setLoading(false)
-
-      return () => {
-        container.removeEventListener("mousemove", handleMouseMove)
-        container.removeEventListener("contextmenu", handleContextMenu)
-        graphView.destroy()
-        viewRef.current = null
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error("Init failed:", err)
-      setInitError(msg)
-      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
     }
-  })()
-    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -438,9 +456,27 @@ export default function App() {
             <div style={{ fontSize: "12px", color: "#667", marginTop: "8px" }}>
               Fetching from mock API ...
             </div>
-            <div id="runtime-error" style={{ display: "none", marginTop: "20px", color: "#ff6b6b", fontSize: "13px", maxWidth: "500px", wordBreak: "break-all" }}></div>
+            <div
+              id="runtime-error"
+              style={{
+                display: "none",
+                marginTop: "20px",
+                color: "#ff6b6b",
+                fontSize: "13px",
+                maxWidth: "500px",
+                wordBreak: "break-all",
+              }}
+            ></div>
             {initError && (
-              <div style={{ marginTop: "20px", color: "#ff6b6b", fontSize: "13px", maxWidth: "500px", wordBreak: "break-all" }}>
+              <div
+                style={{
+                  marginTop: "20px",
+                  color: "#ff6b6b",
+                  fontSize: "13px",
+                  maxWidth: "500px",
+                  wordBreak: "break-all",
+                }}
+              >
                 Error: {initError}
               </div>
             )}
@@ -458,7 +494,6 @@ export default function App() {
           overflow: "hidden",
         }}
       >
-
         {/* DOM tooltip */}
         {hoveredNode && (
           <div

@@ -33,7 +33,12 @@ export function PlusButtonOverlay({
 
     const rect = container.getBoundingClientRect()
     const { x: tx, y: ty, k } = cameraTransform
-    const result: Array<{ id: string; left: number; top: number; label: string }> = []
+    const result: Array<{
+      id: string
+      left: number
+      top: number
+      label: string
+    }> = []
 
     for (const node of graphData.nodes) {
       if (!expandableNodes.has(node.id)) continue
@@ -46,7 +51,8 @@ export function PlusButtonOverlay({
       const sy = (wy + ty) * k
 
       // 只显示在可视区域内
-      if (sx < -30 || sx > rect.width + 30 || sy < -30 || sy > rect.height + 30) continue
+      if (sx < -30 || sx > rect.width + 30 || sy < -30 || sy > rect.height + 30)
+        continue
 
       // 按钮显示在节点右上方偏移
       result.push({

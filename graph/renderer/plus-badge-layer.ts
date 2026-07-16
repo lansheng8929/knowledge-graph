@@ -75,7 +75,9 @@ export class PlusBadgeLayer {
 
     // 在 capture phase 拦截指针事件（优先级高于主交互层）
     this.boundPointerDown = this.onPointerDown.bind(this)
-    this.canvas.addEventListener("pointerdown", this.boundPointerDown, { capture: true })
+    this.canvas.addEventListener("pointerdown", this.boundPointerDown, {
+      capture: true,
+    })
   }
 
   // ─── 编译工具 ───────────────────────────────────
@@ -86,7 +88,9 @@ export class PlusBadgeLayer {
     gl.shaderSource(shader, source)
     gl.compileShader(shader)
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      throw new Error("Plus shader compile failed: " + gl.getShaderInfoLog(shader))
+      throw new Error(
+        "Plus shader compile failed: " + gl.getShaderInfoLog(shader),
+      )
     }
     return shader
   }
@@ -112,15 +116,23 @@ export class PlusBadgeLayer {
     this.uScale = gl.getUniformLocation(this.program, "u_scale")
     this.uZOffset = gl.getUniformLocation(this.program, "u_zOffset")
 
-    this.uPickResolution = gl.getUniformLocation(this.pickProgram, "u_resolution")
-    this.uPickTranslation = gl.getUniformLocation(this.pickProgram, "u_translation")
+    this.uPickResolution = gl.getUniformLocation(
+      this.pickProgram,
+      "u_resolution",
+    )
+    this.uPickTranslation = gl.getUniformLocation(
+      this.pickProgram,
+      "u_translation",
+    )
     this.uPickScale = gl.getUniformLocation(this.pickProgram, "u_scale")
     this.uPickZOffset = gl.getUniformLocation(this.pickProgram, "u_zOffset")
   }
 
   private initQuadGeometry(): void {
     const gl = this.gl
-    const positions = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+    const positions = new Float32Array([
+      -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
+    ])
     const vao = gl.createVertexArray()!
     gl.bindVertexArray(vao)
     const posBuf = gl.createBuffer()!
@@ -132,7 +144,11 @@ export class PlusBadgeLayer {
     this.quadVao = vao
   }
 
-  private setupInstanceBuffer(loc: number, data: Float32Array, components: number): void {
+  private setupInstanceBuffer(
+    loc: number,
+    data: Float32Array,
+    components: number,
+  ): void {
     const gl = this.gl
     const buf = gl.createBuffer()!
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
@@ -212,13 +228,29 @@ export class PlusBadgeLayer {
 
     this.pickTexture = gl.createTexture()!
     gl.bindTexture(gl.TEXTURE_2D, this.pickTexture)
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      width,
+      height,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      null,
+    )
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 
     this.pickFbo = gl.createFramebuffer()!
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickFbo)
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pickTexture, 0)
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      gl.COLOR_ATTACHMENT0,
+      gl.TEXTURE_2D,
+      this.pickTexture,
+      0,
+    )
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
   }
 
@@ -283,7 +315,15 @@ export class PlusBadgeLayer {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickFbo)
     const pixel = new Uint8Array(4)
-    gl.readPixels(px, this.pickHeight - py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
+    gl.readPixels(
+      px,
+      this.pickHeight - py,
+      1,
+      1,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      pixel,
+    )
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
     const idx = (pixel[0] << 16) | (pixel[1] << 8) | pixel[2]
@@ -312,7 +352,9 @@ export class PlusBadgeLayer {
 
   destroy(): void {
     const gl = this.gl
-    this.canvas.removeEventListener("pointerdown", this.boundPointerDown, { capture: true } as any)
+    this.canvas.removeEventListener("pointerdown", this.boundPointerDown, {
+      capture: true,
+    } as any)
     gl.deleteProgram(this.program)
     gl.deleteProgram(this.pickProgram)
     if (this.pickFbo) gl.deleteFramebuffer(this.pickFbo)
