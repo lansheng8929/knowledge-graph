@@ -41,6 +41,15 @@ export interface RenderNode {
    * - other shapes: unused
    */
   shapeParam?: number
+
+  /** 是否显示 "+" 拓出徽标 */
+  showPlus?: boolean
+  /** 徽标相对节点中心的 X 偏移比例 (节点半径的倍数), 正=右 */
+  plusOffsetX?: number
+  /** 徽标相对节点中心的 Y 偏移比例 (节点半径的倍数), 负=上 */
+  plusOffsetY?: number
+  /** 徽标整体大小 (节点半径的倍数), 控制白底圆+加号的大小 */
+  plusScale?: number
 }
 
 export interface RenderLink {

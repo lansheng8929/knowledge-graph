@@ -116,6 +116,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   // ========== Renderer callbacks ==========
 
   private setupRendererCallbacks(): void {
+    // ===== 主画布交互层 =====
     this.renderer.onNodeClick = (nodeId, event) => {
       if (nodeId) {
         const node = this.nodeMap.get(nodeId) ?? null
@@ -123,6 +124,12 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       } else {
         this.events.publish("nodeClick", null)
       }
+    }
+
+    // ===== 工具交互层（PlusBadgeLayer 独立处理） =====
+    this.renderer.onPlusClick = (nodeId) => {
+      const node = this.nodeMap.get(nodeId) ?? null
+      this.events.publish("plusToolClick", node)
     }
 
     this.renderer.onNodeHover = (nodeId) => {
@@ -189,8 +196,9 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     if (this.hoveredNodeId && this.hoveredNodeId !== nodeId) {
       const prev = renderNodes.find((n) => n.id === this.hoveredNodeId)
       if (prev) {
-        prev.radius = 8
+        // 恢复默认外观（保持半径不变，清除发光描边）
         prev.color = [1.0, 1.0, 1.0, 1.0]
+        prev.strokeColor = [1.0, 1.0, 1.0, 1.0]
         prev.strokeWidth = 0
       }
     }
@@ -205,12 +213,14 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       return
     }
 
-    // 高亮当前悬浮节点（变大 + 变色，无描边）
+    // 高亮当前悬浮节点（边缘发光效果）
     const curr = renderNodes.find((n) => n.id === nodeId)
     if (curr) {
-      curr.radius = 12
-      curr.color = [1.0, 0.6, 0.2, 1.0]
-      curr.strokeWidth = 0
+      // 保持原有大小，添加发光描边
+      curr.strokeColor = [1.0, 0.6, 0.2, 1.0]  // 橙色发光
+      curr.strokeWidth = 3
+      // 略微提高节点亮度
+      curr.color = [1.0, 0.85, 0.7, 1.0]
     }
 
     // 通过 model 数据找到关联边的 ID
@@ -309,6 +319,23 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.layout.setData(simNodes, simLinks)
     this.layout.start()
 
+    // 更新工具交互层的徽标数据
+    const badges: import("../renderer/plus-badge-layer.js").BadgeData[] = []
+    for (const rn of renderNodes) {
+      if (rn.showPlus) {
+        const offX = rn.radius * (rn.plusOffsetX ?? 0.5)
+        const offY = rn.radius * (rn.plusOffsetY ?? -0.5)
+        const badgeRadius = rn.radius * (rn.plusScale ?? 0.35)
+        badges.push({
+          x: rn.x + offX,
+          y: rn.y + offY,
+          radius: badgeRadius,
+          nodeId: rn.id,
+        })
+      }
+    }
+    this.renderer.backend.plusLayer.updateBadges(badges)
+
     // Fit view initially
     requestAnimationFrame(() => {
       this.renderer.fitView()
@@ -396,6 +423,20 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       if (tn) {
         rl.targetX = tn.x ?? 0
         rl.targetY = tn.y ?? 0
+      }
+    }
+
+    // 同步工具交互层的徽标位置
+    const badges = this.renderer.backend.plusLayer.badges
+    for (let i = 0; i < badges.length; i++) {
+      const b = badges[i]
+      const rn = renderNodes.find((n) => n.id === b.nodeId)
+      if (rn) {
+        const offX = rn.radius * (rn.plusOffsetX ?? 0.5)
+        const offY = rn.radius * (rn.plusOffsetY ?? -0.5)
+        b.x = rn.x + offX
+        b.y = rn.y + offY
+        b.radius = rn.radius * (rn.plusScale ?? 0.35)
       }
     }
   }

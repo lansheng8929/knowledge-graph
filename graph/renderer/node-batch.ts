@@ -143,6 +143,7 @@ export class NodeBatchRenderer {
     const strokeWidth = new Float32Array(N)
     const shapeType = new Float32Array(N)
     const shapeParam = new Float32Array(N)
+    const showPlus = new Float32Array(N)
 
     for (let i = 0; i < N; i++) {
       const n = nodes[i]

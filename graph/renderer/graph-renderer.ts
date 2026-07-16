@@ -36,6 +36,7 @@ export interface GraphRendererCallbacks {
   onLinkClick?: (linkId: string | null, event: MouseEvent) => void
   onBackgroundClick?: (event: MouseEvent) => void
   onZoom?: (transform: ViewTransform) => void
+  onPlusClick?: (nodeId: string) => void
 }
 
 export class GraphRenderer {
@@ -76,6 +77,7 @@ export class GraphRenderer {
   onLinkClick?: GraphRendererCallbacks["onLinkClick"]
   onBackgroundClick?: GraphRendererCallbacks["onBackgroundClick"]
   onZoom?: GraphRendererCallbacks["onZoom"]
+  onPlusClick?: GraphRendererCallbacks["onPlusClick"]
 
   constructor(opts: GraphRendererOptions) {
     this.backend = new WebGLRenderer({
@@ -97,6 +99,7 @@ export class GraphRenderer {
     this.backend.onBackgroundClick = (...args) =>
       this.onBackgroundClick?.(...args)
     this.backend.onZoom = (...args) => this.onZoom?.(...args)
+    this.backend.onPlusClick = (...args) => this.onPlusClick?.(...args)
   }
 
   // ========== 统一 API ==========

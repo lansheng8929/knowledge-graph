@@ -9,7 +9,6 @@ layout(location = 4) in vec4 a_strokeColor;    // instance: stroke color
 layout(location = 5) in float a_strokeWidth;   // instance: stroke width
 layout(location = 6) in float a_shapeType;     // instance: shape enum
 layout(location = 7) in float a_shapeParam;    // instance: shape parameter
-
 uniform vec2 u_resolution;
 uniform vec2 u_translation;
 uniform float u_scale;

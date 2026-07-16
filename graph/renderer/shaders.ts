@@ -18,6 +18,10 @@ import arrowFrag from "./shaders/arrow.frag?raw"
 import arrowPickFrag from "./shaders/arrow-pick.frag?raw"
 import textVert from "./shaders/text.vert?raw"
 import textFrag from "./shaders/text.frag?raw"
+import plusVert from "./shaders/plus.vert?raw"
+import plusFrag from "./shaders/plus.frag?raw"
+import plusPickVert from "./shaders/plus-pick.vert?raw"
+import plusPickFrag from "./shaders/plus-pick.frag?raw"
 
 export const NODE_VS = nodeVert
 export const NODE_FS = nodeFrag
@@ -33,3 +37,7 @@ export const PICK_ARROW_VS = arrowVert
 export const PICK_ARROW_FS = arrowPickFrag
 export const TEXT_VS = textVert
 export const TEXT_FS = textFrag
+export const PLUS_VS = plusVert
+export const PLUS_FS = plusFrag
+export const PICK_PLUS_VS = plusPickVert
+export const PICK_PLUS_FS = plusPickFrag

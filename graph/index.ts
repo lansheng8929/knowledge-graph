@@ -14,6 +14,9 @@ export * from "./style-registry"
 
 export * from "./type"
 
+// Expansion service
+export * from "./expansion/index.js"
+
 // New Canvas2D-based renderer and physics
 export { GraphView } from "./client/view-new.js"
 export type { GraphViewOptions } from "./client/view-new.js"
