@@ -266,10 +266,7 @@ export default function App() {
               id: node.id,
               label: node.data?.label,
               showPlus: canExpand,
-              // Plus 按钮位置：相对于节点半径的比例
-              // 右上角: (0.5, -0.5), 右下角: (0.5, 0.5),
-              // 左上角: (-0.5, -0.5), 左下角: (-0.5, 0.5),
-              // 正上方: (0, -0.6), 正右方: (0.6, 0)
+              // Plus 徽标位置：右上角
               plusOffsetX: 0.55,
               plusOffsetY: -0.55,
               plusScale: 0.3,

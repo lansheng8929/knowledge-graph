@@ -9,6 +9,10 @@ layout(location = 4) in vec4 a_strokeColor;    // instance: stroke color
 layout(location = 5) in float a_strokeWidth;   // instance: stroke width
 layout(location = 6) in float a_shapeType;     // instance: shape enum
 layout(location = 7) in float a_shapeParam;    // instance: shape parameter
+layout(location = 8) in float a_showPlus;      // instance: show plus button
+layout(location = 9) in float a_plusOffsetX;   // instance: plus offset X
+layout(location = 10) in float a_plusOffsetY;  // instance: plus offset Y
+layout(location = 11) in float a_plusScale;    // instance: plus size scale
 uniform vec2 u_resolution;
 uniform vec2 u_translation;
 uniform float u_scale;
@@ -21,6 +25,10 @@ out float v_strokeWidth;
 out vec2 v_localPos;
 out float v_shapeType;
 out float v_shapeParam;
+out float v_showPlus;
+out float v_plusOffsetX;
+out float v_plusOffsetY;
+out float v_plusScale;
 
 void main() {
   float halfSize = a_radius + a_strokeWidth;
@@ -37,4 +45,8 @@ void main() {
   v_localPos = a_position * halfSize;
   v_shapeType = a_shapeType;
   v_shapeParam = a_shapeParam;
+  v_showPlus = a_showPlus;
+  v_plusOffsetX = a_plusOffsetX;
+  v_plusOffsetY = a_plusOffsetY;
+  v_plusScale = a_plusScale;
 }

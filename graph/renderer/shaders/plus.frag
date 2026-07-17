@@ -33,11 +33,7 @@ void main() {
 
   vec3 bgColor = vec3(1.0, 1.0, 1.0);
 
-  // 2. Thin border around badge
-  float borderD = sdCircle(v_localPos, v_radius);
-  float borderAlpha = 1.0 - smoothstep(-aa, aa, borderD + 0.5);
-
-  // 3. Red plus symbol inside
+  // 2. Red plus symbol inside
   float plusD = sdPlus(v_localPos, v_radius * 0.85);
   float plusAlpha = 1.0 - smoothstep(-1.0, 1.0, plusD);
 

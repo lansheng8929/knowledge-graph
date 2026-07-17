@@ -144,6 +144,9 @@ export class NodeBatchRenderer {
     const shapeType = new Float32Array(N)
     const shapeParam = new Float32Array(N)
     const showPlus = new Float32Array(N)
+    const plusOffsetX = new Float32Array(N)
+    const plusOffsetY = new Float32Array(N)
+    const plusScale = new Float32Array(N)
 
     for (let i = 0; i < N; i++) {
       const n = nodes[i]
@@ -161,6 +164,10 @@ export class NodeBatchRenderer {
       strokeWidth[i] = n.strokeWidth
       shapeType[i] = shapeToType(n.shape)
       shapeParam[i] = n.shapeParam ?? 0.25
+      showPlus[i] = n.showPlus ?? 0
+      plusOffsetX[i] = n.plusOffsetX ?? 0.5
+      plusOffsetY[i] = n.plusOffsetY ?? -0.5
+      plusScale[i] = n.plusScale ?? 0.35
     }
 
     this.setupInstanceBuffer(1, center, 2)
@@ -170,11 +177,15 @@ export class NodeBatchRenderer {
     this.setupInstanceBuffer(5, strokeWidth, 1)
     this.setupInstanceBuffer(6, shapeType, 1)
     this.setupInstanceBuffer(7, shapeParam, 1)
+    this.setupInstanceBuffer(8, showPlus, 1)
+    this.setupInstanceBuffer(9, plusOffsetX, 1)
+    this.setupInstanceBuffer(10, plusOffsetY, 1)
+    this.setupInstanceBuffer(11, plusScale, 1)
 
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, N)
 
     // Reset divisors to 0 for non-instanced attributes
-    for (let loc = 1; loc <= 7; loc++) {
+    for (let loc = 1; loc <= 11; loc++) {
       gl.vertexAttribDivisor(loc, 0)
     }
     gl.bindVertexArray(null)

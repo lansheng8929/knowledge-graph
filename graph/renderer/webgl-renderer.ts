@@ -11,7 +11,6 @@ import { LinkBatchRenderer } from "./link-batch.js"
 import { TextLabelRenderer, type LabelInfo } from "./text-label.js"
 import { WebGLPicker } from "./webgl-picker.js"
 import { CpuPicker } from "./cpu-picker.js"
-import { PlusBadgeLayer, type BadgeData } from "./plus-badge-layer.js"
 import {
   InteractionManager,
   type ViewTransform,
@@ -67,7 +66,6 @@ export class WebGLRenderer {
   private nodeRenderer: NodeBatchRenderer
   private linkRenderer: LinkBatchRenderer
   private labelRenderer: TextLabelRenderer
-  readonly plusLayer: PlusBadgeLayer
 
   // Current data
   nodes: RenderNode[] = []
@@ -91,7 +89,6 @@ export class WebGLRenderer {
   onLinkClick?: (linkId: string | null, event: MouseEvent) => void
   onBackgroundClick?: (event: MouseEvent) => void
   onZoom?: (transform: ViewTransform) => void
-  onPlusClick?: (nodeId: string) => void
 
   constructor(opts: WebGLRendererOptions) {
     this.container = opts.container
@@ -162,15 +159,6 @@ export class WebGLRenderer {
     )
     // 保持相机同步
     this.interaction.transform = this.camera.state as ViewTransform
-
-    // 工具交互层（独立渲染 + 独立拾取）
-    this.plusLayer = new PlusBadgeLayer({
-      canvas: this.canvas,
-      gl,
-      onPlusClick: (nodeId) => {
-        self.onPlusClick?.(nodeId)
-      },
-    })
 
     // 尺寸监听
     const ro = new ResizeObserver(() => this.handleResize())
@@ -269,11 +257,7 @@ export class WebGLRenderer {
     // Render nodes (z = -0.5, in front of links)
     this.nodeRenderer.render(this.nodes, w, h, x, y, k, -0.5)
 
-    // Render plus badges (z = -0.3, on top of nodes)
-    this.plusLayer.render(w, h, x, y, k, -0.3)
-
-    // 渲染徽标拾取缓冲（每帧更新，确保拾取精度）
-    this.plusLayer.renderPickBuffer(w, h, x, y, k)
+    // Render labels
 
     // Render labels
     this.labels = this.labelRenderer.buildNodeLabels(

@@ -179,6 +179,12 @@ export class PlusBadgeLayer {
     zOffset = 0,
   ): void {
     const N = this.badges.length
+    console.log(
+      "[PlusBadgeLayer] render called, badges:",
+      N,
+      "first:",
+      this.badges[0],
+    )
     if (N === 0) return
     const gl = this.gl
 

@@ -116,20 +116,41 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   // ========== Renderer callbacks ==========
 
   private setupRendererCallbacks(): void {
-    // ===== 主画布交互层 =====
     this.renderer.onNodeClick = (nodeId, event) => {
       if (nodeId) {
+        // 检测点击是否在 "+" 徽标区域内（坐标检测）
+        const renderNode = this.renderer.nodes.find((n) => n.id === nodeId)
+        if (renderNode?.showPlus) {
+          const rect = this.renderer.canvas.getBoundingClientRect()
+          const mouseX = event.clientX - rect.left
+          const mouseY = event.clientY - rect.top
+          const t = this.renderer.interaction.transform
+
+          const offX = renderNode.radius * (renderNode.plusOffsetX ?? 0.5)
+          const offY = renderNode.radius * (renderNode.plusOffsetY ?? -0.5)
+          const badgeWorldRadius =
+            renderNode.radius * (renderNode.plusScale ?? 0.35)
+
+          // 徽标中心屏幕坐标（与 shader 计算一致）
+          const badgeSX = (renderNode.x + offX + t.x) * t.k
+          const badgeSY = (renderNode.y + offY + t.y) * t.k
+          const badgeSR = badgeWorldRadius * t.k
+
+          const dx = mouseX - badgeSX
+          const dy = mouseY - badgeSY
+          if (dx * dx + dy * dy <= badgeSR * badgeSR) {
+            // 点击在 "+" 徽标上
+            const node = this.nodeMap.get(nodeId) ?? null
+            this.events.publish("plusToolClick", node)
+            return
+          }
+        }
+        // 点击在节点本体上
         const node = this.nodeMap.get(nodeId) ?? null
         this.events.publish("nodeClick", node)
       } else {
         this.events.publish("nodeClick", null)
       }
-    }
-
-    // ===== 工具交互层（PlusBadgeLayer 独立处理） =====
-    this.renderer.onPlusClick = (nodeId) => {
-      const node = this.nodeMap.get(nodeId) ?? null
-      this.events.publish("plusToolClick", node)
     }
 
     this.renderer.onNodeHover = (nodeId) => {
@@ -319,23 +340,6 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.layout.setData(simNodes, simLinks)
     this.layout.start()
 
-    // 更新工具交互层的徽标数据
-    const badges: import("../renderer/plus-badge-layer.js").BadgeData[] = []
-    for (const rn of renderNodes) {
-      if (rn.showPlus) {
-        const offX = rn.radius * (rn.plusOffsetX ?? 0.5)
-        const offY = rn.radius * (rn.plusOffsetY ?? -0.5)
-        const badgeRadius = rn.radius * (rn.plusScale ?? 0.35)
-        badges.push({
-          x: rn.x + offX,
-          y: rn.y + offY,
-          radius: badgeRadius,
-          nodeId: rn.id,
-        })
-      }
-    }
-    this.renderer.backend.plusLayer.updateBadges(badges)
-
     // Fit view initially
     requestAnimationFrame(() => {
       this.renderer.fitView()
@@ -423,20 +427,6 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       if (tn) {
         rl.targetX = tn.x ?? 0
         rl.targetY = tn.y ?? 0
-      }
-    }
-
-    // 同步工具交互层的徽标位置
-    const badges = this.renderer.backend.plusLayer.badges
-    for (let i = 0; i < badges.length; i++) {
-      const b = badges[i]
-      const rn = renderNodes.find((n) => n.id === b.nodeId)
-      if (rn) {
-        const offX = rn.radius * (rn.plusOffsetX ?? 0.5)
-        const offY = rn.radius * (rn.plusOffsetY ?? -0.5)
-        b.x = rn.x + offX
-        b.y = rn.y + offY
-        b.radius = rn.radius * (rn.plusScale ?? 0.35)
       }
     }
   }
