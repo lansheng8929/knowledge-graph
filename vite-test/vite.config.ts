@@ -315,11 +315,6 @@ export default defineConfig({
       },
     },
   ],
-  resolve: {
-    alias: {
-      "@ra-sdk/knowledge-graph": path.resolve(__dirname, "../graph"),
-    },
-  },
   server: {
     port: 3000,
   },

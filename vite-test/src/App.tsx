@@ -16,6 +16,7 @@ import type {
   ExpansionRule,
   ExpansionFetcher,
 } from "@ra-sdk/knowledge-graph/expansion/expansion-service"
+import { NodeTooltip } from "./NodeTooltip"
 import { RuleMenu } from "./RuleMenu"
 
 // ─── 从 init API 获取规则并注册 ──────────────────────
@@ -154,9 +155,7 @@ const menuItemStyle: React.CSSProperties = {
 // ──────────────────────────────────────────────────────
 
 export default function App() {
-  console.log("[App] Component rendered")
   const containerRef = useRef<HTMLDivElement>(null)
-  const tooltipRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<GraphView | null>(null)
   const [view, setView] = useState<GraphView | null>(null)
   const [loading, setLoading] = useState(true)
@@ -164,7 +163,7 @@ export default function App() {
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
   const hoveredNodeRef = useRef<GraphNode | null>(null)
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  const mousePosRef = useRef({ x: 0, y: 0 })
   const [contextMenu, setContextMenu] = useState<{
     node: GraphNode
     x: number
@@ -180,10 +179,6 @@ export default function App() {
   const [nodeCount, setNodeCount] = useState(0)
 
   hoveredNodeRef.current = hoveredNode
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    setMousePos({ x: e.clientX, y: e.clientY })
-  }, [])
 
   // Close menus on outside click
   useEffect(() => {
@@ -295,8 +290,6 @@ export default function App() {
           if (node) handlePlusClick(node.id)
         })
 
-        container.addEventListener("mousemove", handleMouseMove)
-
         const handleContextMenu = (e: MouseEvent) => {
           e.preventDefault()
           const node = hoveredNodeRef.current
@@ -317,7 +310,6 @@ export default function App() {
         setLoading(false)
 
         return () => {
-          container.removeEventListener("mousemove", handleMouseMove)
           container.removeEventListener("contextmenu", handleContextMenu)
           graphView.destroy()
           viewRef.current = null
@@ -338,6 +330,8 @@ export default function App() {
   // ─── 处理 + 按钮点击 ──────────────────────────────
 
   const handlePlusClick = useCallback((nodeId: string) => {
+    console.log("plus click")
+
     const expansion = expansionRef.current
     if (!expansion) return
     const rules = expansion.getRules(nodeId)
@@ -490,53 +484,20 @@ export default function App() {
           position: "relative",
           overflow: "hidden",
         }}
+        onMouseMove={(e) => {
+          mousePosRef.current = { x: e.clientX, y: e.clientY }
+        }}
+        onMouseLeave={() => setHoveredNode(null)}
       >
         {/* DOM tooltip */}
         {hoveredNode && (
-          <div
-            ref={tooltipRef}
-            style={{
-              position: "fixed",
-              left: mousePos.x + 16,
-              top: mousePos.y - 10,
-              background: "#0f3460",
-              color: "#fff",
-              padding: "10px 14px",
-              borderRadius: "8px",
-              fontSize: "13px",
-              lineHeight: 1.6,
-              border: "1px solid #e94560",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-              pointerEvents: "none",
-              zIndex: 1000,
-              whiteSpace: "nowrap",
-              fontFamily: "monospace",
-            }}
-          >
-            <div
-              style={{ color: "#e94560", fontWeight: "bold", marginBottom: 4 }}
-            >
-              {hoveredNode.id}
-            </div>
-            <div>
-              <span style={{ color: "#8899aa" }}>label: </span>
-              {hoveredNode.data?.label ?? "-"}
-            </div>
-            <div>
-              <span style={{ color: "#8899aa" }}>type: </span>
-              {hoveredNode.data?.nodeType ?? "-"}
-            </div>
-            <div>
-              <span style={{ color: "#8899aa" }}>count: </span>
-              {hoveredNode.data?.count ?? 0}
-              <span style={{ color: "#8899aa" }}> / total: </span>
-              {hoveredNode.data?.total ?? 0}
-            </div>
-            <div>
-              <span style={{ color: "#8899aa" }}>rules: </span>
-              {expansionRef.current?.getRules(hoveredNode.id).length ?? 0}
-            </div>
-          </div>
+          <NodeTooltip
+            node={hoveredNode}
+            getRulesCount={(id) =>
+              expansionRef.current?.getRules(id).length ?? 0
+            }
+            pos={mousePosRef.current}
+          />
         )}
 
         {/* 规则选择菜单 */}

@@ -1,0 +1,36 @@
+{
+  "name": "@ra-sdk/knowledge-graph",
+  "sideEffects": false,
+  "version": "3.0.0-beta.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "tsc": "tsc --noEmit --pretty",
+    "create-entity": "node graph/entity/create-entity.js",
+    "dev": "cd vite-test && npm run dev",
+    "build:test": "cd vite-test && vite build"
+  },
+  "dependencies": {
+    "d3-force": "^3.0.0",
+    "lodash-es": "^4.17.21",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/d3-force": "^3.0.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
+  },
+  "peerDependencies": {
+    "react": "^18",
+    "react-dom": "^18"
+  },
+  "packageManager": "npm@11.0.0",
+  "publishConfig": {
+    "registry": "http://192.168.0.243:4873/"
+  }
+}
