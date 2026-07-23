@@ -30,7 +30,8 @@ export interface GraphEventMap<
     screenPos: { x: number; y: number }
     event: MouseEvent
   }
-  backgroundClick: void
+  backgroundClick: MouseEvent
+  backgroundRightClick: MouseEvent
   zoom: { k: number; x: number; y: number }
 
   focusChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
@@ -39,6 +40,7 @@ export interface GraphEventMap<
   rootNodesChange: { nodeIds: NodeId[] }
   nodesHoverChange: { nodeIds: NodeId[] }
   linksHoverChange: { linkIds: LinkId[] }
+  customStateChange: { dimension: string; nodeIds: NodeId[]; linkIds: LinkId[] }
 
   loadMore: GraphNode<G["NO"], G["NT"], G["NS"]>
   plusToolClick: GraphNode<G["NO"], G["NT"], G["NS"]>

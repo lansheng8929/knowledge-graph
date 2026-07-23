@@ -340,21 +340,28 @@ export class ConnGraphView<
         this.handleNodeDragEnd(node)
       })
       .onLinkClick((_link) => {
-        const link = this.model.getLinkById(String(_link.id))
+        const link = _link as GraphLink<G>
+        // const link = this.model.getLinkById(String(_link.id))
         this.handleLinkClick(link)
       })
       .onLinkRightClick((_link, event) => {
-        const link = this.model.getLinkById(String(_link.id))
+        const link = _link as GraphLink<G>
+        // const link = this.model.getLinkById(String(_link.id))
         this.handleLinkRightClick(link, event)
       })
       .onLinkHover((_link, _previousLink) => {
-        const link = this.model.getLinkById(String(_link?.id))
-        const previousLink = this.model.getLinkById(String(_previousLink?.id))
+        const link = _link as GraphLink<G>
+        const previousLink = _previousLink as GraphLink<G>
+        // const link = this.model.getLinkById(String(_link?.id))
+        // const previousLink = this.model.getLinkById(String(_previousLink?.id))
         this.handleLinkHover(link, previousLink)
       })
-      .onBackgroundClick(() => {
+      .onBackgroundClick((event) => {
         actions.selectNode(undefined)
-        this.model.events.publish("backgroundClick", undefined)
+        this.model.events.publish("backgroundClick", event)
+      })
+      .onBackgroundRightClick((event) => {
+        this.model.events.publish("backgroundRightClick", event)
       })
       .onZoom((transform) => {
         this.handleCanvasZoom(transform)
@@ -415,7 +422,6 @@ export class ConnGraphView<
       },
     )
 
-    // 捕获阶段监听 ，确保 ShadowLayer 优先于 ForceGraph 处理点击
     this.container.addEventListener(
       "pointerup",
       (event) => {
@@ -693,14 +699,18 @@ export class ConnGraphView<
     if (!node) return undefined
 
     const nodeId = node.id
+    const sm = this.model.stateManager
+
+    for (const state of sm.statePriority) {
+      if (state === "hovered" && sm.isHoveredNode(nodeId)) return "hovered"
+      if (state === "highlighted" && sm.isFocused(nodeId)) return "highlighted"
+      if (state === "selected" && sm.isSelected(nodeId)) return "selected"
+      if (state === "hidden" && sm.isHidden(nodeId)) return "hidden"
+      if (state === "root" && sm.isRootNode(nodeId)) return "root"
+      if (sm.isInDimension(nodeId, state)) return state
+    }
+
     const { stateType } = node.data || {}
-
-    if (this.model.stateManager.isHoveredNode(nodeId)) return "hovered"
-    if (this.model.stateManager.isFocused(nodeId)) return "highlighted"
-    if (this.model.stateManager.isSelected(nodeId)) return "selected"
-    if (this.model.stateManager.isHidden(nodeId)) return "hidden"
-    if (this.model.stateManager.isRootNode(nodeId)) return "root"
-
     return stateType
   }
 

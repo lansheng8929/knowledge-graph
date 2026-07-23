@@ -78,6 +78,7 @@ export interface StateConfig {
   rootNodes?: NodeId[]
   hoveredNodes?: NodeId[]
   hoveredLinks?: LinkId[]
+  [key: string]: NodeId[] | undefined
 }
 
 /**

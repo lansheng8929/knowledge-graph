@@ -4,6 +4,10 @@ import type {
   GraphViewModel,
 } from "./client/type"
 
+export function getId(prop: any): string {
+  return prop && typeof prop === "object" ? prop.id : prop
+}
+
 // 合并外部图数据到内部图数据
 export const mergeModelGraphData = <G extends GraphDataGenerics>(
   prevGraphData: GraphViewModel<G> | undefined,

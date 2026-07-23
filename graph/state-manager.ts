@@ -19,8 +19,16 @@ export type StateInfo = Required<StateConfig>
 export class StateManager<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
-  private state: StateInfo
-  private events: ConnGraphEvents<G>
+  public state: StateInfo
+  public events: ConnGraphEvents<G>
+  public customDimensionNames = new Set<string>()
+  public statePriority: string[] = [
+    "hovered",
+    "highlighted",
+    "selected",
+    "hidden",
+    "root",
+  ]
 
   constructor(events: ConnGraphEvents<G>) {
     this.events = events
@@ -532,13 +540,89 @@ export class StateManager<
     }
   }
 
+  // ============ 自定义维度 ============
+
+  /**
+   * 注册一个新的状态维度（如 "boxSelected"），直接融合到 this.state 中
+   */
+  registerDimension(name: string): void {
+    this.state[`${name}Nodes`] = []
+    this.state[`${name}Links`] = []
+    this.customDimensionNames.add(name)
+    if (!this.statePriority.includes(name)) {
+      this.statePriority.push(name)
+    }
+  }
+
+  /**
+   * 设置状态渲染优先级顺序
+   */
+  setStatePriority(priority: string[]): void {
+    this.statePriority = priority
+  }
+
+  setDimensionNodes(name: string, nodeIds: NodeId[], linkIds?: LinkId[]): void {
+    this.state[`${name}Nodes`] = [...new Set(nodeIds)]
+    this.state[`${name}Links`] = linkIds ? [...new Set(linkIds)] : []
+    this.publishDimensionChange(name)
+    this.publishMetaDataChange()
+  }
+
+  addDimensionNodes(name: string, nodeIds: NodeId[], linkIds?: LinkId[]): void {
+    const key = `${name}Nodes`
+    const linkKey = `${name}Links`
+    const curNodes = (this.state[key] ?? []) as NodeId[]
+    const curLinks = (this.state[linkKey] ?? []) as LinkId[]
+    this.state[key] = [...new Set([...curNodes, ...nodeIds])]
+    if (linkIds) {
+      this.state[linkKey] = [...new Set([...curLinks, ...linkIds])]
+    }
+    this.publishDimensionChange(name)
+    this.publishMetaDataChange()
+  }
+
+  removeDimensionNodes(name: string, nodeIds: NodeId[]): void {
+    const set = new Set(nodeIds)
+    const curNodes = (this.state[`${name}Nodes`] ?? []) as NodeId[]
+    this.state[`${name}Nodes`] = curNodes.filter((id) => !set.has(id))
+    this.publishDimensionChange(name)
+    this.publishMetaDataChange()
+  }
+
+  clearDimension(name: string): void {
+    this.state[`${name}Nodes`] = []
+    this.state[`${name}Links`] = []
+    this.publishDimensionChange(name)
+    this.publishMetaDataChange()
+  }
+
+  getDimensionNodes(name: string): NodeId[] {
+    return [...(this.state[`${name}Nodes`] ?? [])]
+  }
+
+  getDimensionLinks(name: string): LinkId[] {
+    return [...(this.state[`${name}Links`] ?? [])]
+  }
+
+  isInDimension(nodeId: NodeId, name: string): boolean {
+    return (this.state[`${name}Nodes`] ?? []).includes(nodeId)
+  }
+
+  private publishDimensionChange(name: string): void {
+    this.events.publish("customStateChange", {
+      dimension: name,
+      nodeIds: [...(this.state[`${name}Nodes`] ?? [])],
+      linkIds: [...(this.state[`${name}Links`] ?? [])],
+    })
+  }
+
   // ============ 通用方法 ============
 
   /**
    * 获取所有状态
    */
   getState(): StateInfo {
-    return {
+    const base: StateInfo = {
       focusNodes: [...this.state.focusNodes],
       focusLinks: [...this.state.focusLinks],
       selectedNodes: [...this.state.selectedNodes],
@@ -549,12 +633,20 @@ export class StateManager<
       hoveredNodes: [...this.state.hoveredNodes],
       hoveredLinks: [...this.state.hoveredLinks],
     }
+    // 合并自定义维度
+    for (const name of this.customDimensionNames) {
+      base[`${name}Nodes`] = [...(this.state[`${name}Nodes`] ?? [])]
+      base[`${name}Links`] = [...(this.state[`${name}Links`] ?? [])]
+    }
+    return base
   }
 
   /**
    * 批量更新状态
    */
-  updateState(config: StateConfig): void {
+  updateState(
+    config: StateConfig & Record<string, NodeId[] | undefined>,
+  ): void {
     let changed = false
 
     if (config.focusNodes !== undefined) {
@@ -645,6 +737,11 @@ export class StateManager<
       rootNodes: [],
       hoveredNodes: [],
       hoveredLinks: [],
+    }
+    // 重置自定义维度
+    for (const name of this.customDimensionNames) {
+      this.state[`${name}Nodes`] = []
+      this.state[`${name}Links`] = []
     }
 
     this.events.publish("focusChange", { nodeIds: [], linkIds: [] })
