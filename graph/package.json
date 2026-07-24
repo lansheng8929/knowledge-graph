@@ -1,5 +1,5 @@
 {
-  "name": "@ra-sdk/knowledge-graph",
+  "name": "@lansheng/knowledge-graph",
   "sideEffects": false,
   "version": "3.0.0-beta.1",
   "type": "module",
