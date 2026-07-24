@@ -17,8 +17,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {
-      "@ra-sdk/knowledge-graph": ["../graph/index.ts"],
-      "@ra-sdk/knowledge-graph/*": ["../graph/*"]
+      "@lansheng/knowledge-graph": ["../graph/index.ts"],
+      "@lansheng/knowledge-graph/*": ["../graph/*"]
     }
   },
   "include": ["src", "../graph"],

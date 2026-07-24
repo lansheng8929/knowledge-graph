@@ -2,8 +2,8 @@
  * RuleMenu — 右键菜单，展示节点的可用拓出规则
  */
 
-import type { GraphNode } from "@ra-sdk/knowledge-graph/client/type"
-import type { ExpansionRule } from "@ra-sdk/knowledge-graph/expansion/expansion-service"
+import type { GraphNode } from "@lansheng/knowledge-graph/client/type"
+import type { ExpansionRule } from "@lansheng/knowledge-graph/expansion/expansion-service"
 
 interface RuleMenuProps {
   node: GraphNode

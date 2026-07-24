@@ -4,18 +4,18 @@ import {
   GraphView,
   type Layout,
   ExpansionService,
-} from "@ra-sdk/knowledge-graph"
-import { MetadataManager } from "@ra-sdk/knowledge-graph/meta-manager"
-import { HistoryManager } from "@ra-sdk/knowledge-graph/history-manager"
+} from "@lansheng/knowledge-graph"
+import { MetadataManager } from "@lansheng/knowledge-graph/meta-manager"
+import { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
 import type {
   GraphNode,
   GraphViewModel,
   DefaultGraphDataGenerics,
-} from "@ra-sdk/knowledge-graph/client/type"
+} from "@lansheng/knowledge-graph/client/type"
 import type {
   ExpansionRule,
   ExpansionFetcher,
-} from "@ra-sdk/knowledge-graph/expansion/expansion-service"
+} from "@lansheng/knowledge-graph/expansion/expansion-service"
 import { NodeTooltip } from "./NodeTooltip"
 import { RuleMenu } from "./RuleMenu"
 

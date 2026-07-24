@@ -1,4 +1,4 @@
-import type { GraphNode } from "@ra-sdk/knowledge-graph/client/type"
+import type { GraphNode } from "@lansheng/knowledge-graph/client/type"
 
 interface NodeTooltipProps {
   node: GraphNode
