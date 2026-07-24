@@ -13,8 +13,6 @@ export function NodeTooltip({ node, getRulesCount, pos }: NodeTooltipProps) {
         position: "fixed",
         left: pos.x + 16,
         top: pos.y - 10,
-        background: "#0f3460",
-        color: "#fff",
         padding: "10px 14px",
         borderRadius: "8px",
         fontSize: "13px",
@@ -25,6 +23,7 @@ export function NodeTooltip({ node, getRulesCount, pos }: NodeTooltipProps) {
         zIndex: 1000,
         whiteSpace: "nowrap",
         fontFamily: "monospace",
+        background: "#fff",
       }}
     >
       <div style={{ color: "#e94560", fontWeight: "bold", marginBottom: 4 }}>

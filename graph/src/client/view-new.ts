@@ -27,6 +27,9 @@ import type {
 import type { GraphEvents } from "../events.js"
 import type { NodeId, LinkId } from "../type.js"
 import type { StyleManager } from "../style-manager.js"
+import type { RenderPlugin } from "../renderer/render-plugin.js"
+import { getNodeStyleByStateType, getLinkStyleByStateType } from "../theme.js"
+import type { NodeRenderPipeline } from "../renderer/node-pipeline.js"
 import type { RenderNode, RenderLink } from "../renderer/types.js"
 
 export interface GraphViewOptions<
@@ -57,6 +60,16 @@ export interface GraphViewOptions<
   /** Plus 徽标边框颜色（默认红色） */
   plusBadgeBorderColor?: [number, number, number, number]
 
+  /**
+   * 自定义渲染插件。
+   * 完全替换默认的节点/边/文字/覆盖层渲染。
+   * 不传则使用 DefaultRenderPlugin。
+   */
+  renderPlugin?: (
+    gl: WebGL2RenderingContext,
+    canvas: HTMLCanvasElement,
+  ) => RenderPlugin
+
   /** Custom node-to-render mapping */
   mapNode?: (
     node: GraphNode<G["NO"], G["NT"], G["NS"]>,
@@ -64,6 +77,18 @@ export interface GraphViewOptions<
   ) => RenderNode | null
   /** Custom link-to-render mapping */
   mapLink?: (link: GraphLink<G>, index: number) => RenderLink | null
+}
+
+/** Parse a hex color string (#RGB, #RRGGBB, #RGBA, #RRGGBBAA) to [r, g, b, a] floats */
+function parseHexColor(hex: string): [number, number, number, number] {
+  let h = hex.replace("#", "")
+  if (h.length === 3) h = h.replace(/(.)/g, "$1$1")
+  if (h.length === 4) h = h.replace(/(.)/g, "$1$1")
+  const r = parseInt(h.slice(0, 2), 16) / 255
+  const g = parseInt(h.slice(2, 4), 16) / 255
+  const b = parseInt(h.slice(4, 6), 16) / 255
+  const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1
+  return [r, g, b, a]
 }
 
 export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
@@ -89,12 +114,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.events = this.model.events
     this.styleManager = this.model.styleManager
 
-    // Initialize style (must be called before defaultMapNode/defaultMapLink)
-    this.styleManager.init({
-      container: this.container,
-    })
-
-    // Initialize renderer proxy
+    // Initialize renderer proxy (must be before style init, plugin provides default styles)
     this.renderer = new GraphRenderer({
       container: this.container,
       width: opts.width,
@@ -103,9 +123,13 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       showArrows: opts.arrowDisplay,
       pickerMode: opts.pickerMode,
       labelFontSize: opts.labelFontSize,
+      renderPlugin: opts.renderPlugin,
       plusBadgeBorderWidth: opts.plusBadgeBorderWidth,
       plusBadgeBorderColor: opts.plusBadgeBorderColor,
     })
+
+    // Initialize style from plugin defaults
+    this.styleManager.init(this.renderer.plugin.getDefaultStyle() as any)
 
     // Initialize layout: use custom layout or default to d3-force
     this.layout = opts.layout ?? new ForceSimulation(opts.forceConfig)
@@ -200,18 +224,23 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     if (this.hoveredNodeId && this.hoveredNodeId !== nodeId) {
       const prev = renderNodes.find((n) => n.id === this.hoveredNodeId)
       if (prev) {
-        // 恢复默认外观（保持半径不变，清除发光描边）
-        prev.color = [1.0, 1.0, 1.0, 1.0]
-        prev.strokeColor = [1.0, 1.0, 1.0, 1.0]
-        prev.strokeWidth = 0
+        const nodeStyle = this.styleManager.getNodeStyle(this.hoveredNodeId)
+        const s = getNodeStyleByStateType(nodeStyle, "regular" as G["NS"])
+        const c = parseHexColor(s.bgColor!)
+        prev.color = [c[0], c[1], c[2], s.opacity!]
+        prev.strokeColor = parseHexColor(s.strokeColor!)
+        prev.strokeWidth = s.strokeWidth!
       }
     }
 
     if (!nodeId) {
-      // 恢复所有关联边
+      // 恢复所有关联边到默认样式
       for (const rl of renderLinks) {
-        rl.color = [0.6, 0.6, 0.6, 0.7]
-        rl.width = 1.5
+        const ls = this.styleManager.getLinkStyle(rl.id)
+        const lr = getLinkStyleByStateType(ls, "regular" as G["LS"])
+        const lc = parseHexColor(lr.color ?? "#9ca3af")
+        rl.color = [lc[0], lc[1], lc[2], lr.opacity ?? 0.7]
+        rl.width = lr.strokeWidth ?? 0.8
       }
       this.hoveredNodeId = null
       return
@@ -220,11 +249,12 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     // 高亮当前悬浮节点（边缘发光效果）
     const curr = renderNodes.find((n) => n.id === nodeId)
     if (curr) {
-      // 保持原有大小，添加发光描边
-      curr.strokeColor = [1.0, 0.6, 0.2, 1.0] // 橙色发光
-      curr.strokeWidth = 3
-      // 略微提高节点亮度
-      curr.color = [1.0, 0.85, 0.7, 1.0]
+      const ns = this.styleManager.getNodeStyle(nodeId)
+      const nh = getNodeStyleByStateType(ns, "hovered" as G["NS"])
+      const nc = parseHexColor(nh.bgColor ?? "#fff")
+      curr.color = [nc[0], nc[1], nc[2], nh.opacity ?? 1]
+      curr.strokeColor = parseHexColor(nh.strokeColor ?? "#00ccff")
+      curr.strokeWidth = nh.strokeWidth ?? 2
     }
 
     // 通过 model 数据找到关联边的 ID
@@ -240,11 +270,17 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
     for (const rl of renderLinks) {
       if (relatedLinkIds.has(rl.id)) {
-        rl.color = [1.0, 0.6, 0.2, 0.9]
-        rl.width = 2.5
+        const ls = this.styleManager.getLinkStyle(rl.id)
+        const lh = getLinkStyleByStateType(ls, "hovered" as G["LS"])
+        const lhc = parseHexColor(lh.color ?? "#00ccff")
+        rl.color = [lhc[0], lhc[1], lhc[2], lh.opacity ?? 1]
+        rl.width = lh.strokeWidth ?? 1.5
       } else {
-        rl.color = [0.6, 0.6, 0.6, 0.7]
-        rl.width = 1.5
+        const ls = this.styleManager.getLinkStyle(rl.id)
+        const lr = getLinkStyleByStateType(ls, "regular" as G["LS"])
+        const lrc = parseHexColor(lr.color ?? "#9ca3af")
+        rl.color = [lrc[0], lrc[1], lrc[2], lr.opacity ?? 0.7]
+        rl.width = lr.strokeWidth ?? 0.8
       }
     }
 
@@ -329,21 +365,29 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     })
   }
 
-  // ========== Default mappers ==========
-
   private defaultMapNode(
     gn: GraphNode<G["NO"], G["NT"], G["NS"]>,
     _index: number,
   ): RenderNode {
+    const nodeStyle = this.styleManager.getNodeStyle(gn.id)
+    const s = getNodeStyleByStateType(nodeStyle, "regular" as G["NS"])
+    const _c = parseHexColor(s.bgColor!)
+    const bgR = _c[0],
+      bgG = _c[1],
+      bgB = _c[2]
+
+    const _tc = parseHexColor(s.textColor!)
     return {
       x: gn.x ?? 0,
       y: gn.y ?? 0,
-      radius: 8,
-      color: [1.0, 1.0, 1.0, 1.0],
-      strokeColor: [1.0, 1.0, 1.0, 1.0],
-      strokeWidth: 0,
+      radius: s.radius!,
+      color: [bgR, bgG, bgB, s.opacity!],
+      strokeColor: parseHexColor(s.strokeColor!),
+      strokeWidth: s.strokeWidth!,
       id: gn.id,
       label: gn.data?.label,
+      textColor: [_tc[0], _tc[1], _tc[2], 1.0],
+      fontSize: s.fontSize,
     }
   }
 
@@ -354,13 +398,26 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     const sourceNode = this.nodeMap.get(String(sourceId))
     const targetNode = this.nodeMap.get(String(targetId))
 
+    const linkStyle = this.styleManager.getLinkStyle(gl.id)
+    const s = getLinkStyleByStateType(linkStyle, "regular" as G["LS"])
+    const _c = parseHexColor(s.color ?? "#9ca3af")
+
+    const snStyle = this.styleManager.getNodeStyle(sourceId as any)
+    const tnStyle = this.styleManager.getNodeStyle(targetId as any)
+    const sn = getNodeStyleByStateType(snStyle, "regular" as G["NS"])
+    const tn = getNodeStyleByStateType(tnStyle, "regular" as G["NS"])
+
     return {
       sourceX: sourceNode?.x ?? 0,
       sourceY: sourceNode?.y ?? 0,
       targetX: targetNode?.x ?? 0,
       targetY: targetNode?.y ?? 0,
-      color: [0.6, 0.6, 0.6, 0.7],
-      width: 1.5,
+      color: [_c[0], _c[1], _c[2], s.opacity ?? 0.7],
+      width: s.strokeWidth ?? 0.8,
+      sourceRadius: sn.radius ?? 4,
+      targetRadius: tn.radius ?? 4,
+      sourceId: String(sourceId),
+      targetId: String(targetId),
       id: gl.id,
       label: gl.data?.label,
     }

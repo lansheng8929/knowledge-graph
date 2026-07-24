@@ -11,7 +11,7 @@
 
 import type { Picker, PickHit } from "./picker.js"
 import type { RenderNode, RenderLink } from "./types.js"
-import type { NodeBatchRenderer } from "./node-batch.js"
+import type { NodeRenderPipeline } from "./node-pipeline.js"
 import type { LinkBatchRenderer } from "./link-batch.js"
 
 /** RGBA → 24-bit 索引 */
@@ -28,7 +28,7 @@ function decodePickColor(r: number, g: number, b: number): number {
  */
 export interface WebGLPickerOptions {
   gl: WebGL2RenderingContext
-  nodeRenderer: NodeBatchRenderer
+  nodeRenderer: NodeRenderPipeline
   linkRenderer?: LinkBatchRenderer
   width: number
   height: number
@@ -36,7 +36,7 @@ export interface WebGLPickerOptions {
 
 export class WebGLPicker implements Picker {
   private gl: WebGL2RenderingContext
-  private nodeRenderer: NodeBatchRenderer
+  private nodeRenderer: NodeRenderPipeline
   private linkRenderer?: LinkBatchRenderer
 
   private pickFbo: WebGLFramebuffer | null = null

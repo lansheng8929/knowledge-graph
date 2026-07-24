@@ -31,6 +31,10 @@ export interface RenderNode {
   strokeWidth: number
   id: string
   label?: string
+  /** Label text color (RGBA) */
+  textColor?: [number, number, number, number]
+  /** Label font size (px), defaults to atlas font size */
+  fontSize?: number
   iconUrl?: string
   /** Node shape (default: "circle") */
   shape?: NodeShape
@@ -61,6 +65,14 @@ export interface RenderLink {
   width: number
   id: string
   label?: string
+  /** 源头节点 ID（用于弧线分组） */
+  sourceId?: string
+  /** 目标节点 ID */
+  targetId?: string
+  /** Source node radius for endpoint offset */
+  sourceRadius?: number
+  /** Target node radius for endpoint offset */
+  targetRadius?: number
 }
 
 export interface RenderData {

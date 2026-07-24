@@ -1,17 +1,18 @@
 /**
- * TextLabelRenderer — renders text labels as textured quads using WebGL2
+ * TextLabelRenderer — 逐字符 instanced SDF 文字渲染。
  */
-
 import { TEXT_VS, TEXT_FS } from "./shaders.js"
 import { TextureAtlas, type AtlasGlyph } from "./atlas.js"
-import type { RenderNode, RenderLink } from "./types.js"
+import type { RenderNode } from "./types.js"
 
-export interface LabelInfo {
-  /** Screen position */
+/** 单个字符的渲染数据 */
+export interface CharInfo {
   x: number
   y: number
-  text: string
+  char: string
   color: [number, number, number, number]
+  /** 相对于图集字号的缩放倍数 */
+  scale: number
 }
 
 export class TextLabelRenderer {
@@ -19,6 +20,9 @@ export class TextLabelRenderer {
   private program: WebGLProgram
   private atlas: TextureAtlas
   private quadVao: WebGLVertexArrayObject | null = null
+  private fontSize: number
+  /** 字符间距（世界像素），按图集字号计算 */
+  private letterSpacing: number
 
   private uResolution: WebGLUniformLocation | null = null
   private uTranslation: WebGLUniformLocation | null = null
@@ -26,10 +30,16 @@ export class TextLabelRenderer {
   private uZOffset: WebGLUniformLocation | null = null
   private uTexture: WebGLUniformLocation | null = null
 
-  constructor(gl: WebGL2RenderingContext, atlasSize = 2048, fontSize = 12) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    atlasSize = 2048,
+    fontSize = 48,
+    letterSpacingRatio = 0.0,
+  ) {
     this.gl = gl
+    this.fontSize = fontSize
+    this.letterSpacing = Math.round(fontSize * letterSpacingRatio)
     this.atlas = new TextureAtlas(atlasSize, fontSize)
-
     this.program = this.compile(TEXT_VS, TEXT_FS)
     this.initGeometry()
     this.cacheUniforms()
@@ -65,48 +75,63 @@ export class TextLabelRenderer {
 
   private initGeometry(): void {
     const gl = this.gl
-    // Unit quad: a_position in (0..1)
     const positions = new Float32Array([0, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1])
-
     const vao = gl.createVertexArray()!
     gl.bindVertexArray(vao)
-
-    const posBuf = gl.createBuffer()!
-    gl.bindBuffer(gl.ARRAY_BUFFER, posBuf)
+    const buf = gl.createBuffer()!
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
-
     gl.bindVertexArray(null)
     this.quadVao = vao
   }
 
-  /** Build labels from node data */
+  /** 将节点标签展开为逐字符 quads */
   buildNodeLabels(
     nodes: RenderNode[],
     scale: number,
     minScale: number,
-  ): LabelInfo[] {
-    const labels: LabelInfo[] = []
-    if (scale < minScale) return labels
+  ): CharInfo[] {
+    const chars: CharInfo[] = []
+    if (scale < minScale) return chars
 
     for (const n of nodes) {
       if (!n.label) continue
-      const glyph = this.atlas.getOrCreate(n.label)
-      if (!glyph) continue
-      labels.push({
-        x: n.x,
-        y: n.y + n.radius + 6 / scale,
-        text: n.label,
-        color: [1.0, 1.0, 1.0, 1.0], // white for readability
-      })
+      const tc = n.textColor ?? [1.0, 1.0, 1.0, 1.0]
+      const fs = (n.fontSize ?? this.fontSize) / this.fontSize
+      const charScale = scale
+      let cx = n.x - this.measureWidth(n.label, fs) / (2 * charScale)
+      const cy = n.y + n.radius + 12 / scale
+      for (const ch of n.label) {
+        const glyph = this.atlas.getOrCreate(ch)
+        if (!glyph) continue
+        chars.push({
+          x: cx + (glyph.advance * fs) / (2 * charScale),
+          y: cy,
+          char: ch,
+          color: tc,
+          scale: fs,
+        })
+        cx += ((glyph.advance + this.letterSpacing) * fs) / charScale
+      }
     }
-    return labels
+    return chars
   }
 
-  /** Render labels — instanced with per-glyph UVs */
+  /** 估算标签世界宽度（乘以 fontSize 缩放 + 间距） */
+  private measureWidth(text: string, scale: number): number {
+    let w = 0
+    for (const ch of text) {
+      const g = this.atlas.getOrCreate(ch)
+      if (g) w += (g.advance + this.letterSpacing) * scale
+    }
+    return w
+  }
+
+  /** instanced 逐字符渲染 */
   render(
-    labels: LabelInfo[],
+    chars: CharInfo[],
     width: number,
     height: number,
     tx: number,
@@ -114,8 +139,8 @@ export class TextLabelRenderer {
     scale: number,
     zOffset = 0,
   ): void {
-    if (labels.length === 0) return
-
+    const N = chars.length
+    if (N === 0) return
     const gl = this.gl
     const texture = this.atlas.getTexture(gl)
 
@@ -125,13 +150,10 @@ export class TextLabelRenderer {
     gl.uniform1f(this.uScale, scale)
     gl.uniform1f(this.uZOffset, zOffset)
     gl.uniform1i(this.uTexture, 0)
-
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, texture)
-
     gl.bindVertexArray(this.quadVao)
 
-    const N = labels.length
     const centerData = new Float32Array(N * 2)
     const sizeData = new Float32Array(N * 2)
     const colorData = new Float32Array(N * 4)
@@ -139,15 +161,14 @@ export class TextLabelRenderer {
     const uvSizeData = new Float32Array(N * 2)
 
     for (let i = 0; i < N; i++) {
-      const l = labels[i]
-      const glyph = this.atlas.getOrCreate(l.text)
+      const c = chars[i]
+      const glyph = this.atlas.getOrCreate(c.char)
       if (!glyph) continue
-
-      centerData[i * 2] = l.x
-      centerData[i * 2 + 1] = l.y
-      sizeData[i * 2] = glyph.pw / scale
-      sizeData[i * 2 + 1] = glyph.ph / scale
-      colorData.set(l.color, i * 4)
+      centerData[i * 2] = c.x
+      centerData[i * 2 + 1] = c.y
+      sizeData[i * 2] = (glyph.pw * c.scale) / scale
+      sizeData[i * 2 + 1] = (glyph.ph * c.scale) / scale
+      colorData.set(c.color, i * 4)
       uvOriginData[i * 2] = glyph.uv[0]
       uvOriginData[i * 2 + 1] = glyph.uv[1]
       uvSizeData[i * 2] = glyph.uv[2] - glyph.uv[0]
@@ -179,11 +200,13 @@ export class TextLabelRenderer {
     gl.vertexAttribDivisor(loc, 1)
   }
 
-  /** Pre-register all labels to build atlas */
+  /** 预注册所有字符到图集（逐字符拆分） */
   preRegister(texts: string[]): void {
+    const chars = new Set<string>()
     for (const t of texts) {
-      if (t) this.atlas.getOrCreate(t)
+      for (const c of t) chars.add(c)
     }
+    for (const c of chars) this.atlas.getOrCreate(c)
   }
 
   destroy(): void {

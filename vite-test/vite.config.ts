@@ -2,6 +2,9 @@ import { defineConfig } from "vite"
 import react from "@vitejs/plugin-react"
 import path from "path"
 import fs from "fs"
+import { createRequire } from "node:module"
+
+const projectRequire = createRequire(path.resolve(__dirname, "package.json"))
 
 // ─── Mock API Server ─────────────────────────────────
 
@@ -207,6 +210,19 @@ function executeExpand(req: {
 }
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@lansheng/knowledge-graph": path.resolve(__dirname, "../graph/src"),
+    },
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      loader: {
+        ".frag": "text",
+        ".vert": "text",
+      },
+    },
+  },
   plugins: [
     react(),
     {
@@ -214,11 +230,8 @@ export default defineConfig({
       configureServer(server) {
         // GET /api/graph/init — 返回初始种子数据
         server.middlewares.use("/api/graph/init", (_req, res) => {
-          const seedIds = ["person-1", "person-2", "person-6"]
-          const seedNodes = seedIds
-            .map((id) => getNodes().find((n) => n.id === id)!)
-            .filter(Boolean)
-          const nodes = seedNodes.map((raw) => {
+          // 全量加载（测试用）
+          const nodes = getNodes().map((raw) => {
             const rules = getRulesForNodeType(raw.nodeType)
             return {
               ...toGraphNode(raw),
@@ -229,10 +242,7 @@ export default defineConfig({
               },
             }
           })
-          const nodeIdSet = new Set(seedIds)
-          const links = getLinks()
-            .filter((l) => nodeIdSet.has(l.source) && nodeIdSet.has(l.target))
-            .map(toGraphLink)
+          const links = getLinks().map(toGraphLink)
 
           const rulesMap: Record<string, unknown[]> = {}
           for (const node of nodes) {

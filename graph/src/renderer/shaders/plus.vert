@@ -17,7 +17,9 @@ out float v_radius;
 flat out float v_nodeId;
 
 void main() {
-  float halfSize = a_radius + u_borderWidth;
+  // padding 为抗锯齿过渡留出约 3 像素的余量，防止边框边缘被 quad 裁切
+  float padding = 3.0 / max(u_scale, 0.001);
+  float halfSize = a_radius + u_borderWidth + padding;
   vec2 screenPos = (a_center + u_translation) * u_scale + a_position * halfSize * u_scale;
   vec2 clipSpace = (screenPos / u_resolution) * 2.0 - 1.0;
   clipSpace.y = -clipSpace.y;

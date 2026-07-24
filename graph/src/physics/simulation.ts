@@ -19,7 +19,7 @@ import {
   type Simulation,
   type SimulationNodeDatum,
   type SimulationLinkDatum,
-} from "d3-force"
+} from "../vendor/d3-force/src/index.js"
 import type { Layout } from "./layout.js"
 
 export interface SimNode extends SimulationNodeDatum {

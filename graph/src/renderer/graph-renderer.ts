@@ -11,6 +11,7 @@ import {
   type ViewTransform,
 } from "./interaction-manager.js"
 import type { Picker } from "./picker.js"
+import type { RenderPlugin } from "./render-plugin.js"
 import type { RenderNode, RenderLink } from "./types.js"
 
 export interface GraphRendererOptions {
@@ -23,6 +24,11 @@ export interface GraphRendererOptions {
   labelFontSize?: number
   /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
   pickerMode?: "gpu" | "cpu"
+  /** 自定义渲染插件 */
+  renderPlugin?: (
+    gl: WebGL2RenderingContext,
+    canvas: HTMLCanvasElement,
+  ) => RenderPlugin
   /** Plus 徽标边框宽度（世界坐标单位，默认 0） */
   plusBadgeBorderWidth?: number
   /** Plus 徽标边框颜色（默认红色） */
@@ -60,7 +66,7 @@ export class GraphRenderer {
 
   /** 当前绑定的拾取器 */
   get picker(): Picker {
-    return this.backend.picker
+    return this.backend.plugin
   }
 
   /** 渲染器内部节点数据 */
@@ -71,6 +77,11 @@ export class GraphRenderer {
   /** 渲染器内部边数据 */
   get links(): RenderLink[] {
     return this.backend.links
+  }
+
+  /** 获取当前渲染插件 */
+  get plugin(): RenderPlugin {
+    return this.backend.plugin
   }
 
   // ========== 回调桥接 ==========
@@ -94,6 +105,7 @@ export class GraphRenderer {
       labelMinScale: opts.labelMinScale,
       labelFontSize: opts.labelFontSize,
       pickerMode: opts.pickerMode,
+      renderPlugin: opts.renderPlugin,
       plusBadgeBorderWidth: opts.plusBadgeBorderWidth,
       plusBadgeBorderColor: opts.plusBadgeBorderColor,
     })

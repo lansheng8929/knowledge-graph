@@ -37,25 +37,21 @@ float shapeSDF(vec2 p, float radius, float type, float param) {
 
 // ---- Main ----
 void main() {
-  float outerRadius = v_radius + v_strokeWidth;
-  float d = shapeSDF(v_localPos, outerRadius, v_shapeType, v_shapeParam);
-  float innerD = shapeSDF(v_localPos, v_radius, v_shapeType, v_shapeParam);
+  // SDF for fill circle (inner edge)
+  float fillD = shapeSDF(v_localPos, v_radius, v_shapeType, v_shapeParam);
+  // SDF for stroke circle (outer edge)
+  float strokeD = shapeSDF(v_localPos, v_radius + v_strokeWidth, v_shapeType, v_shapeParam);
 
-  // 屏幕空间抗锯齿：使用 fwidth 让过渡宽度约为 1 像素
-  float aa = fwidth(d) * 0.8;
-  float outerAlpha = 1.0 - smoothstep(-aa, aa, d);
-  float fillAlpha = 1.0 - smoothstep(-aa, aa, innerD);
-  float strokeAlpha = smoothstep(-aa, aa, innerD) * (1.0 - smoothstep(-aa, aa, d));
+  float aa = fwidth(strokeD) * 0.8;
 
-  vec4 color = v_color;
-  color.a *= fillAlpha;
+  // Alpha for the entire node (fill + stroke)
+  float strokeAlpha = 1.0 - smoothstep(-aa, aa, strokeD);
+  // Alpha for the fill area (inside stroke ring)
+  float fillAlpha = 1.0 - smoothstep(-aa, aa, fillD);
 
-  vec4 stroke = v_strokeColor;
-  stroke.a *= strokeAlpha;
-
-  fragColor = stroke + color * (1.0 - stroke.a);
-  fragColor.a = max(fillAlpha * v_color.a, strokeAlpha * v_strokeColor.a);
-  fragColor.a *= outerAlpha;
+  // Stroke color in the ring, fill color inside
+  fragColor = mix(v_strokeColor, v_color, fillAlpha);
+  fragColor.a *= strokeAlpha;
 
   // Draw plus badge at configurable position (inside a white circle)
   if (v_showPlus > 0.5) {

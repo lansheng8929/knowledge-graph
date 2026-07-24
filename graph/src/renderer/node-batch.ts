@@ -5,13 +5,15 @@
  */
 
 import { NODE_VS, NODE_FS, PICK_NODE_VS, PICK_NODE_FS } from "./shaders.js"
+import type { NodeRenderPipeline } from "./node-pipeline.js"
+import type { RenderNode } from "./types.js"
 
 /** Shape type → float for shader uniform (always circle) */
 export function shapeToType(_shape?: string): number {
   return 0
 }
 
-/** Node interface accepted by the batch renderer */
+/** @deprecated 使用 RenderNode 替代 */
 export interface BatchNode {
   x: number
   y: number
@@ -23,7 +25,7 @@ export interface BatchNode {
   shapeParam?: number
 }
 
-export class NodeBatchRenderer {
+export class NodeBatchRenderer implements NodeRenderPipeline {
   private gl: WebGL2RenderingContext
   private program: WebGLProgram
   private pickProgram: WebGLProgram
@@ -116,7 +118,7 @@ export class NodeBatchRenderer {
 
   /** Render all nodes in one instanced draw call */
   render(
-    nodes: BatchNode[],
+    nodes: RenderNode[],
     width: number,
     height: number,
     tx: number,
@@ -193,7 +195,7 @@ export class NodeBatchRenderer {
 
   /** Batch-render all nodes for FBO picking (single draw call, gl_InstanceID encodes index) */
   renderPicking(
-    nodes: BatchNode[],
+    nodes: RenderNode[],
     width: number,
     height: number,
     tx: number,

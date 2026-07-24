@@ -1,24 +1,22 @@
 /**
- * WebGLRenderer — WebGL 图渲染器。
+ * WebGLRenderer — WebGL 图渲染器（轻量化）。
  *
- * 职责：WebGL 绘制节点、边、文字标签。
- * 相机由 Camera 类管理，交互委托给 InteractionManager + WebGLPicker。
+ * 核心职责：Canvas 管理、WebGL 上下文、渲染循环、交互。
+ * 具体绘制全部委托给 RenderPlugin。
  */
-
 import { Camera } from "./camera.js"
-import { NodeBatchRenderer } from "./node-batch.js"
-import { LinkBatchRenderer } from "./link-batch.js"
-import { TextLabelRenderer, type LabelInfo } from "./text-label.js"
-import { WebGLPicker } from "./webgl-picker.js"
-import { CpuPicker } from "./cpu-picker.js"
 import {
   InteractionManager,
   type ViewTransform,
   type InteractionCallbacks,
 } from "./interaction-manager.js"
-import { PlusBadgeLayer, type BadgeData } from "./plus-badge-layer.js"
-import type { Picker } from "./picker.js"
+import { DefaultRenderPlugin } from "./default-render-plugin.js"
+import type { RenderPlugin } from "./render-plugin.js"
+import type { PickHit } from "./picker.js"
 import type { RenderNode, RenderLink } from "./types.js"
+
+// Re-export for backward compatibility
+export { PlusBadgeLayer, type BadgeData } from "./plus-badge-layer.js"
 
 export interface WebGLRendererOptions {
   container: HTMLElement
@@ -32,13 +30,17 @@ export interface WebGLRendererOptions {
   labelFontSize?: number
   /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
   pickerMode?: "gpu" | "cpu"
+  /** 自定义渲染插件（不传则使用 DefaultRenderPlugin） */
+  renderPlugin?: (
+    gl: WebGL2RenderingContext,
+    canvas: HTMLCanvasElement,
+  ) => RenderPlugin
   /** Plus 徽标边框宽度（世界坐标单位，默认 0） */
   plusBadgeBorderWidth?: number
   /** Plus 徽标边框颜色（默认红色） */
   plusBadgeBorderColor?: [number, number, number, number]
 }
 
-/** Color-coded ID for picking: encodes an index into RGBA */
 export function encodePickColor(
   index: number,
 ): [number, number, number, number] {
@@ -50,7 +52,6 @@ export function encodePickColor(
   ]
 }
 
-/** Decode a pick color back to index */
 export function decodePickColor(r: number, g: number, b: number): number {
   return (
     (Math.round(r * 255) << 16) |
@@ -62,32 +63,24 @@ export function decodePickColor(r: number, g: number, b: number): number {
 export class WebGLRenderer {
   readonly container: HTMLElement
   readonly canvas: HTMLCanvasElement
+  readonly plugin: RenderPlugin
   readonly interaction: InteractionManager
-  readonly picker: Picker
-  readonly pickerMode: "gpu" | "cpu"
-  readonly plusBadgeLayer: PlusBadgeLayer
 
   private gl: WebGL2RenderingContext
   private camera = new Camera()
-  private nodeRenderer: NodeBatchRenderer
-  private linkRenderer: LinkBatchRenderer
-  private labelRenderer: TextLabelRenderer
 
-  // Current data
   nodes: RenderNode[] = []
   links: RenderLink[] = []
-  private labels: LabelInfo[] = []
 
-  // Options
-  private bgColor: [number, number, number, number] = [0.1, 0.1, 0.12, 1]
+  private bgColor!: [number, number, number, number]
   private showArrows = false
-  private labelMinScale = 0.2
+  private labelMinScale = 0.5
   private width: number
   private height: number
   private _destroyed = false
   private _rafId = 0
 
-  // 公开回调（桥接到 InteractionManager 和 PlusBadgeLayer）
+  // 回调
   onNodeClick?: (nodeId: string | null, event: MouseEvent) => void
   onNodeHover?: (nodeId: string | null) => void
   onNodeDrag?: (nodeId: string, x: number, y: number) => void
@@ -95,7 +88,6 @@ export class WebGLRenderer {
   onLinkClick?: (linkId: string | null, event: MouseEvent) => void
   onBackgroundClick?: (event: MouseEvent) => void
   onZoom?: (transform: ViewTransform) => void
-  /** Plus 徽标点击回调（独立于 onNodeClick） */
   onPlusClick?: (nodeId: string) => void
 
   constructor(opts: WebGLRendererOptions) {
@@ -118,7 +110,6 @@ export class WebGLRenderer {
     // WebGL2
     const gl = this.canvas.getContext("webgl2", {
       antialias: true,
-      alpha: true,
       premultipliedAlpha: false,
     })
     if (!gl) throw new Error("WebGL2 not supported")
@@ -128,6 +119,7 @@ export class WebGLRenderer {
     gl.enable(gl.DEPTH_TEST)
     gl.depthFunc(gl.LEQUAL)
 
+    // Background
     if (opts.backgroundColor) {
       const hex = opts.backgroundColor
       this.bgColor = [
@@ -136,48 +128,37 @@ export class WebGLRenderer {
         parseInt(hex.slice(5, 7), 16) / 255,
         1.0,
       ]
+    } else {
+      this.bgColor = [1, 1, 1, 1]
     }
 
     this.showArrows = opts.showArrows ?? false
     this.labelMinScale = opts.labelMinScale ?? 0.5
 
-    this.nodeRenderer = new NodeBatchRenderer(gl)
-    this.linkRenderer = new LinkBatchRenderer(gl)
-    this.labelRenderer = new TextLabelRenderer(gl, 2048, opts.labelFontSize)
-
-    // 拾取器（可切换 GPU/FBO 或 CPU/SDF 模式）
-    this.pickerMode = opts.pickerMode ?? "gpu"
-    if (this.pickerMode === "cpu") {
-      this.picker = new CpuPicker()
+    // 渲染插件
+    if (opts.renderPlugin) {
+      this.plugin = opts.renderPlugin(gl, this.canvas)
     } else {
-      this.picker = new WebGLPicker({
+      this.plugin = new DefaultRenderPlugin({
         gl,
-        nodeRenderer: this.nodeRenderer,
-        linkRenderer: this.linkRenderer,
+        canvas: this.canvas,
         width: this.width,
         height: this.height,
+        pickerMode: opts.pickerMode,
+        labelFontSize: opts.labelFontSize,
+        plusBadgeBorderWidth: opts.plusBadgeBorderWidth,
+        plusBadgeBorderColor: opts.plusBadgeBorderColor,
+        onPlusClick: (nodeId) => this.onPlusClick?.(nodeId),
       })
     }
 
-    // 交互管理器
+    // 交互管理器（插件即 Picker）
     this.interaction = new InteractionManager(
       this.canvas,
-      this.picker,
+      this.plugin,
       this.makeCallbacks(),
     )
-    // 保持相机同步
     this.interaction.transform = this.camera.state as ViewTransform
-
-    // PlusBadgeLayer — 独立的工具交互层（capture phase 拦截事件）
-    this.plusBadgeLayer = new PlusBadgeLayer({
-      canvas: this.canvas,
-      gl,
-      onPlusClick: (nodeId) => {
-        this.onPlusClick?.(nodeId)
-      },
-      borderWidth: opts.plusBadgeBorderWidth,
-      borderColor: opts.plusBadgeBorderColor,
-    })
 
     // 尺寸监听
     const ro = new ResizeObserver(() => this.handleResize())
@@ -186,42 +167,27 @@ export class WebGLRenderer {
     this.startRenderLoop()
   }
 
-  // ========== 回调桥接 ==========
+  // ========== 回调 ==========
 
   private makeCallbacks(): InteractionCallbacks {
-    const self = this
     return {
-      onNodeClick(nodeId, event) {
-        self.onNodeClick?.(nodeId, event)
-      },
-      onLinkClick(linkId, event) {
-        self.onLinkClick?.(linkId, event)
-      },
-      onNodeHover(nodeId) {
-        self.onNodeHover?.(nodeId)
-      },
-      onNodeDrag(nodeId, dx, dy) {
-        const k = self.interaction.transform.k
-        const node = self.nodes.find((n) => n.id === nodeId)
+      onNodeClick: (id, e) => this.onNodeClick?.(id, e),
+      onLinkClick: (id, e) => this.onLinkClick?.(id, e),
+      onNodeHover: (id) => this.onNodeHover?.(id),
+      onNodeDrag: (id, dx, dy) => {
+        const k = this.interaction.transform.k
+        const node = this.nodes.find((n) => n.id === id)
         if (node) {
           node.x += dx / k
           node.y += dy / k
-          self.onNodeDrag?.(nodeId, node.x, node.y)
-          self.updatePlusBadges()
+          this.onNodeDrag?.(id, node.x, node.y)
+          this.plugin.afterPositionUpdate?.(this.nodes)
         }
       },
-      onNodeDragEnd(nodeId) {
-        self.onNodeDragEnd?.(nodeId)
-      },
-      onBackgroundClick(event) {
-        self.onBackgroundClick?.(event)
-      },
-      onZoom(transform) {
-        self.onZoom?.(transform)
-      },
-      onPan(transform) {
-        self.onZoom?.(transform)
-      },
+      onNodeDragEnd: (id) => this.onNodeDragEnd?.(id),
+      onBackgroundClick: (e) => this.onBackgroundClick?.(e),
+      onZoom: (t) => this.onZoom?.(t),
+      onPan: (t) => this.onZoom?.(t),
     }
   }
 
@@ -230,31 +196,7 @@ export class WebGLRenderer {
   updateData(nodes: RenderNode[], links: RenderLink[]): void {
     this.nodes = nodes
     this.links = links
-    this.picker.syncData(nodes, links)
-
-    const texts = nodes.map((n) => n.label).filter(Boolean) as string[]
-    texts.push(...(links.map((l) => l.label).filter(Boolean) as string[]))
-    this.labelRenderer.preRegister(texts)
-
-    // 同步 Plus 徽标数据
-    this.updatePlusBadges()
-  }
-
-  /** 从节点数据构建并更新 Plus 徽标列表 */
-  private updatePlusBadges(): void {
-    const badges: BadgeData[] = []
-    for (const n of this.nodes) {
-      if (!n.showPlus) continue
-      const offX = n.radius * (n.plusOffsetX ?? 0.5)
-      const offY = n.radius * (n.plusOffsetY ?? -0.5)
-      badges.push({
-        x: n.x + offX,
-        y: n.y + offY,
-        radius: n.radius * (n.plusScale ?? 0.35),
-        nodeId: n.id,
-      })
-    }
-    this.plusBadgeLayer.updateBadges(badges)
+    this.plugin.syncData(nodes, links)
   }
 
   updateNodePositions(positions: Map<string, { x: number; y: number }>): void {
@@ -265,14 +207,12 @@ export class WebGLRenderer {
         n.y = pos.y
       }
     }
-    // 物理 tick 后同步徽标位置
-    this.updatePlusBadges()
+    this.plugin.afterPositionUpdate?.(this.nodes)
   }
 
   getCamera(): Camera {
     return this.camera
   }
-
   getCanvas(): HTMLCanvasElement {
     return this.canvas
   }
@@ -291,32 +231,30 @@ export class WebGLRenderer {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
     const t = this.interaction.transform
-    const { x, y, k } = t
 
-    // Render links (z = 0.0, behind nodes)
-    this.linkRenderer.render(this.links, w, h, x, y, k, this.showArrows, 0)
+    this.plugin.render({
+      nodes: this.nodes,
+      links: this.links,
+      width: w,
+      height: h,
+      tx: t.x,
+      ty: t.y,
+      scale: t.k,
+      showArrows: this.showArrows,
+      labelMinScale: this.labelMinScale,
+    })
 
-    // Render nodes (z = -0.5, in front of links)
-    this.nodeRenderer.render(this.nodes, w, h, x, y, k, -0.5)
+    // 同步相机
+    this.plugin.tx = t.x
+    this.plugin.ty = t.y
+    this.plugin.k = t.k
 
-    // Render labels
-
-    // Render labels
-    this.labels = this.labelRenderer.buildNodeLabels(
-      this.nodes,
-      k,
-      this.labelMinScale,
-    )
-    this.labelRenderer.render(this.labels, w, h, x, y, k, -1.0)
-
-    // 同步拾取器的相机
-    this.picker.tx = x
-    this.picker.ty = y
-    this.picker.k = k
-
-    // PlusBadgeLayer：渲染拾取缓冲 + 徽标（在节点之上）
-    this.plusBadgeLayer.renderPickBuffer(w, h, x, y, k)
-    this.plusBadgeLayer.render(w, h, x, y, k, -0.6)
+    // 覆盖层
+    const overlays = this.plugin.getOverlays()
+    for (let i = 0; i < overlays.length; i++) {
+      overlays[i].renderPickBuffer(w, h, t.x, t.y, t.k)
+      overlays[i].render(w, h, t.x, t.y, t.k, -0.6 - i * 0.01)
+    }
   }
 
   private startRenderLoop(): void {
@@ -328,16 +266,13 @@ export class WebGLRenderer {
     this._rafId = requestAnimationFrame(loop)
   }
 
-  // ========== Picking（委托给 WebGLPicker） ==========
+  // ========== Picking ==========
 
-  pick(
-    screenX: number,
-    screenY: number,
-  ): { type: "node" | "link"; id: string } | null {
-    return this.picker.pick(screenX, screenY)
+  pick(screenX: number, screenY: number): PickHit | null {
+    return this.plugin.pick(screenX, screenY)
   }
 
-  // ========== 尺寸变化 ==========
+  // ========== Resize ==========
 
   private handleResize(): void {
     const dpr = window.devicePixelRatio || 1
@@ -346,11 +281,10 @@ export class WebGLRenderer {
     this.canvas.width = this.width * dpr
     this.canvas.height = this.height * dpr
     this.gl.viewport(0, 0, this.width * dpr, this.height * dpr)
-    this.picker.resize(this.width, this.height)
-    this.plusBadgeLayer.ensurePickFbo(this.width * dpr, this.height * dpr)
+    this.plugin.resize(this.width, this.height)
   }
 
-  // ========== 相机控制 ==========
+  // ========== Camera ==========
 
   fitView(padding = 40): void {
     if (this.nodes.length === 0) return
@@ -388,11 +322,7 @@ export class WebGLRenderer {
     if (this._rafId) cancelAnimationFrame(this._rafId)
     this.interaction.detach()
     this.interaction.reset()
-    this.nodeRenderer.destroy()
-    this.linkRenderer.destroy()
-    this.labelRenderer.destroy()
-    this.picker.destroy()
-    this.plusBadgeLayer.destroy()
+    this.plugin.destroy()
     if (this.canvas.parentNode) this.container.removeChild(this.canvas)
   }
 }

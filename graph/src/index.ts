@@ -24,4 +24,4 @@ export { GraphRenderer } from "./renderer/graph-renderer.js"
 export { ForceSimulation } from "./physics/index.js"
 export type { ForceConfig, SimNode, SimLink, Layout } from "./physics/index.js"
 
-export * as d3 from "d3-force"
+export * as d3 from "./vendor/d3-force/src/index.js"

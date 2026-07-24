@@ -9,7 +9,6 @@ import {
   type GraphViewStyle,
   type NodeStyle,
   type LinkStyle,
-  getDefaultColorOf,
   getNodeStyleByType,
   getLinkStyleByType,
 } from "./theme"
@@ -35,18 +34,8 @@ export class StyleManager<
     this.graphModelData = graphModelData
   }
 
-  init({
-    style,
-    container,
-  }: {
-    style?: RecursivePartial<GraphViewStyle<G>>
-    container: HTMLElement
-  }) {
-    if (style) {
-      this.style = mergeObjects(this.style, style || {})
-    } else {
-      this.style = getDefaultColorOf<G>(container)
-    }
+  init(defaultStyle: GraphViewStyle<G>): void {
+    this.style = defaultStyle
   }
 
   update(style: RecursivePartial<GraphViewStyle<G>>) {

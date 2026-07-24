@@ -18,7 +18,7 @@ void main() {
   float size = a_size * u_scale;
   vec2 dir = normalize(a_dir);
   vec2 norm = vec2(-dir.y, dir.x);
-  vec2 offset = a_position.x * (-dir * size) + a_position.y * (norm * size * 0.5);
+  vec2 offset = a_position.x * (dir * size) + a_position.y * (norm * size * 0.5);
   vec2 pos = tip + offset;
   vec2 clipSpace = (pos / u_resolution) * 2.0 - 1.0;
   clipSpace.y = -clipSpace.y;

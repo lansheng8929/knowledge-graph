@@ -9,28 +9,75 @@ link-7,person-5,phone-7,OWNS,名下手机号
 link-8,person-6,phone-8,OWNS,名下手机号
 link-9,person-7,phone-9,OWNS,名下手机号
 link-10,person-8,phone-10,OWNS,名下手机号
-link-11,person-1,address-1,RESIDES_AT,居住地址
-link-12,person-2,address-2,RESIDES_AT,居住地址
-link-13,person-3,address-3,RESIDES_AT,居住地址
-link-14,person-4,address-4,RESIDES_AT,居住地址
-link-15,person-5,address-5,RESIDES_AT,居住地址
-link-16,person-1,company-1,WORKS_AT,工作单位
-link-17,person-2,company-2,WORKS_AT,工作单位
-link-18,person-3,company-3,WORKS_AT,工作单位
-link-19,person-6,company-4,WORKS_AT,工作单位
-link-20,person-1,account-1,HAS_ACCOUNT,名下账户
-link-21,person-1,account-2,HAS_ACCOUNT,名下账户
-link-22,person-2,account-3,HAS_ACCOUNT,名下账户
-link-23,person-3,account-4,HAS_ACCOUNT,名下账户
-link-24,person-4,account-5,HAS_ACCOUNT,名下账户
-link-25,person-6,account-6,HAS_ACCOUNT,名下账户
-link-26,phone-1,phone-3,CALLED,通话记录
-link-27,phone-3,phone-5,CALLED,通话记录
-link-28,phone-2,phone-4,CALLED,通话记录
-link-29,phone-6,phone-8,CALLED,通话记录
-link-30,phone-7,phone-9,CALLED,通话记录
-link-31,phone-1,phone-6,CALLED,通话记录
-link-32,account-1,account-3,TRANSACTED,交易记录
-link-33,account-3,account-4,TRANSACTED,交易记录
+link-11,person-9,phone-11,OWNS,名下手机号
+link-12,person-10,phone-12,OWNS,名下手机号
+link-13,person-11,phone-13,OWNS,名下手机号
+link-14,person-12,phone-14,OWNS,名下手机号
+link-15,person-1,address-1,RESIDES_AT,居住地址
+link-16,person-2,address-2,RESIDES_AT,居住地址
+link-17,person-3,address-3,RESIDES_AT,居住地址
+link-18,person-4,address-4,RESIDES_AT,居住地址
+link-19,person-5,address-5,RESIDES_AT,居住地址
+link-20,person-9,address-6,RESIDES_AT,居住地址
+link-21,person-10,address-7,RESIDES_AT,居住地址
+link-22,person-1,company-1,WORKS_AT,工作单位
+link-23,person-2,company-2,WORKS_AT,工作单位
+link-24,person-3,company-3,WORKS_AT,工作单位
+link-25,person-6,company-4,WORKS_AT,工作单位
+link-26,person-9,company-5,WORKS_AT,工作单位
+link-27,person-10,company-1,WORKS_AT,工作单位
+link-28,person-11,company-3,WORKS_AT,工作单位
+link-29,person-12,company-2,WORKS_AT,工作单位
+link-30,person-1,account-1,HAS_ACCOUNT,工商银行
+link-31,person-1,account-2,HAS_ACCOUNT,建设银行
+link-32,person-2,account-3,HAS_ACCOUNT,农业银行
+link-33,person-3,account-4,HAS_ACCOUNT,中国银行
+link-34,person-4,account-5,HAS_ACCOUNT,工商银行
+link-35,person-6,account-6,HAS_ACCOUNT,建设银行
+link-36,person-9,account-7,HAS_ACCOUNT,农业银行
+link-37,person-10,account-8,HAS_ACCOUNT,中国银行
+link-38,phone-1,phone-3,CALLED,2024-01-15 09:30
+link-39,phone-1,phone-3,CALLED,2024-01-16 14:22
+link-40,phone-1,phone-3,CALLED,2024-01-17 18:05
+link-41,phone-1,phone-3,CALLED,2024-01-17 20:12
+link-42,phone-3,phone-5,CALLED,2024-02-01 08:15
+link-43,phone-3,phone-5,CALLED,2024-02-02 11:40
+link-44,phone-2,phone-4,CALLED,2024-03-10 16:30
+link-45,phone-6,phone-8,CALLED,2024-04-05 09:00
+link-46,phone-6,phone-8,CALLED,2024-04-05 09:45
+link-47,phone-6,phone-8,CALLED,2024-04-06 21:10
+link-48,phone-11,phone-12,CALLED,2024-05-20 13:00
+link-49,phone-13,phone-14,CALLED,2024-06-01 07:30
+link-50,phone-2,phone-12,CALLED,2024-07-01 10:00
+link-51,phone-5,phone-13,CALLED,2024-07-15 19:45
+link-52,phone-7,phone-9,CALLED,2024-08-01 15:00
+link-53,phone-7,phone-9,CALLED,2024-08-01 15:05
+link-54,phone-7,phone-9,CALLED,2024-08-02 22:00
+link-55,phone-7,phone-9,CALLED,2024-08-03 08:30
+link-56,phone-10,phone-15,CALLED,2024-09-10 12:00
+link-57,account-1,account-4,TRANSACTED,转入 ¥50,000
+link-58,account-1,account-4,TRANSACTED,转出 ¥20,000
+link-59,account-1,account-4,TRANSACTED,转入 ¥15,500
+link-60,account-2,account-5,TRANSACTED,转入 ¥100,000
+link-61,account-2,account-5,TRANSACTED,转出 ¥45,000
+link-62,account-3,account-7,TRANSACTED,转入 ¥8,500
+link-63,account-3,account-7,TRANSACTED,转出 ¥3,200
+link-64,account-3,account-7,TRANSACTED,转入 ¥12,000
+link-65,account-6,account-8,TRANSACTED,转出 ¥15,000
+link-66,account-6,account-8,TRANSACTED,转入 ¥28,000
+link-67,account-1,account-6,TRANSACTED,转出 ¥5,000
+link-68,account-1,account-6,TRANSACTED,转入 ¥30,000
+link-69,account-1,account-6,TRANSACTED,转出 ¥12,000
+link-70,person-1,ip-1,LOGIN_IP,2024-08-01 09:00
+link-71,person-1,ip-1,LOGIN_IP,2024-08-01 14:30
+link-72,person-1,ip-1,LOGIN_IP,2024-08-02 20:00
+link-73,person-3,ip-2,LOGIN_IP,2024-09-01
+link-74,person-7,ip-3,LOGIN_IP,2024-10-01
+link-75,person-10,ip-1,LOGIN_IP,2024-11-01
+link-76,person-1,device-1,USE_DEVICE,MacBook Pro
+link-77,person-1,device-2,USE_DEVICE,iPhone 13
+link-78,person-2,device-2,USE_DEVICE,iPhone 13
+link-79,person-3,device-3,USE_DEVICE,ThinkPad X1
+link-80,person-5,device-1,USE_DEVICE,MacBook Pro
 link-34,account-2,account-5,TRANSACTED,交易记录
 link-35,account-5,account-6,TRANSACTED,交易记录

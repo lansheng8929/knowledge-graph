@@ -5,8 +5,11 @@
  * - 在画布上渲染 "+" 徽标（白底圆 + 红色加号）
  * - 独立处理点击事件（capture phase 拦截）
  * - 与主画布交互层完全分离
+ *
+ * 实现 GraphOverlay 接口，可通过 WebGLRenderer.addOverlay() 注册。
  */
 
+import type { GraphOverlay } from "./graph-overlay.js"
 import { PLUS_VS, PLUS_FS, PICK_PLUS_VS, PICK_PLUS_FS } from "./shaders.js"
 
 /** 单个徽标数据 */
@@ -32,7 +35,8 @@ export interface PlusBadgeLayerOptions {
   borderColor?: [number, number, number, number]
 }
 
-export class PlusBadgeLayer {
+export class PlusBadgeLayer implements GraphOverlay {
+  readonly name = "plus-badge"
   private gl: WebGL2RenderingContext
   private canvas: HTMLCanvasElement
   private program: WebGLProgram
@@ -374,6 +378,12 @@ export class PlusBadgeLayer {
       e.stopPropagation()
       e.preventDefault()
     }
+  }
+
+  // ─── GraphOverlay ───────────────────────────────
+
+  resize(width: number, height: number): void {
+    this.ensurePickFbo(width, height)
   }
 
   // ─── 销毁 ───────────────────────────────────────

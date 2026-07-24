@@ -46,100 +46,10 @@ const expansionFetcher: ExpansionFetcher = async (request) => {
   return json.data
 }
 
-// ─── 自定义布局 ─────────────────────────────────────
-class RadialLayout implements Layout {
-  private nodes: Array<{ id: string; x?: number; y?: number }> = []
-  private links: Array<{ source: string; target: string }> = []
-  private timer: ReturnType<typeof setTimeout> | null = null
-  private step = 0
-  private centerX = 0
-  private centerY = 0
-
-  onTick?: (nodes: Array<{ id: string; x: number; y: number }>) => void
-  onEnd?: () => void
-
-  setData(nodes: any[], links: any[]): void {
-    this.nodes = nodes.map((n) => ({ id: n.id, x: n.x, y: n.y }))
-    this.links = links.map((l) => ({
-      source: typeof l.source === "object" ? l.source.id : l.source,
-      target: typeof l.target === "object" ? l.target.id : l.target,
-    }))
-  }
-
-  start(): void {
-    this.stop()
-    this.step = 0
-    this.centerX = 0
-    this.centerY = 0
-
-    const degree = new Map<string, number>()
-    for (const n of this.nodes) degree.set(n.id, 0)
-    for (const l of this.links) {
-      degree.set(l.source, (degree.get(l.source) || 0) + 1)
-      degree.set(l.target, (degree.get(l.target) || 0) + 1)
-    }
-
-    const sorted = [...this.nodes].sort(
-      (a, b) => (degree.get(b.id) || 0) - (degree.get(a.id) || 0),
-    )
-    const total = this.nodes.length
-    if (total === 0) return
-
-    const tick = () => {
-      const count = Math.min(this.step + 5, total)
-      const placed = new Set<string>()
-
-      for (let i = 0; i < count; i++) {
-        const n = sorted[i]
-        if (!n || placed.has(n.id)) continue
-        placed.add(n.id)
-
-        const angle = (i / count) * Math.PI * 2
-        const radius = 60 + (degree.get(n.id) || 0) * 8
-        n.x = this.centerX + Math.cos(angle) * radius
-        n.y = this.centerY + Math.sin(angle) * radius
-      }
-
-      this.step = count
-
-      if (this.onTick) {
-        this.onTick(
-          this.nodes.map((n) => ({ id: n.id, x: n.x ?? 0, y: n.y ?? 0 })),
-        )
-      }
-
-      if (count < total) {
-        this.timer = setTimeout(tick, 50)
-      } else {
-        this.onEnd?.()
-      }
-    }
-
-    this.timer = setTimeout(tick, 16)
-  }
-
-  stop(): void {
-    if (this.timer) {
-      clearTimeout(this.timer)
-      this.timer = null
-    }
-  }
-  reheat(): void {
-    this.start()
-  }
-  fixNode(_id: string, _x?: number, _y?: number): void {}
-  releaseNode(_id: string): void {}
-  destroy(): void {
-    this.stop()
-  }
-}
-
 // ─── 样式 ────────────────────────────────────────────
 
 const btnStyle: React.CSSProperties = {
   padding: "4px 12px",
-  background: "#0f3460",
-  color: "#fff",
   border: "1px solid #e94560",
   borderRadius: "4px",
   cursor: "pointer",
@@ -241,32 +151,8 @@ export default function App() {
         const graphView = new GraphView({
           container,
           graphModel: model,
-          backgroundColor: "#1a1a2e",
-          arrowDisplay: false,
+          arrowDisplay: true,
           pickerMode: "gpu",
-          mapNode: (node) => {
-            const nd = node.data as Record<string, unknown> | undefined
-            const count = typeof nd?.count === "number" ? nd.count : 0
-            const total = typeof nd?.total === "number" ? nd.total : 0
-            const canExpand = count < total
-            return {
-              x: node.x ?? 0,
-              y: node.y ?? 0,
-              radius: 8,
-              color: [1.0, 1.0, 1.0, 1.0],
-              strokeColor: canExpand
-                ? ([0.913, 0.271, 0.376, 1.0] as const)
-                : ([1.0, 1.0, 1.0, 1.0] as const),
-              strokeWidth: canExpand ? 1.5 : 0,
-              id: node.id,
-              label: node.data?.label,
-              showPlus: canExpand,
-              // Plus 徽标位置：右上角
-              plusOffsetX: 0.55,
-              plusOffsetY: -0.55,
-              plusScale: 0.3,
-            }
-          },
           forceConfig: {
             repulsion: -200,
             linkDistance: 100,
@@ -380,7 +266,6 @@ export default function App() {
       <div
         style={{
           padding: "8px 16px",
-          background: "#16213e",
           display: "flex",
           gap: "8px",
           alignItems: "center",
@@ -434,7 +319,6 @@ export default function App() {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "#1a1a2e",
             color: "#e94560",
             fontFamily: "monospace",
             fontSize: "18px",
@@ -480,7 +364,6 @@ export default function App() {
         ref={containerRef}
         style={{
           flex: 1,
-          background: "#1a1a2e",
           position: "relative",
           overflow: "hidden",
         }}
@@ -519,8 +402,6 @@ export default function App() {
               position: "fixed",
               left: contextMenu.x,
               top: contextMenu.y,
-              background: "#16213e",
-              color: "#fff",
               border: "1px solid #e94560",
               borderRadius: "6px",
               boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
