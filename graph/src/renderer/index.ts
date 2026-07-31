@@ -1,5 +1,7 @@
 export { WebGLRenderer } from "./webgl-renderer.js"
 export { GraphRenderer } from "./graph-renderer.js"
+export { DefaultRenderPlugin } from "./default-render-plugin.js"
+export type { RenderPlugin, RenderPluginOptions } from "./render-plugin.js"
 export type {
   GraphRendererOptions,
   GraphRendererCallbacks,
@@ -14,6 +16,8 @@ export { Camera } from "./camera.js"
 export type { CameraState } from "./camera.js"
 export { NodeBatchRenderer, shapeToType } from "./node-batch.js"
 export type { BatchNode } from "./node-batch.js"
+export { IconAtlas } from "./icon-atlas.js"
+export type { AtlasGlyph } from "./icon-atlas.js"
 export { LinkBatchRenderer } from "./link-batch.js"
 export { TextLabelRenderer } from "./text-label.js"
 export { TextureAtlas } from "./atlas.js"

@@ -10,15 +10,20 @@ import {
   type ViewTransform,
   type InteractionCallbacks,
 } from "./interaction-manager.js"
-import { DefaultRenderPlugin } from "./default-render-plugin.js"
 import type { RenderPlugin } from "./render-plugin.js"
+import type {
+  GraphDataGenerics,
+  DefaultGraphDataGenerics,
+} from "../client/type.js"
 import type { PickHit } from "./picker.js"
 import type { RenderNode, RenderLink } from "./types.js"
 
 // Re-export for backward compatibility
 export { PlusBadgeLayer, type BadgeData } from "./plus-badge-layer.js"
 
-export interface WebGLRendererOptions {
+export interface WebGLRendererOptions<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
+> {
   container: HTMLElement
   width?: number
   height?: number
@@ -26,19 +31,11 @@ export interface WebGLRendererOptions {
   showArrows?: boolean
   /** Minimum scale to show labels */
   labelMinScale?: number
-  /** Font size for labels (affects atlas) */
-  labelFontSize?: number
-  /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
-  pickerMode?: "gpu" | "cpu"
-  /** 自定义渲染插件（不传则使用 DefaultRenderPlugin） */
-  renderPlugin?: (
+  /** 渲染插件工厂（必填，外部传入创建函数） */
+  renderPlugin: (
     gl: WebGL2RenderingContext,
     canvas: HTMLCanvasElement,
-  ) => RenderPlugin
-  /** Plus 徽标边框宽度（世界坐标单位，默认 0） */
-  plusBadgeBorderWidth?: number
-  /** Plus 徽标边框颜色（默认红色） */
-  plusBadgeBorderColor?: [number, number, number, number]
+  ) => RenderPlugin<G>
 }
 
 export function encodePickColor(
@@ -60,10 +57,12 @@ export function decodePickColor(r: number, g: number, b: number): number {
   )
 }
 
-export class WebGLRenderer {
+export class WebGLRenderer<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
+> {
   readonly container: HTMLElement
   readonly canvas: HTMLCanvasElement
-  readonly plugin: RenderPlugin
+  readonly plugin: RenderPlugin<G>
   readonly interaction: InteractionManager
 
   private gl: WebGL2RenderingContext
@@ -83,6 +82,8 @@ export class WebGLRenderer {
   // 回调
   onNodeClick?: (nodeId: string | null, event: MouseEvent) => void
   onNodeHover?: (nodeId: string | null) => void
+  onLinkHover?: (linkId: string | null) => void
+  onNodeContextMenu?: (nodeId: string, clientX: number, clientY: number) => void
   onNodeDrag?: (nodeId: string, x: number, y: number) => void
   onNodeDragEnd?: (nodeId: string) => void
   onLinkClick?: (linkId: string | null, event: MouseEvent) => void
@@ -90,7 +91,7 @@ export class WebGLRenderer {
   onZoom?: (transform: ViewTransform) => void
   onPlusClick?: (nodeId: string) => void
 
-  constructor(opts: WebGLRendererOptions) {
+  constructor(opts: WebGLRendererOptions<G>) {
     this.container = opts.container
 
     // Canvas
@@ -135,22 +136,8 @@ export class WebGLRenderer {
     this.showArrows = opts.showArrows ?? false
     this.labelMinScale = opts.labelMinScale ?? 0.5
 
-    // 渲染插件
-    if (opts.renderPlugin) {
-      this.plugin = opts.renderPlugin(gl, this.canvas)
-    } else {
-      this.plugin = new DefaultRenderPlugin({
-        gl,
-        canvas: this.canvas,
-        width: this.width,
-        height: this.height,
-        pickerMode: opts.pickerMode,
-        labelFontSize: opts.labelFontSize,
-        plusBadgeBorderWidth: opts.plusBadgeBorderWidth,
-        plusBadgeBorderColor: opts.plusBadgeBorderColor,
-        onPlusClick: (nodeId) => this.onPlusClick?.(nodeId),
-      })
-    }
+    // 渲染插件（由外部工厂创建，必填）
+    this.plugin = opts.renderPlugin(gl, this.canvas)
 
     // 交互管理器（插件即 Picker）
     this.interaction = new InteractionManager(
@@ -167,6 +154,18 @@ export class WebGLRenderer {
     this.startRenderLoop()
   }
 
+  // ========== Background ==========
+
+  /** 运行时切换画布背景色（主题切换用） */
+  setBackgroundColor(hex: string): void {
+    this.bgColor = [
+      parseInt(hex.slice(1, 3), 16) / 255,
+      parseInt(hex.slice(3, 5), 16) / 255,
+      parseInt(hex.slice(5, 7), 16) / 255,
+      1.0,
+    ]
+  }
+
   // ========== 回调 ==========
 
   private makeCallbacks(): InteractionCallbacks {
@@ -174,6 +173,7 @@ export class WebGLRenderer {
       onNodeClick: (id, e) => this.onNodeClick?.(id, e),
       onLinkClick: (id, e) => this.onLinkClick?.(id, e),
       onNodeHover: (id) => this.onNodeHover?.(id),
+      onLinkHover: (id) => this.onLinkHover?.(id),
       onNodeDrag: (id, dx, dy) => {
         const k = this.interaction.transform.k
         const node = this.nodes.find((n) => n.id === id)
@@ -185,6 +185,7 @@ export class WebGLRenderer {
         }
       },
       onNodeDragEnd: (id) => this.onNodeDragEnd?.(id),
+      onNodeContextMenu: (id, cx, cy) => this.onNodeContextMenu?.(id, cx, cy),
       onBackgroundClick: (e) => this.onBackgroundClick?.(e),
       onZoom: (t) => this.onZoom?.(t),
       onPan: (t) => this.onZoom?.(t),

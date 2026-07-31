@@ -22,8 +22,10 @@ export interface InteractionCallbacks {
   onNodeClick?: (nodeId: string | null, event: PointerEvent) => void
   onLinkClick?: (linkId: string | null, event: PointerEvent) => void
   onNodeHover?: (nodeId: string | null) => void
+  onLinkHover?: (linkId: string | null) => void
   onNodeDrag?: (nodeId: string, x: number, y: number) => void
   onNodeDragEnd?: (nodeId: string) => void
+  onNodeContextMenu?: (nodeId: string, clientX: number, clientY: number) => void
   onBackgroundClick?: (event: PointerEvent) => void
   onZoom?: (transform: ViewTransform) => void
   onPan?: (transform: ViewTransform) => void
@@ -41,8 +43,16 @@ export class InteractionManager {
   private isDragging = false
   private dragNodeId: string | null = null
   private hoveredId: string | null = null
+  private hoveredType: "node" | "link" | null = null
   private lastMouseX = 0
   private lastMouseY = 0
+  private lastClientX = 0
+  private lastClientY = 0
+
+  /** 鼠标在视口中的最后位置（由 pointermove 同步更新） */
+  get mousePosition(): { x: number; y: number } {
+    return { x: this.lastClientX, y: this.lastClientY }
+  }
   private isPanning = false
   /** 垂直缩放容忍度（px），在此范围内不触发平移/缩放手感混淆 */
   private panDeadZone = 3
@@ -70,7 +80,7 @@ export class InteractionManager {
     this.boundPointerUp = this.onPointerUp.bind(this)
     this.boundPointerLeave = this.onPointerLeave.bind(this)
     this.boundWheel = this.onWheel.bind(this)
-    this.boundContextMenu = (e: Event) => e.preventDefault()
+    this.boundContextMenu = this.onContextMenu.bind(this)
 
     this.attach()
   }
@@ -108,6 +118,7 @@ export class InteractionManager {
     this.dragNodeId = null
     this.isPanning = false
     this.hoveredId = null
+    this.hoveredType = null
     this.canvas.style.cursor = "default"
   }
 
@@ -126,12 +137,13 @@ export class InteractionManager {
     const hit = this.picker.pick(pos.x, pos.y)
 
     if (hit && hit.type === "node") {
+      // 仅左键触发点击/选中；右键只走 contextmenu
       if (e.button === 0) {
         this.isDragging = true
         this.dragNodeId = hit.id
         this.canvas.setPointerCapture(e.pointerId)
+        this.callbacks.onNodeClick?.(hit.id, e)
       }
-      this.callbacks.onNodeClick?.(hit.id, e)
     } else if (hit && hit.type === "link") {
       this.callbacks.onLinkClick?.(hit.id, e)
     } else {
@@ -160,15 +172,35 @@ export class InteractionManager {
       // 悬停检测
       const hit = this.picker.pick(pos.x, pos.y)
       const newId = hit?.id ?? null
-      if (newId !== this.hoveredId) {
+      const newType = hit?.type ?? null
+      if (newId !== this.hoveredId || newType !== this.hoveredType) {
         this.hoveredId = newId
-        this.callbacks.onNodeHover?.(newId)
+        this.hoveredType = newType
+        if (newType === "link") {
+          this.callbacks.onLinkHover?.(newId)
+          this.callbacks.onNodeHover?.(null)
+        } else {
+          this.callbacks.onNodeHover?.(newId)
+          this.callbacks.onLinkHover?.(null)
+        }
         this.canvas.style.cursor = newId ? "pointer" : "default"
       }
     }
 
     this.lastMouseX = pos.x
     this.lastMouseY = pos.y
+    this.lastClientX = e.clientX
+    this.lastClientY = e.clientY
+  }
+
+  private onContextMenu(e: Event): void {
+    e.preventDefault()
+    const me = e as MouseEvent
+    const pos = this.getPos(me)
+    const hit = this.picker.pick(pos.x, pos.y)
+    if (hit?.type === "node") {
+      this.callbacks.onNodeContextMenu?.(hit.id, me.clientX, me.clientY)
+    }
   }
 
   private onPointerUp(e: PointerEvent): void {
@@ -185,8 +217,10 @@ export class InteractionManager {
   private onPointerLeave(_e: PointerEvent): void {
     if (this.hoveredId !== null) {
       this.hoveredId = null
+      this.hoveredType = null
       this.canvas.style.cursor = "default"
       this.callbacks.onNodeHover?.(null)
+      this.callbacks.onLinkHover?.(null)
     }
   }
 

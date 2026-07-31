@@ -1,467 +1,406 @@
-import { useRef, useEffect, useState, useCallback } from "react"
-import {
-  GraphModel,
-  GraphView,
-  type Layout,
-  ExpansionService,
-} from "@lansheng/knowledge-graph"
-import { MetadataManager } from "@lansheng/knowledge-graph/meta-manager"
-import { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
+import { useRef, useState, useCallback } from "react"
 import type {
-  GraphNode,
   GraphViewModel,
   DefaultGraphDataGenerics,
 } from "@lansheng/knowledge-graph/client/type"
-import type {
-  ExpansionRule,
-  ExpansionFetcher,
-} from "@lansheng/knowledge-graph/expansion/expansion-service"
+import LegendPanel from "./LegendPanel"
+import MiniMap from "./MiniMap"
 import { NodeTooltip } from "./NodeTooltip"
+import { LinkTooltip } from "./LinkTooltip"
 import { RuleMenu } from "./RuleMenu"
+import SnapshotPanel from "./SnapshotPanel"
+import AnalysisPanel from "./AnalysisPanel"
+import Toolbar from "./Toolbar"
+import SelectionOverlay from "./SelectionOverlay"
+import { AppProvider } from "./AppContext"
+import { PanelProvider } from "./panel"
+import { useGraphHover } from "./hooks/useGraphHover"
+import { useRuleMenu } from "./hooks/useRuleMenu"
+import { useGraphApp } from "./hooks/useGraphApp"
+import { useGraphSelection } from "./hooks/useGraphSelection"
 
-// ─── 从 init API 获取规则并注册 ──────────────────────
-
-interface InitResponse {
-  graphData: GraphViewModel<DefaultGraphDataGenerics>["graphData"]
-  rulesMap: Record<string, ExpansionRule[]>
+// 计算节点各方向已加载的邻居数量（纯函数）
+function getLoadedNeighbors(
+  graphData: GraphViewModel<DefaultGraphDataGenerics>["graphData"],
+  nodeId: string,
+) {
+  const loaded: Record<string, { out: number; in: number }> = {}
+  for (const link of graphData.links) {
+    const sid = typeof link.source === "object" ? link.source.id : link.source
+    const tid = typeof link.target === "object" ? link.target.id : link.target
+    if (String(sid) === nodeId) {
+      const targetNode = graphData.nodes.find((n: any) => n.id === tid)
+      if (targetNode) {
+        const t = (targetNode as any).data?.nodeType ?? "unknown"
+        if (!loaded[t]) loaded[t] = { out: 0, in: 0 }
+        loaded[t].out += 1
+      }
+    }
+    if (String(tid) === nodeId) {
+      const sourceNode = graphData.nodes.find((n: any) => n.id === sid)
+      if (sourceNode) {
+        const t = (sourceNode as any).data?.nodeType ?? "unknown"
+        if (!loaded[t]) loaded[t] = { out: 0, in: 0 }
+        loaded[t].in += 1
+      }
+    }
+  }
+  return loaded
 }
 
-async function fetchInitData(): Promise<InitResponse> {
-  const res = await fetch("/api/graph/init")
-  const json = await res.json()
-  if (!json.success) throw new Error("Failed to fetch init data")
-  return json.data as InitResponse
-}
-
-// ─── 拓出 API fetcher ────────────────────────────────
-
-const expansionFetcher: ExpansionFetcher = async (request) => {
-  const res = await fetch("/api/graph/expand", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  })
-  const json = await res.json()
-  if (!json.success) throw new Error("Expand failed")
-  return json.data
-}
-
-// ─── 样式 ────────────────────────────────────────────
-
-const btnStyle: React.CSSProperties = {
-  padding: "4px 12px",
-  border: "1px solid #e94560",
-  borderRadius: "4px",
-  cursor: "pointer",
-  fontSize: "13px",
-  fontFamily: "monospace",
-}
-const menuItemStyle: React.CSSProperties = {
-  padding: "8px 14px",
-  cursor: "pointer",
-  userSelect: "none",
-}
-
-// ──────────────────────────────────────────────────────
+// 从 URL 读取初始 ids
+const initialIds: string[] | undefined = (() => {
+  const params = new URLSearchParams(window.location.search)
+  const ids = params.get("ids")
+  return ids ? ids.split(",").filter(Boolean) : undefined
+})()
 
 export default function App() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<GraphView | null>(null)
-  const [view, setView] = useState<GraphView | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [initError, setInitError] = useState<string | null>(null)
-  const [selectedNode, setSelectedNode] = useState<string | null>(null)
-  const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null)
-  const hoveredNodeRef = useRef<GraphNode | null>(null)
-  const mousePosRef = useRef({ x: 0, y: 0 })
-  const [contextMenu, setContextMenu] = useState<{
-    node: GraphNode
-    x: number
-    y: number
-  } | null>(null)
-  const [ruleMenu, setRuleMenu] = useState<{
-    node: GraphNode
-    rules: ExpansionRule[]
-    x: number
-    y: number
-  } | null>(null)
-  const expansionRef = useRef<ExpansionService | null>(null)
-  const [nodeCount, setNodeCount] = useState(0)
+  const graphApp = useGraphApp(initialIds)
+  const {
+    containerRef,
+    modelRef,
+    viewRef,
+    historyManagerRef,
+    expansionRef,
+    ctx: {
+      mousePos,
+      setMousePos,
+      loading,
+      initError,
+      snapshotPanelOpen,
+      setSnapshotPanelOpen,
+      legendPanelOpen,
+      setLegendPanelOpen,
+      miniMapOpen,
+      setMiniMapOpen,
+      analysisPanelOpen,
+      setAnalysisPanelOpen,
+      setAnalysisTarget,
+      handleTakeSnapshot,
+      handleJumpToSnapshot,
+      handleDeleteSnapshot,
+      handleToggleSnapshotPanel,
+      handleUndo,
+      handleRedo,
+    },
+  } = graphApp
 
-  hoveredNodeRef.current = hoveredNode
+  const graphHover = useGraphHover(modelRef, {
+    onPlusToolClick: (node) => {
+      handleTakeSnapshot()
+      setRuleMenu({
+        node,
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      })
+    },
+    onNodeContextMenu: (node, x, y) => {
+      setRuleMenu({ node, x, y })
+    },
+  })
+  const {
+    ctx: {
+      hoveredNode,
+      setHoveredNode,
+      hoveredLink,
+      setHoveredLink,
+      selectedNodeIds,
+    },
+  } = graphHover
 
-  // Close menus on outside click
-  useEffect(() => {
-    const handleClick = () => {
-      setContextMenu(null)
-      setRuleMenu(null)
-    }
-    document.addEventListener("click", handleClick)
-    return () => document.removeEventListener("click", handleClick)
+  const ruleMenuHook = useRuleMenu(containerRef, expansionRef)
+  const { ruleMenu, setRuleMenu, expanding, runtimeError } = ruleMenuHook.ctx
+  const { handleRuleExpand } = ruleMenuHook
+
+  const selCtx = useGraphSelection({ viewRef, modelRef })
+
+  const handleSearchSelect = useCallback((nodeId: string) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set("ids", nodeId)
+    window.location.href = url.toString()
   }, [])
 
-  // Close on Escape
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setContextMenu(null)
-        setRuleMenu(null)
-      }
-    }
-    document.addEventListener("keydown", handleKey)
-    return () => document.removeEventListener("keydown", handleKey)
+  const handleAnalyze = useCallback(() => {
+    if (analysisPanelOpen) return setAnalysisPanelOpen(false)
+    const targets = [...selectedNodeIds]
+    if (targets.length === 0) return
+    setAnalysisTarget({
+      ids: targets,
+      labels: targets.map((id) => {
+        const gn = modelRef.current
+          ?.getGraphModelData()
+          .graphData.nodes.find((n) => n.id === id)
+        return (gn?.data as any)?.label ?? id
+      }),
+    })
+    setAnalysisPanelOpen(true)
+  }, [selectedNodeIds, analysisPanelOpen, setAnalysisPanelOpen])
+
+  const handleToggleLegend = useCallback(() => {
+    setLegendPanelOpen((prev) => !prev)
   }, [])
 
-  // ─── 主初始化：从 API 获取数据 ─────────────────────
-
-  useEffect(() => {
-    if (!containerRef.current) return
-    const container = containerRef.current
-    let cancelled = false
-
-    ;(async () => {
-      try {
-        // 1. 从 API 获取初始数据和规则
-        const initData = await fetchInitData()
-        if (cancelled) return
-
-        // 2. 创建数据模型
-        const model = new GraphModel({
-          initData: { graphData: initData.graphData },
-        })
-
-        // 3. 创建 ExpansionService
-        const metadataManager = new MetadataManager()
-        const historyManager = new HistoryManager()
-
-        const expansionService = new ExpansionService({
-          model,
-          metadataManager,
-          loadingManager: model.loadingManager,
-          historyManager,
-          fetcher: expansionFetcher,
-        })
-
-        // 注册服务端下发的规则
-        expansionService.setRulesMap(initData.rulesMap)
-        expansionRef.current = expansionService
-
-        setNodeCount(initData.graphData.nodes.length)
-
-        const graphView = new GraphView({
-          container,
-          graphModel: model,
-          arrowDisplay: true,
-          pickerMode: "gpu",
-          forceConfig: {
-            repulsion: -200,
-            linkDistance: 100,
-            linkStrength: 0.2,
-            centerStrength: 0.1,
-            velocityDecay: 0.4,
-          },
-        })
-
-        viewRef.current = graphView
-
-        // 4. 订阅事件
-        model.events.subscribe("nodeHover", (node) => {
-          setHoveredNode(node)
-        })
-        model.events.subscribe("dataChange", ({ graphData }) => {
-          setNodeCount(graphData.nodes.length)
-        })
-        // "+" 徽标点击 → 执行拓出
-        model.events.subscribe("plusToolClick", (node) => {
-          if (node) handlePlusClick(node.id)
-        })
-
-        const handleContextMenu = (e: MouseEvent) => {
-          e.preventDefault()
-          const node = hoveredNodeRef.current
-          if (node) {
-            const rules = expansionService.getRules(node.id)
-            if (rules.length > 0) {
-              setRuleMenu({ node, rules, x: e.clientX, y: e.clientY })
-            } else {
-              setContextMenu({ node, x: e.clientX, y: e.clientY })
-            }
-          }
-        }
-        container.addEventListener("contextmenu", handleContextMenu)
-
-        // 节点计数已在前面设置
-
-        setView(graphView)
-        setLoading(false)
-
-        return () => {
-          container.removeEventListener("contextmenu", handleContextMenu)
-          graphView.destroy()
-          viewRef.current = null
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        console.error("Init failed:", err)
-        setInitError(msg)
-        setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // ─── 处理 + 按钮点击 ──────────────────────────────
-
-  const handlePlusClick = useCallback((nodeId: string) => {
-    console.log("plus click")
-
-    const expansion = expansionRef.current
-    if (!expansion) return
-    const rules = expansion.getRules(nodeId)
-    if (rules.length === 0) return
-    // 单条规则直接拓出，多条规则使用第一条（或用户可通过右键菜单选择）
-    expansion.expand(nodeId, rules[0].id).catch(console.error)
-  }, [])
-
-  // ─── 处理规则菜单选择 ──────────────────────────────
-
-  const handleRuleSelect = useCallback((nodeId: string, ruleId: string) => {
-    setRuleMenu(null)
-    expansionRef.current?.expand(nodeId, ruleId).catch(console.error)
-  }, [])
-
-  // ─── 工具按钮 ─────────────────────────────────────
-
-  const handleReset = useCallback(() => {
-    window.location.reload()
+  const handleToggleMiniMap = useCallback(() => {
+    setMiniMapOpen((prev) => !prev)
   }, [])
 
   const handleFitView = useCallback(() => {
-    view?.fitView(50)
-  }, [view])
+    viewRef.current?.fitView(50)
+  }, [])
 
-  const handleReheat = useCallback(() => {
-    view?.reheat(0.3)
-  }, [view])
-
-  const handleFocusSelected = useCallback(() => {
-    if (selectedNode && view) {
-      view.focusNodeById(selectedNode)
-    }
-  }, [selectedNode, view])
+  const appCtx = {
+    ...graphApp.ctx,
+    ...graphHover.ctx,
+    ...ruleMenuHook.ctx,
+    ...selCtx,
+  }
 
   return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* Toolbar */}
-      <div
-        style={{
-          padding: "8px 16px",
-          display: "flex",
-          gap: "8px",
-          alignItems: "center",
-          borderBottom: "1px solid #0f3460",
-          flexWrap: "wrap",
-          zIndex: 2000,
-        }}
-      >
-        <span
-          style={{ color: "#e94560", fontWeight: "bold", marginRight: "16px" }}
-        >
-          Knowledge Graph + 规则拓出
-        </span>
-        <span style={{ color: "#8899aa", fontSize: "13px" }}>
-          节点: {nodeCount}
-        </span>
-        <button onClick={handleReset} style={btnStyle}>
-          🔄 Reset
-        </button>
-        <button onClick={handleFitView} style={btnStyle}>
-          Fit View
-        </button>
-        <button onClick={handleReheat} style={btnStyle}>
-          Reheat
-        </button>
-        <button
-          onClick={handleFocusSelected}
-          style={btnStyle}
-          disabled={!selectedNode}
-        >
-          Focus Selected
-        </button>
-        {selectedNode && (
-          <span
-            style={{ color: "#e94560", fontSize: "13px", marginLeft: "auto" }}
-          >
-            Selected: {selectedNode}
-          </span>
-        )}
-      </div>
-
-      {/* Loading overlay (shown on top of the graph container) */}
-      {loading && (
+    <AppProvider value={appCtx}>
+      <PanelProvider>
         <div
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            width: "100%",
+            height: "100%",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#e94560",
-            fontFamily: "monospace",
-            fontSize: "18px",
-            zIndex: 3000,
+            flexDirection: "column",
+            background: "rgb(var(--background))",
+            color: "rgb(var(--foreground))",
           }}
         >
-          <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "32px", marginBottom: "12px" }}>⟳</div>
-            <div>Loading graph data...</div>
-            <div style={{ fontSize: "12px", color: "#667", marginTop: "8px" }}>
-              Fetching from mock API ...
-            </div>
+          <Toolbar
+            historyManagerRef={historyManagerRef}
+            onFitView={handleFitView}
+            onToggleSnapshotPanel={handleToggleSnapshotPanel}
+            onToggleLegend={handleToggleLegend}
+            onToggleMiniMap={handleToggleMiniMap}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onSearchSelect={handleSearchSelect}
+            onAnalyze={handleAnalyze}
+          />
+
+          {/* Loading overlay (shown on top of the graph container) */}
+          {loading && (
             <div
-              id="runtime-error"
               style={{
-                display: "none",
-                marginTop: "20px",
-                color: "#ff6b6b",
-                fontSize: "13px",
-                maxWidth: "500px",
-                wordBreak: "break-all",
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#e94560",
+                fontFamily: "monospace",
+                fontSize: "18px",
+                zIndex: 3000,
               }}
-            ></div>
-            {initError && (
+            >
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "32px", marginBottom: "12px" }}>⟳</div>
+                <div>Loading graph data...</div>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "rgb(var(--muted))",
+                    marginTop: "8px",
+                  }}
+                >
+                  Fetching from mock API ...
+                </div>
+                <div
+                  id="runtime-error"
+                  style={{
+                    display: "none",
+                    marginTop: "20px",
+                    color: "#ff6b6b",
+                    fontSize: "13px",
+                    maxWidth: "500px",
+                    wordBreak: "break-all",
+                  }}
+                ></div>
+                {initError && (
+                  <div
+                    style={{
+                      marginTop: "20px",
+                      color: "#ff6b6b",
+                      fontSize: "13px",
+                      maxWidth: "500px",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    Error: {initError}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Graph container (always rendered, so ref is always available) */}
+          <div
+            ref={containerRef}
+            style={{
+              flex: 1,
+              position: "relative",
+              overflow: "hidden",
+            }}
+            onMouseMove={(e) => {
+              setMousePos({ x: e.clientX, y: e.clientY })
+            }}
+            onMouseLeave={() => {
+              setHoveredNode(null)
+              setHoveredLink(null)
+            }}
+          >
+            {/* DOM tooltip - node */}
+            {hoveredNode && (
+              <NodeTooltip
+                loadedNeighbors={getLoadedNeighbors(
+                  modelRef.current!.getGraphModelData().graphData,
+                  hoveredNode.id,
+                )}
+              />
+            )}
+
+            {/* DOM tooltip - link */}
+            {hoveredLink && <LinkTooltip />}
+
+            {/* ─── 快照面板 ─── */}
+            {snapshotPanelOpen && historyManagerRef.current && (
+              <SnapshotPanel
+                historyManager={historyManagerRef.current}
+                currentIndex={historyManagerRef.current.cursor}
+                onTakeSnapshot={handleTakeSnapshot}
+                onJumpTo={handleJumpToSnapshot}
+                onDeleteEntry={handleDeleteSnapshot}
+                onClose={() => setSnapshotPanelOpen(false)}
+              />
+            )}
+
+            {/* 分析面板 */}
+            {analysisPanelOpen && (
+              <AnalysisPanel
+                onClose={() => {
+                  setAnalysisTarget(null)
+                  setAnalysisPanelOpen(false)
+                }}
+                onExpand={(graphData) => {
+                  const model = modelRef.current
+                  if (!model) return
+                  const current = model.getGraphModelData().graphData
+                  const existNodeIds = new Set(current.nodes.map((n) => n.id))
+                  const existLinkIds = new Set(current.links.map((l) => l.id))
+                  model.updateGraphData({
+                    graphData: {
+                      nodes: [
+                        ...current.nodes,
+                        ...graphData.nodes.filter(
+                          (n) => !existNodeIds.has(n.id),
+                        ),
+                      ],
+                      links: [
+                        ...current.links,
+                        ...graphData.links.filter(
+                          (l) => !existLinkIds.has(l.id),
+                        ),
+                      ],
+                    },
+                  })
+                  viewRef.current?.reheat(1)
+                  viewRef.current?.fitView(50)
+                }}
+              />
+            )}
+
+            {/* ─── 图例面板 ─── */}
+            {legendPanelOpen && !loading && (
+              <LegendPanel onClose={() => setLegendPanelOpen(false)} />
+            )}
+
+            {/* ─── 小地图 ─── */}
+            {miniMapOpen && !loading && <MiniMap viewRef={viewRef} />}
+
+            {/* 规则选择菜单 */}
+            {ruleMenu && (
+              <RuleMenu
+                node={ruleMenu.node}
+                loadedNeighbors={getLoadedNeighbors(
+                  modelRef.current!.getGraphModelData().graphData,
+                  ruleMenu.node.id,
+                )}
+                x={ruleMenu.x}
+                y={ruleMenu.y}
+                onExpand={handleRuleExpand}
+                onClose={() => setRuleMenu(null)}
+              />
+            )}
+
+            {/* ─── 拓出加载动画 ─── */}
+            {expanding && (
               <div
                 style={{
-                  marginTop: "20px",
-                  color: "#ff6b6b",
+                  position: "fixed",
+                  bottom: 70,
+                  right: 20,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "rgb(var(--tooltip-bg) / 0.95)",
+                  border: "1px solid #1976d2",
+                  borderRadius: 8,
+                  padding: "8px 14px",
+                  boxShadow: "var(--shadow)",
+                  zIndex: 9999,
+                  fontFamily: "monospace",
                   fontSize: "13px",
-                  maxWidth: "500px",
+                  color: "#1976d2",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "18px",
+                    animation: "spin 1s linear infinite",
+                  }}
+                >
+                  ⟳
+                </span>
+                <span>正在拓出...</span>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              </div>
+            )}
+
+            {/* ─── 框选覆盖层 ─── */}
+            <SelectionOverlay />
+
+            {/* ─── 错误提示 ─── */}
+            {runtimeError && (
+              <div
+                style={{
+                  position: "fixed",
+                  bottom: 20,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#d32f2f",
+                  color: "#fff",
+                  padding: "10px 20px",
+                  borderRadius: 6,
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  zIndex: 9999,
+                  fontSize: "13px",
+                  fontFamily: "monospace",
+                  maxWidth: "80%",
                   wordBreak: "break-all",
                 }}
               >
-                Error: {initError}
+                ❌ {runtimeError}
               </div>
             )}
           </div>
         </div>
-      )}
-
-      {/* Graph container (always rendered, so ref is always available) */}
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          position: "relative",
-          overflow: "hidden",
-        }}
-        onMouseMove={(e) => {
-          mousePosRef.current = { x: e.clientX, y: e.clientY }
-        }}
-        onMouseLeave={() => setHoveredNode(null)}
-      >
-        {/* DOM tooltip */}
-        {hoveredNode && (
-          <NodeTooltip
-            node={hoveredNode}
-            getRulesCount={(id) =>
-              expansionRef.current?.getRules(id).length ?? 0
-            }
-            pos={mousePosRef.current}
-          />
-        )}
-
-        {/* 规则选择菜单 */}
-        {ruleMenu && (
-          <RuleMenu
-            node={ruleMenu.node}
-            rules={ruleMenu.rules}
-            x={ruleMenu.x}
-            y={ruleMenu.y}
-            onSelect={handleRuleSelect}
-            onClose={() => setRuleMenu(null)}
-          />
-        )}
-
-        {/* 普通右键菜单 */}
-        {contextMenu && (
-          <div
-            style={{
-              position: "fixed",
-              left: contextMenu.x,
-              top: contextMenu.y,
-              border: "1px solid #e94560",
-              borderRadius: "6px",
-              boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
-              zIndex: 1100,
-              minWidth: "160px",
-              padding: "4px 0",
-              fontFamily: "monospace",
-              fontSize: "13px",
-            }}
-          >
-            <div
-              style={{
-                padding: "8px 14px",
-                borderBottom: "1px solid #0f3460",
-                color: "#8899aa",
-              }}
-            >
-              {contextMenu.node.id}
-            </div>
-            <div
-              style={menuItemStyle}
-              onClick={() => {
-                setSelectedNode(contextMenu.node.id)
-                view?.focusNodeById(contextMenu.node.id)
-                setContextMenu(null)
-              }}
-            >
-              🔍 Focus
-            </div>
-            <div
-              style={menuItemStyle}
-              onClick={() => {
-                view?.fitView(50)
-                setContextMenu(null)
-              }}
-            >
-              📐 Fit View
-            </div>
-            <div
-              style={menuItemStyle}
-              onClick={() => {
-                view?.reheat(0.3)
-                setContextMenu(null)
-              }}
-            >
-              🔄 Reheat
-            </div>
-            <div
-              style={{
-                ...menuItemStyle,
-                borderTop: "1px solid #0f3460",
-                color: "#e94560",
-              }}
-              onClick={() => setContextMenu(null)}
-            >
-              ✕ Close
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+      </PanelProvider>
+    </AppProvider>
   )
 }

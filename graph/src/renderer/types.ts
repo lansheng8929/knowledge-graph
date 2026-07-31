@@ -73,6 +73,8 @@ export interface RenderLink {
   sourceRadius?: number
   /** Target node radius for endpoint offset */
   targetRadius?: number
+  /** 箭头大小（屏幕像素） */
+  arrowSize?: number
 }
 
 export interface RenderData {

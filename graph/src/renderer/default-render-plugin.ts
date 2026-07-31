@@ -8,24 +8,18 @@ import type { RenderNode, RenderLink } from "./types.js"
 import type { GraphOverlay } from "./graph-overlay.js"
 import type { PickHit } from "./picker.js"
 import type { GraphViewStyle } from "../theme.js"
-import type { DefaultGraphDataGenerics } from "../client/type.js"
-import {
-  defaultNodeStyle,
-  personStyle,
-  phoneStyle,
-  addressStyle,
-  accountStyle,
-  companyStyle,
-  ipStyle,
-  deviceStyle,
-} from "../entity/default/default.style.js"
-import { defaultLinkStyle } from "../entity/link/default/default.style.js"
+import type {
+  GraphDataGenerics,
+  DefaultGraphDataGenerics,
+} from "../client/type.js"
 import type {
   RenderPlugin,
   RenderPluginOptions,
   RenderContext,
 } from "./render-plugin.js"
+import type { StateManager } from "../state-manager"
 import { NodeBatchRenderer } from "./node-batch.js"
+import { IconAtlas } from "./icon-atlas.js"
 import { LinkBatchRenderer } from "./link-batch.js"
 import { TextLabelRenderer, type CharInfo } from "./text-label.js"
 import { WebGLPicker } from "./webgl-picker.js"
@@ -33,13 +27,16 @@ import { CpuPicker } from "./cpu-picker.js"
 import { PlusBadgeLayer, type BadgeData } from "./plus-badge-layer.js"
 import type { Picker } from "./picker.js"
 
-export class DefaultRenderPlugin implements RenderPlugin {
+export class DefaultRenderPlugin<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
+> implements RenderPlugin<G> {
   readonly name = "default"
 
   private gl: WebGL2RenderingContext
   private nodeRenderer: NodeBatchRenderer
   private linkRenderer: LinkBatchRenderer
   private labelRenderer: TextLabelRenderer
+  private iconAtlas = new IconAtlas()
   private picker: Picker
   readonly plusBadgeLayer: PlusBadgeLayer
 
@@ -103,6 +100,7 @@ export class DefaultRenderPlugin implements RenderPlugin {
       ctx.ty,
       ctx.scale,
       -0.5,
+      this.iconAtlas,
     )
 
     this.labels = this.labelRenderer.buildNodeLabels(
@@ -119,6 +117,21 @@ export class DefaultRenderPlugin implements RenderPlugin {
       ctx.scale,
       -1.0,
     )
+    // 边标签
+    const linkLabels = this.labelRenderer.buildLinkLabels(
+      ctx.links,
+      ctx.scale,
+      ctx.labelMinScale,
+    )
+    this.labelRenderer.render(
+      linkLabels,
+      ctx.width,
+      ctx.height,
+      ctx.tx,
+      ctx.ty,
+      ctx.scale,
+      -0.8,
+    )
   }
 
   getOverlays(): GraphOverlay[] {
@@ -129,21 +142,27 @@ export class DefaultRenderPlugin implements RenderPlugin {
     this.updateBadges(nodes)
   }
 
-  getDefaultStyle(): GraphViewStyle<DefaultGraphDataGenerics> {
+  resolveNodeState(nodeId: string, stateManager: StateManager): string {
+    if (stateManager.getHiddenNodes().includes(nodeId)) return "hidden"
+    if (stateManager.isHoveredNode(nodeId)) return "hovered"
+    if (stateManager.getSelectedNodes().includes(nodeId)) return "selected"
+    if (stateManager.getRootNodes().includes(nodeId)) return "root"
+    return "regular"
+  }
+
+  resolveLinkState(linkId: string, stateManager: StateManager): string {
+    if (stateManager.getHiddenLinks().includes(linkId)) return "hidden"
+    if (stateManager.isHoveredLink(linkId)) return "hovered"
+    if (stateManager.getSelectedLinks().includes(linkId)) return "selected"
+    return "regular"
+  }
+
+  getDefaultStyle(): GraphViewStyle<G> {
     return {
       background: "#f7f7f7",
-      node: {
-        default: defaultNodeStyle as any,
-        person: personStyle,
-        phone: phoneStyle,
-        address: addressStyle,
-        account: accountStyle,
-        company: companyStyle,
-        ip: ipStyle,
-        device: deviceStyle,
-      },
-      link: { default: defaultLinkStyle as any },
-    } as GraphViewStyle<DefaultGraphDataGenerics>
+      node: {},
+      link: {},
+    } as unknown as GraphViewStyle<G>
   }
 
   // ═══════════════════════════════════════════════

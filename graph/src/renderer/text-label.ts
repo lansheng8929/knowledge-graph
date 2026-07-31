@@ -3,7 +3,7 @@
  */
 import { TEXT_VS, TEXT_FS } from "./shaders.js"
 import { TextureAtlas, type AtlasGlyph } from "./atlas.js"
-import type { RenderNode } from "./types.js"
+import type { RenderNode, RenderLink } from "./types.js"
 
 /** 单个字符的渲染数据 */
 export interface CharInfo {
@@ -13,6 +13,8 @@ export interface CharInfo {
   color: [number, number, number, number]
   /** 相对于图集字号的缩放倍数 */
   scale: number
+  /** 旋转角度（弧度），0=不旋转 */
+  angle?: number
 }
 
 export class TextLabelRenderer {
@@ -102,7 +104,10 @@ export class TextLabelRenderer {
       const fs = (n.fontSize ?? this.fontSize) / this.fontSize
       const charScale = scale
       let cx = n.x - this.measureWidth(n.label, fs) / (2 * charScale)
-      const cy = n.y + n.radius + 12 / scale
+      // 屏幕空间 gap：节点半径的 22%，下限 4px，上限 24px，+额外偏移
+      const screenR = n.radius * scale
+      const screenGap = Math.min(Math.max(screenR * 0.22, 4), 24) + 8
+      const cy = n.y + n.radius + screenGap / scale
       for (const ch of n.label) {
         const glyph = this.atlas.getOrCreate(ch)
         if (!glyph) continue
@@ -127,6 +132,58 @@ export class TextLabelRenderer {
       if (g) w += (g.advance + this.letterSpacing) * scale
     }
     return w
+  }
+
+  buildLinkLabels(
+    links: RenderLink[],
+    scale: number,
+    minScale: number,
+  ): CharInfo[] {
+    const chars: CharInfo[] = []
+    if (scale < minScale) return chars
+
+    for (const l of links) {
+      if (!l.label) continue
+      const tc: [number, number, number, number] = [0.55, 0.55, 0.65, 0.85]
+
+      // 线方向角度
+      const dx = l.targetX - l.sourceX
+      const dy = l.targetY - l.sourceY
+      const lineLen = Math.sqrt(dx * dx + dy * dy)
+      if (lineLen < 1) continue
+      const angle = Math.atan2(dy, dx)
+
+      // 固定字号 12（图集字号 32，所以 scale=0.375）
+      const fs = 0.375
+      const labelText = l.label
+      const charScale = scale
+      const textWidth = this.measureWidth(labelText, fs)
+
+      const mx = (l.sourceX + l.targetX) / 2
+      const my = (l.sourceY + l.targetY) / 2
+
+      // 沿线的方向逐个字符定位，文字居中
+      const halfW = textWidth / (2 * charScale)
+      let cx = mx - halfW * Math.cos(angle)
+      let cy = my - halfW * Math.sin(angle)
+
+      for (const ch of labelText) {
+        const glyph = this.atlas.getOrCreate(ch)
+        if (!glyph) continue
+        const advance = ((glyph.advance + this.letterSpacing) * fs) / charScale
+        chars.push({
+          x: cx + (advance / 2) * Math.cos(angle),
+          y: cy + (advance / 2) * Math.sin(angle),
+          char: ch,
+          color: tc,
+          scale: fs,
+          angle,
+        })
+        cx += advance * Math.cos(angle)
+        cy += advance * Math.sin(angle)
+      }
+    }
+    return chars
   }
 
   /** instanced 逐字符渲染 */
@@ -159,6 +216,7 @@ export class TextLabelRenderer {
     const colorData = new Float32Array(N * 4)
     const uvOriginData = new Float32Array(N * 2)
     const uvSizeData = new Float32Array(N * 2)
+    const angleData = new Float32Array(N)
 
     for (let i = 0; i < N; i++) {
       const c = chars[i]
@@ -173,6 +231,7 @@ export class TextLabelRenderer {
       uvOriginData[i * 2 + 1] = glyph.uv[1]
       uvSizeData[i * 2] = glyph.uv[2] - glyph.uv[0]
       uvSizeData[i * 2 + 1] = glyph.uv[3] - glyph.uv[1]
+      angleData[i] = c.angle ?? 0
     }
 
     this.instancedAttrib(1, centerData, 2)
@@ -180,9 +239,10 @@ export class TextLabelRenderer {
     this.instancedAttrib(3, colorData, 4)
     this.instancedAttrib(4, uvOriginData, 2)
     this.instancedAttrib(5, uvSizeData, 2)
+    this.instancedAttrib(6, angleData, 1)
 
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, N)
-    for (let loc = 1; loc <= 5; loc++) gl.vertexAttribDivisor(loc, 0)
+    for (let loc = 1; loc <= 6; loc++) gl.vertexAttribDivisor(loc, 0)
     gl.bindVertexArray(null)
   }
 

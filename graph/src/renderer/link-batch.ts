@@ -1,36 +1,67 @@
 /**
- * LinkBatchRenderer — instanced line segment rendering with WebGL2
+ * LinkBatchRenderer — instanced line segment + arrow rendering with WebGL2
  */
 
-import { LINE_VS, LINE_FS, PICK_LINE_VS, PICK_LINE_FS } from "./shaders.js"
+import {
+  LINE_VS,
+  LINE_FS,
+  PICK_LINE_VS,
+  PICK_LINE_FS,
+  ARROW_VS,
+  ARROW_FS,
+  PICK_ARROW_VS,
+  PICK_ARROW_FS,
+} from "./shaders.js"
 import type { RenderLink } from "./types.js"
 
 export class LinkBatchRenderer {
   private gl: WebGL2RenderingContext
-  private program: WebGLProgram
-  private pickProgram: WebGLProgram
 
+  // ── Line program ──
+  private lineProgram: WebGLProgram
+  private linePickProgram: WebGLProgram
+
+  // ── Arrow program ──
+  private arrowProgram: WebGLProgram
+  private arrowPickProgram: WebGLProgram
+
+  // ── VAOs ──
   private lineVao: WebGLVertexArrayObject | null = null
+  private arrowVao: WebGLVertexArrayObject | null = null
+  private _lineVerts = 0 // triangle strip vertex count
 
-  // Uniforms (render)
-  private uResolution: WebGLUniformLocation | null = null
-  private uTranslation: WebGLUniformLocation | null = null
-  private uScale: WebGLUniformLocation | null = null
-  private uZOffset: WebGLUniformLocation | null = null
+  // Uniforms (line render)
+  private uLineResolution: WebGLUniformLocation | null = null
+  private uLineTranslation: WebGLUniformLocation | null = null
+  private uLineScale: WebGLUniformLocation | null = null
+  private uLineZOffset: WebGLUniformLocation | null = null
 
-  // Uniforms (pick)
-  private uPickResolution: WebGLUniformLocation | null = null
-  private uPickTranslation: WebGLUniformLocation | null = null
-  private uPickScale: WebGLUniformLocation | null = null
-  private uPickZOffset: WebGLUniformLocation | null = null
-  private uPickIdOffset: WebGLUniformLocation | null = null
+  // Uniforms (line pick)
+  private uLinePickResolution: WebGLUniformLocation | null = null
+  private uLinePickTranslation: WebGLUniformLocation | null = null
+  private uLinePickScale: WebGLUniformLocation | null = null
+  private uLinePickZOffset: WebGLUniformLocation | null = null
+  private uLinePickIdOffset: WebGLUniformLocation | null = null
+
+  // Uniforms (arrow render)
+  private uArrowResolution: WebGLUniformLocation | null = null
+  private uArrowTranslation: WebGLUniformLocation | null = null
+  private uArrowScale: WebGLUniformLocation | null = null
+
+  // Uniforms (arrow pick)
+  private uArrowPickResolution: WebGLUniformLocation | null = null
+  private uArrowPickTranslation: WebGLUniformLocation | null = null
+  private uArrowPickScale: WebGLUniformLocation | null = null
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl
-    this.program = this.compile(LINE_VS, LINE_FS)
-    this.pickProgram = this.compile(PICK_LINE_VS, PICK_LINE_FS)
+    this.lineProgram = this.compile(LINE_VS, LINE_FS)
+    this.linePickProgram = this.compile(PICK_LINE_VS, PICK_LINE_FS)
+    this.arrowProgram = this.compile(ARROW_VS, ARROW_FS)
+    this.arrowPickProgram = this.compile(PICK_ARROW_VS, PICK_ARROW_FS)
 
     this.initLineGeometry()
+    this.initArrowGeometry()
     this.cacheUniforms()
   }
 
@@ -55,62 +86,110 @@ export class LinkBatchRenderer {
 
   private cacheUniforms(): void {
     const gl = this.gl
-    this.uResolution = gl.getUniformLocation(this.program, "u_resolution")
-    this.uTranslation = gl.getUniformLocation(this.program, "u_translation")
-    this.uScale = gl.getUniformLocation(this.program, "u_scale")
-    this.uZOffset = gl.getUniformLocation(this.program, "u_zOffset")
-
-    this.uPickResolution = gl.getUniformLocation(
-      this.pickProgram,
+    // Line render
+    this.uLineResolution = gl.getUniformLocation(
+      this.lineProgram,
       "u_resolution",
     )
-    this.uPickTranslation = gl.getUniformLocation(
-      this.pickProgram,
+    this.uLineTranslation = gl.getUniformLocation(
+      this.lineProgram,
       "u_translation",
     )
-    this.uPickScale = gl.getUniformLocation(this.pickProgram, "u_scale")
-    this.uPickZOffset = gl.getUniformLocation(this.pickProgram, "u_zOffset")
-    this.uPickIdOffset = gl.getUniformLocation(this.pickProgram, "u_idOffset")
+    this.uLineScale = gl.getUniformLocation(this.lineProgram, "u_scale")
+    this.uLineZOffset = gl.getUniformLocation(this.lineProgram, "u_zOffset")
+
+    // Line pick
+    this.uLinePickResolution = gl.getUniformLocation(
+      this.linePickProgram,
+      "u_resolution",
+    )
+    this.uLinePickTranslation = gl.getUniformLocation(
+      this.linePickProgram,
+      "u_translation",
+    )
+    this.uLinePickScale = gl.getUniformLocation(this.linePickProgram, "u_scale")
+    this.uLinePickZOffset = gl.getUniformLocation(
+      this.linePickProgram,
+      "u_zOffset",
+    )
+    this.uLinePickIdOffset = gl.getUniformLocation(
+      this.linePickProgram,
+      "u_idOffset",
+    )
+
+    // Arrow render
+    this.uArrowResolution = gl.getUniformLocation(
+      this.arrowProgram,
+      "u_resolution",
+    )
+    this.uArrowTranslation = gl.getUniformLocation(
+      this.arrowProgram,
+      "u_translation",
+    )
+    this.uArrowScale = gl.getUniformLocation(this.arrowProgram, "u_scale")
+
+    // Arrow pick
+    this.uArrowPickResolution = gl.getUniformLocation(
+      this.arrowPickProgram,
+      "u_resolution",
+    )
+    this.uArrowPickTranslation = gl.getUniformLocation(
+      this.arrowPickProgram,
+      "u_translation",
+    )
+    this.uArrowPickScale = gl.getUniformLocation(
+      this.arrowPickProgram,
+      "u_scale",
+    )
   }
 
+  /** 三角带：t∈[0,1] 分割为 SEGMENTS 段, side=±1 交替 */
   private initLineGeometry(): void {
     const gl = this.gl
-    // Line quad (x:0..1, y:±1) + Arrow triangle (x:-1..0, y:±0.5)
-    const pos = new Float32Array([
-      0,
-      -1,
-      1,
-      -1,
-      0,
-      1,
-      0,
-      1,
-      1,
-      -1,
-      1,
-      1, // line quad (x:0..1)
-      -1,
-      -0.5,
-      -1,
-      0.5,
-      -0.01,
-      0, // arrow tri (x:-1..-0.01, tip at -0.01)
-    ])
+    const SEGMENTS = 16
+    const verts = new Float32Array((SEGMENTS + 1) * 4) // 每对 (t, side) 2 floats
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const t = i / SEGMENTS
+      const base = i * 4
+      verts[base] = t
+      verts[base + 1] = -1.0 // left
+      verts[base + 2] = t
+      verts[base + 3] = 1.0 // right
+    }
 
     const vao = gl.createVertexArray()!
     gl.bindVertexArray(vao)
 
     const buf = gl.createBuffer()!
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-    gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW)
+    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW)
     gl.enableVertexAttribArray(0)
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
 
     gl.bindVertexArray(null)
     this.lineVao = vao
+    this._lineVerts = (SEGMENTS + 1) * 2
   }
 
-  /** Render link lines + arrows in one draw call */
+  /** 箭头三角形：x∈[-1,0] 沿方向偏移, y=±0.5 垂直宽度 */
+  private initArrowGeometry(): void {
+    const gl = this.gl
+    const arrowPos = new Float32Array([-0.6, -0.45, -0.6, 0.45, -0.01, 0])
+
+    const vao = gl.createVertexArray()!
+    gl.bindVertexArray(vao)
+
+    const buf = gl.createBuffer()!
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+    gl.bufferData(gl.ARRAY_BUFFER, arrowPos, gl.STATIC_DRAW)
+    gl.enableVertexAttribArray(0)
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+
+    gl.bindVertexArray(null)
+    this.arrowVao = vao
+  }
+
+  /** Render link lines + arrows in two draw calls */
   render(
     links: RenderLink[],
     width: number,
@@ -125,11 +204,11 @@ export class LinkBatchRenderer {
 
     const gl = this.gl
     const N = links.length
-    const CURVE = 24
+    const CURVE = 12
 
-    // ── 内部按 (sourceId→targetId) 有向分组 ──
-    const midX = new Float32Array(N)
-    const midY = new Float32Array(N)
+    // ── 按 (sourceId→targetId) 有向分组，计算二次 Bézier 控制点 ──
+    const midX = new Float32Array(N),
+      midY = new Float32Array(N)
     const groups = new Map<string, { idx: number; link: RenderLink }[]>()
     for (let i = 0; i < N; i++) {
       const l = links[i]
@@ -171,56 +250,103 @@ export class LinkBatchRenderer {
       }
     }
 
-    // ── 上传 instanced 数据 ──
-    gl.useProgram(this.program)
-    gl.uniform2f(this.uResolution, width, height)
-    gl.uniform2f(this.uTranslation, tx, ty)
-    gl.uniform1f(this.uScale, scale)
-    gl.uniform1f(this.uZOffset, zOffset)
-    const uShowArrows = gl.getUniformLocation(this.program, "u_showArrows")
-    gl.uniform1i(uShowArrows, showArrows ? 1 : 0)
-    gl.bindVertexArray(this.lineVao)
-
-    const srcData = new Float32Array(N * 2)
-    const tgtData = new Float32Array(N * 2)
+    // ── 准备 instanced 数据 ──
+    const srcData = new Float32Array(N * 2) // P0 — start (节点中心)
+    const midData = new Float32Array(N * 2) // P1 — 控制点
+    const tgtData = new Float32Array(N * 2) // P2 — end   (节点中心)
     const colorData = new Float32Array(N * 4)
     const widthData = new Float32Array(N)
-    const midDat = new Float32Array(N * 2)
-    const arrSizeData = new Float32Array(N)
+    const arrowTipData = new Float32Array(N * 2) // 箭头尖端（节点边缘）
+    const arrowDirData = new Float32Array(N * 2)
+    const arrowSizeData = new Float32Array(N)
 
     for (let i = 0; i < N; i++) {
       const l = links[i]
-      const sr = l.sourceRadius ?? 0
       const tr = l.targetRadius ?? 0
-      const dx = l.targetX - l.sourceX
-      const dy = l.targetY - l.sourceY
-      const len = Math.sqrt(dx * dx + dy * dy)
-      const ux = len > 0.001 ? dx / len : 0
-      const uy = len > 0.001 ? dy / len : 0
-      srcData[i * 2] = l.sourceX + ux * sr
-      srcData[i * 2 + 1] = l.sourceY + uy * sr
-      tgtData[i * 2] = l.targetX - ux * tr
-      tgtData[i * 2 + 1] = l.targetY - uy * tr
+
+      // 线端点：节点中心（不做半径偏移）
+      srcData[i * 2] = l.sourceX
+      srcData[i * 2 + 1] = l.sourceY
+      tgtData[i * 2] = l.targetX
+      tgtData[i * 2 + 1] = l.targetY
+
+      // 控制点：曲线用计算值，直线用中点（(start+end)/2 使二次 Bézier 退化为直线）
+      const mx = midX[i],
+        my = midY[i]
+      if (mx === 0 && my === 0) {
+        midData[i * 2] = (l.sourceX + l.targetX) / 2
+        midData[i * 2 + 1] = (l.sourceY + l.targetY) / 2
+      } else {
+        midData[i * 2] = mx
+        midData[i * 2 + 1] = my
+      }
+
+      // 曲线到达方向：target → mid 的反方向（即 Bézier 在 t=1 的切线方向）
+      const adx = l.targetX - midData[i * 2]
+      const ady = l.targetY - midData[i * 2 + 1]
+      const alen = Math.sqrt(adx * adx + ady * ady)
+      const aux = alen > 0.001 ? adx / alen : 1
+      const auy = alen > 0.001 ? ady / alen : 0
+
+      // 箭头尖端：沿曲线到达方向回退半径距离
+      arrowTipData[i * 2] = l.targetX - aux * tr
+      arrowTipData[i * 2 + 1] = l.targetY - auy * tr
+
       colorData.set(l.color, i * 4)
       widthData[i] = l.width
-      midDat[i * 2] = midX[i]
-      midDat[i * 2 + 1] = midY[i]
-      arrSizeData[i] = 10
+
+      // 箭头方向 = tangent at t=1
+      arrowDirData[i * 2] = adx
+      arrowDirData[i * 2 + 1] = ady
+      arrowSizeData[i] = l.arrowSize ?? Math.max(6, l.width * 16 + 4)
     }
 
-    this.instancedAttrib(1, srcData, 2)
-    this.instancedAttrib(2, tgtData, 2)
-    this.instancedAttrib(3, colorData, 4)
-    this.instancedAttrib(4, widthData, 1)
-    this.instancedAttrib(5, midDat, 2)
-    this.instancedAttrib(6, arrSizeData, 1)
+    // ── 逐条绘制线段（三角带） ──
+    gl.useProgram(this.lineProgram)
+    gl.uniform2f(this.uLineResolution, width, height)
+    gl.uniform2f(this.uLineTranslation, tx, ty)
+    gl.uniform1f(this.uLineScale, scale)
+    gl.uniform1f(this.uLineZOffset, zOffset)
+    gl.bindVertexArray(this.lineVao)
 
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 9, N)
-    for (let loc = 1; loc <= 6; loc++) gl.vertexAttribDivisor(loc, 0)
+    for (let i = 0; i < N; i++) {
+      this.instancedSingle(1, srcData[i * 2], srcData[i * 2 + 1])
+      this.instancedSingle(2, midData[i * 2], midData[i * 2 + 1])
+      this.instancedSingle(3, tgtData[i * 2], tgtData[i * 2 + 1])
+      this.instancedSingle4(4, colorData, i * 4)
+      this.instancedSingle1(5, widthData[i])
+
+      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, this._lineVerts, 1)
+    }
+    for (let loc = 1; loc <= 5; loc++) gl.vertexAttribDivisor(loc, 0)
+
+    // ── 逐条绘制箭头（关闭混合，避免半透明叠加） ──
+    if (showArrows) {
+      gl.useProgram(this.arrowProgram)
+      gl.uniform2f(this.uArrowResolution, width, height)
+      gl.uniform2f(this.uArrowTranslation, tx, ty)
+      gl.uniform1f(this.uArrowScale, scale)
+      gl.bindVertexArray(this.arrowVao)
+
+      gl.disable(gl.BLEND)
+
+      for (let i = 0; i < N; i++) {
+        this.instancedSingle(1, arrowTipData[i * 2], arrowTipData[i * 2 + 1])
+        this.instancedSingle(2, arrowDirData[i * 2], arrowDirData[i * 2 + 1])
+        this.instancedSingle4(3, colorData, i * 4)
+        this.instancedSingle1(4, arrowSizeData[i])
+
+        gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 1)
+      }
+      for (let loc = 1; loc <= 4; loc++) gl.vertexAttribDivisor(loc, 0)
+
+      gl.enable(gl.BLEND)
+    }
+
     gl.bindVertexArray(null)
   }
 
-  /** Batch-render links for FBO picking (gl_InstanceID + idOffset encodes index) */
+  /** Batch-render links for FBO picking (lines only, triangle strip) */
   renderPicking(
     links: RenderLink[],
     width: number,
@@ -234,40 +360,100 @@ export class LinkBatchRenderer {
     if (links.length === 0) return
 
     const gl = this.gl
+    const N = links.length
+    const CURVE = 12
 
-    gl.useProgram(this.pickProgram)
-    gl.uniform2f(this.uPickResolution, width, height)
-    gl.uniform2f(this.uPickTranslation, tx, ty)
-    gl.uniform1f(this.uPickScale, scale)
-    gl.uniform1f(this.uPickZOffset, zOffset)
-    gl.uniform1ui(this.uPickIdOffset, idOffset)
+    // ── 按 (sourceId→targetId) 有向分组，计算二次 Bézier 控制点（与 render() 保持一致） ──
+    const midX = new Float32Array(N),
+      midY = new Float32Array(N)
+    const groups = new Map<string, { idx: number; link: RenderLink }[]>()
+    for (let i = 0; i < N; i++) {
+      const l = links[i]
+      const key = `${l.sourceId ?? ""}|${l.targetId ?? ""}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push({ idx: i, link: l })
+    }
+    for (const [, bundle] of groups) {
+      const M = bundle.length
+      if (M <= 1) continue
+      bundle.sort((a, b) => a.idx - b.idx)
+      for (let i = 0; i < M; i++) {
+        const { idx, link: l } = bundle[i]
+        const dx = l.targetX - l.sourceX
+        const dy = l.targetY - l.sourceY
+        const len = Math.sqrt(dx * dx + dy * dy)
+        const nx = len > 0.01 ? -dy / len : 1
+        const ny = len > 0.01 ? dx / len : 0
+
+        if (M % 2 === 1 && i === Math.floor(M / 2)) continue
+
+        let pairIdx: number, side: number
+        if (M % 2 === 1) {
+          const center = Math.floor(M / 2)
+          if (i < center) {
+            pairIdx = center - i - 1
+            side = 1
+          } else {
+            pairIdx = i - center - 1
+            side = -1
+          }
+        } else {
+          pairIdx = Math.floor(i / 2)
+          side = i % 2 === 0 ? 1 : -1
+        }
+        const off = (pairIdx + 1) * CURVE
+        midX[idx] = (l.sourceX + l.targetX) / 2 + nx * side * off
+        midY[idx] = (l.sourceY + l.targetY) / 2 + ny * side * off
+      }
+    }
+
+    gl.useProgram(this.linePickProgram)
+    gl.uniform2f(this.uLinePickResolution, width, height)
+    gl.uniform2f(this.uLinePickTranslation, tx, ty)
+    gl.uniform1f(this.uLinePickScale, scale)
+    gl.uniform1f(this.uLinePickZOffset, zOffset)
+    gl.uniform1ui(this.uLinePickIdOffset, idOffset)
 
     gl.bindVertexArray(this.lineVao)
 
-    const srcData = new Float32Array(links.length * 2)
-    const tgtData = new Float32Array(links.length * 2)
-    const colorData = new Float32Array(links.length * 4)
-    const widthData = new Float32Array(links.length)
-    const midData = new Float32Array(links.length * 2)
+    const startData = new Float32Array(N * 2)
+    const midData = new Float32Array(N * 2)
+    const endData = new Float32Array(N * 2)
+    const colorData = new Float32Array(N * 4)
+    const widthData = new Float32Array(N)
 
-    for (let i = 0; i < links.length; i++) {
+    for (let i = 0; i < N; i++) {
       const l = links[i]
-      srcData[i * 2] = l.sourceX
-      srcData[i * 2 + 1] = l.sourceY
-      tgtData[i * 2] = l.targetX
-      tgtData[i * 2 + 1] = l.targetY
+      const sx = l.sourceX,
+        sy = l.sourceY
+      const tx = l.targetX,
+        ty = l.targetY
+      startData[i * 2] = sx
+      startData[i * 2 + 1] = sy
+      endData[i * 2] = tx
+      endData[i * 2 + 1] = ty
+
+      // 使用与视觉 render 一致的曲线控制点
+      const mx = midX[i],
+        my = midY[i]
+      if (mx === 0 && my === 0) {
+        midData[i * 2] = (sx + tx) / 2
+        midData[i * 2 + 1] = (sy + ty) / 2
+      } else {
+        midData[i * 2] = mx
+        midData[i * 2 + 1] = my
+      }
+
       widthData[i] = l.width + 4
-      midData[i * 2] = l.midX ?? 0
-      midData[i * 2 + 1] = l.midY ?? 0
     }
 
-    this.instancedAttrib(1, srcData, 2)
-    this.instancedAttrib(2, tgtData, 2)
-    this.instancedAttrib(3, colorData, 4)
-    this.instancedAttrib(4, widthData, 1)
-    this.instancedAttrib(5, midData, 2)
+    this.instancedAttrib(1, startData, 2)
+    this.instancedAttrib(2, midData, 2)
+    this.instancedAttrib(3, endData, 2)
+    this.instancedAttrib(4, colorData, 4)
+    this.instancedAttrib(5, widthData, 1)
 
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, links.length)
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, this._lineVerts, N)
     for (let loc = 1; loc <= 5; loc++) gl.vertexAttribDivisor(loc, 0)
     gl.bindVertexArray(null)
   }
@@ -286,9 +472,41 @@ export class LinkBatchRenderer {
     gl.vertexAttribDivisor(loc, 1)
   }
 
+  private instancedSingle(loc: number, x: number, y: number): void {
+    this.instancedSingle1Arr(loc, new Float32Array([x, y]), 2)
+  }
+
+  private instancedSingle1(loc: number, v: number): void {
+    this.instancedSingle1Arr(loc, new Float32Array([v]), 1)
+  }
+
+  private instancedSingle4(
+    loc: number,
+    arr: Float32Array,
+    offset: number,
+  ): void {
+    this.instancedSingle1Arr(loc, arr.slice(offset, offset + 4), 4)
+  }
+
+  private instancedSingle1Arr(
+    loc: number,
+    data: Float32Array,
+    comps: number,
+  ): void {
+    const gl = this.gl
+    const buf = gl.createBuffer()!
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    gl.enableVertexAttribArray(loc)
+    gl.vertexAttribPointer(loc, comps, gl.FLOAT, false, 0, 0)
+    gl.vertexAttribDivisor(loc, 1)
+  }
+
   destroy(): void {
     const gl = this.gl
-    gl.deleteProgram(this.program)
-    gl.deleteProgram(this.pickProgram)
+    gl.deleteProgram(this.lineProgram)
+    gl.deleteProgram(this.linePickProgram)
+    gl.deleteProgram(this.arrowProgram)
+    gl.deleteProgram(this.arrowPickProgram)
   }
 }

@@ -18,7 +18,7 @@ import type { DefaultGraphDataGenerics, GraphDataGenerics } from "./client"
 export interface GraphViewStyle<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
-  background: string
+  background?: string
   node: Partial<Record<G["NT"], NodeStyle<G>>>
   link: Partial<Record<G["LT"], LinkStyle<G>>>
 }
@@ -32,7 +32,6 @@ export interface Style {
   fontSize?: number
   radius?: number
   opacity?: number
-  light?: string
 }
 export type NodeStyle<G extends GraphDataGenerics> = Record<G["NS"], Style>
 
@@ -41,7 +40,8 @@ export interface LStyle {
   stroke?: string
   strokeWidth?: number
   opacity?: number
-  light?: string
+  /** 箭头大小（屏幕像素），不设置则自动按线宽计算 */
+  arrowSize?: number
 }
 export type LinkStyle<G extends GraphDataGenerics> = Record<G["LS"], LStyle>
 

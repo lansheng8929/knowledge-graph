@@ -29,6 +29,7 @@ import type { NodeId, LinkId } from "../type.js"
 import type { StyleManager } from "../style-manager.js"
 import type { RenderPlugin } from "../renderer/render-plugin.js"
 import { getNodeStyleByStateType, getLinkStyleByStateType } from "../theme.js"
+import type { GraphViewStyle, NodeStyle, LinkStyle, LStyle } from "../theme.js"
 import type { NodeRenderPipeline } from "../renderer/node-pipeline.js"
 import type { RenderNode, RenderLink } from "../renderer/types.js"
 
@@ -49,34 +50,45 @@ export interface GraphViewOptions<
   /** 自定义布局引擎（默认使用 d3-force ForceSimulation） */
   layout?: Layout
 
-  /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
-  pickerMode?: "gpu" | "cpu"
-
-  /** 标签字号 (默认 32) */
-  labelFontSize?: number
-
-  /** Plus 徽标边框宽度（世界坐标单位，默认 0 = 无边框） */
-  plusBadgeBorderWidth?: number
-  /** Plus 徽标边框颜色（默认红色） */
-  plusBadgeBorderColor?: [number, number, number, number]
-
-  /**
-   * 自定义渲染插件。
-   * 完全替换默认的节点/边/文字/覆盖层渲染。
-   * 不传则使用 DefaultRenderPlugin。
-   */
-  renderPlugin?: (
+  /** 渲染插件工厂（必填，外部传入，内部创建实例） */
+  renderPlugin: (
     gl: WebGL2RenderingContext,
     canvas: HTMLCanvasElement,
-  ) => RenderPlugin
+  ) => RenderPlugin<G>
 
-  /** Custom node-to-render mapping */
-  mapNode?: (
-    node: GraphNode<G["NO"], G["NT"], G["NS"]>,
-    index: number,
-  ) => RenderNode | null
-  /** Custom link-to-render mapping */
-  mapLink?: (link: GraphLink<G>, index: number) => RenderLink | null
+  /**
+   * 运行时主题值（应用层自定义，如 "light" | "dark"）。
+   * 会作为第 2 个参数传给主题样式回调函数，实现动态换肤。
+   * 主题切换后调用 setRuntimeTheme() 重新应用。
+   */
+  runtimeTheme?: unknown
+
+  /**
+   * 自定义主题，会与插件的默认样式合并。
+   * 可用于覆盖默认颜色、尺寸、新增节点类型等。
+   *
+   * 每个节点/边类型的值可以是静态样式对象，也可以是回调函数。
+   * 回调函数接收节点/边数据（及运行时主题值），返回动态样式。
+   */
+  theme?: {
+    background?: string
+    node?: Partial<
+      Record<
+        G["NT"],
+        | NodeStyle<G>
+        | ((
+            node: GraphNode<G["NO"], G["NT"], G["NS"]>,
+            runtimeTheme?: unknown,
+          ) => NodeStyle<G>)
+      >
+    >
+    link?: Partial<
+      Record<
+        G["LT"],
+        LStyle | ((link: GraphLink<G>, runtimeTheme?: unknown) => LStyle)
+      >
+    >
+  }
 }
 
 /** Parse a hex color string (#RGB, #RRGGBB, #RGBA, #RRGGBBAA) to [r, g, b, a] floats */
@@ -91,14 +103,40 @@ function parseHexColor(hex: string): [number, number, number, number] {
   return [r, g, b, a]
 }
 
+/** 浅合并 GraphViewStyle（只合并顶层 node/link 下各类型的条目） */
+function deepMergeStyles(
+  base: Record<string, any>,
+  override: Record<string, any>,
+): Record<string, any> {
+  const result: Record<string, any> = { ...base }
+  for (const key of Object.keys(override)) {
+    if (
+      key === "background" ||
+      typeof override[key] !== "object" ||
+      override[key] === null
+    ) {
+      result[key] = override[key]
+    } else {
+      result[key] = { ...(base[key] || {}), ...override[key] }
+    }
+  }
+  return result
+}
+
 export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   private options: GraphViewOptions<G>
   private container: HTMLElement
   model: GraphModel<G>
   /** 渲染器代理门面 */
-  renderer: GraphRenderer
+  renderer: GraphRenderer<G>
   /** 当前布局引擎 */
   layout: Layout
+
+  /** 原始 theme 配置（含静态样式和动态回调） */
+  private rawTheme?: GraphViewOptions<G>["theme"]
+
+  /** 运行时主题值（传给样式回调函数） */
+  private runtimeTheme: unknown
 
   // Node/link lookup
   private nodeMap = new Map<string, GraphNode<G["NO"], G["NT"], G["NS"]>>()
@@ -113,6 +151,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.model = opts.graphModel
     this.events = this.model.events
     this.styleManager = this.model.styleManager
+    this.runtimeTheme = opts.runtimeTheme
 
     // Initialize renderer proxy (must be before style init, plugin provides default styles)
     this.renderer = new GraphRenderer({
@@ -121,15 +160,31 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       height: opts.height,
       backgroundColor: opts.backgroundColor,
       showArrows: opts.arrowDisplay,
-      pickerMode: opts.pickerMode,
-      labelFontSize: opts.labelFontSize,
       renderPlugin: opts.renderPlugin,
-      plusBadgeBorderWidth: opts.plusBadgeBorderWidth,
-      plusBadgeBorderColor: opts.plusBadgeBorderColor,
     })
 
-    // Initialize style from plugin defaults
-    this.styleManager.init(this.renderer.plugin.getDefaultStyle() as any)
+    // Initialize style from plugin defaults + optional theme merge
+    this.rawTheme = opts.theme
+    const defaultStyle = this.renderer.plugin.getDefaultStyle() as any
+    // 只将静态样式合并到 styleManager，回调在 defaultMapNode 中按需解析
+    let staticTheme: Record<string, any> | undefined
+    if (opts.theme) {
+      staticTheme = { background: (opts.theme as any).background }
+      for (const section of ["node", "link"] as const) {
+        const entries = (opts.theme as any)[section]
+        if (entries) {
+          const statics: Record<string, any> = {}
+          for (const key of Object.keys(entries)) {
+            if (typeof entries[key] !== "function") statics[key] = entries[key]
+          }
+          if (Object.keys(statics).length > 0) staticTheme![section] = statics
+        }
+      }
+    }
+    const mergedStyle = staticTheme
+      ? deepMergeStyles(defaultStyle, staticTheme)
+      : defaultStyle
+    this.styleManager.init(mergedStyle)
 
     // Initialize layout: use custom layout or default to d3-force
     this.layout = opts.layout ?? new ForceSimulation(opts.forceConfig)
@@ -147,23 +202,37 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   // ========== Renderer callbacks ==========
 
   private setupRendererCallbacks(): void {
-    this.renderer.onNodeClick = (nodeId, _event) => {
-      // Plus 徽标点击已由 PlusBadgeLayer 独立处理（capture phase 拦截）
-      // 此处仅处理节点本体点击
+    this.renderer.onNodeContextMenu = (
+      nodeId: string,
+      clientX: number,
+      clientY: number,
+    ) => {
+      const node = this.nodeMap.get(nodeId) ?? null
+      if (node) {
+        this.events.publish("nodeRightClick", {
+          node,
+          screenPos: { x: clientX, y: clientY },
+          event: new MouseEvent("contextmenu"),
+        })
+      }
+    }
+
+    this.renderer.onNodeClick = (nodeId, event) => {
       const node = nodeId ? (this.nodeMap.get(nodeId) ?? null) : null
-      this.events.publish("nodeClick", node)
+      this.events.publish("nodeClick", {
+        node,
+        ctrlKey: event?.ctrlKey ?? false,
+      })
     }
 
     // PlusBadgeLayer 独立处理徽标点击
     this.renderer.onPlusClick = (nodeId) => {
       const node = this.nodeMap.get(nodeId) ?? null
-      this.events.publish("plusToolClick", node)
+      node && this.events.publish("plusToolClick", node)
     }
 
     this.renderer.onNodeHover = (nodeId) => {
-      // 直接更新渲染器中的节点样式，无需全量重建
-      this.updateHoverVisuals(nodeId)
-
+      // 先更新 stateManager，再更新视觉，确保 resolveNodeState 读到正确状态
       if (nodeId) {
         this.model.stateManager.setHoveredNodes([nodeId])
         const node = this.nodeMap.get(nodeId) ?? null
@@ -172,6 +241,21 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
         this.model.stateManager.clearHoveredNodes()
         this.events.publish("nodeHover", null)
       }
+      this.syncAllNodeStyles()
+    }
+
+    this.renderer.onLinkHover = (linkId) => {
+      // 边 hover 也同步节点样式——因为边 hover 时相关节点的状态可能变化
+      if (linkId) {
+        this.model.stateManager.setHoveredLinks([linkId])
+        const link = this.linkMap.get(linkId) ?? null
+        this.events.publish("linkHover", { link, previousLink: null })
+      } else {
+        this.model.stateManager.clearHoveredLinks()
+        this.events.publish("linkHover", { link: null, previousLink: null })
+      }
+      this.syncAllLinkStyles()
+      this.syncAllNodeStyles()
     }
 
     this.renderer.onNodeDrag = (nodeId, x, y) => {
@@ -208,88 +292,56 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
     // Listen to model data changes
     this.events.subscribe("dataChange", ({ graphData }) => {
-      this.rebuildFromModel()
+      this.rebuildFromModel(false)
+    })
+
+    this.events.subscribe("selectionChange", ({ nodeIds }) => {
+      // 选中/隐藏等状态变化只影响视觉，无需重建数据与重启物理模拟
+      this.syncAllNodeStyles()
+      this.syncAllLinkStyles()
     })
   }
 
-  // ========== Hover 视觉更新（直接操作渲染器，不触发重建） ==========
+  // ========== 状态驱动的视觉同步 ==========
 
-  private hoveredNodeId: string | null = null
-
-  private updateHoverVisuals(nodeId: string | null): void {
-    const renderNodes = this.renderer.nodes
-    const renderLinks = this.renderer.links
-
-    // 恢复上一个悬浮节点到默认样式
-    if (this.hoveredNodeId && this.hoveredNodeId !== nodeId) {
-      const prev = renderNodes.find((n) => n.id === this.hoveredNodeId)
-      if (prev) {
-        const nodeStyle = this.styleManager.getNodeStyle(this.hoveredNodeId)
-        const s = getNodeStyleByStateType(nodeStyle, "regular" as G["NS"])
-        const c = parseHexColor(s.bgColor!)
-        prev.color = [c[0], c[1], c[2], s.opacity!]
-        prev.strokeColor = parseHexColor(s.strokeColor!)
-        prev.strokeWidth = s.strokeWidth!
-      }
+  /** 遍历所有节点，根据 stateManager 当前状态刷新视觉样式 */
+  private syncAllNodeStyles(): void {
+    for (const rn of this.renderer.nodes) {
+      const stateType =
+        (this.renderer.plugin.resolveNodeState?.(
+          rn.id,
+          this.model.stateManager,
+        ) as G["NS"]) ?? ("regular" as G["NS"])
+      const style = this.styleManager.getNodeStyle(rn.id)
+      const s = getNodeStyleByStateType(style, stateType)
+      const c = parseHexColor(s.bgColor!)
+      rn.color = [c[0], c[1], c[2], s.opacity!]
+      rn.strokeColor = parseHexColor(s.strokeColor!)
+      rn.strokeWidth = s.strokeWidth!
     }
+  }
 
-    if (!nodeId) {
-      // 恢复所有关联边到默认样式
-      for (const rl of renderLinks) {
-        const ls = this.styleManager.getLinkStyle(rl.id)
-        const lr = getLinkStyleByStateType(ls, "regular" as G["LS"])
-        const lc = parseHexColor(lr.color ?? "#9ca3af")
-        rl.color = [lc[0], lc[1], lc[2], lr.opacity ?? 0.7]
-        rl.width = lr.strokeWidth ?? 0.8
-      }
-      this.hoveredNodeId = null
-      return
+  /** 遍历所有边，根据 stateManager 当前状态刷新视觉样式 */
+  private syncAllLinkStyles(): void {
+    for (const rl of this.renderer.links) {
+      const stateType =
+        (this.renderer.plugin.resolveLinkState?.(
+          rl.id,
+          this.model.stateManager,
+        ) as G["LS"]) ?? ("regular" as G["LS"])
+      const s = getLinkStyleByStateType(
+        this.styleManager.getLinkStyle(rl.id),
+        stateType,
+      )
+      const c = parseHexColor(s.color ?? "#9ca3af")
+      rl.color = [c[0], c[1], c[2], s.opacity ?? 0.7]
+      rl.width = s.strokeWidth ?? 0.8
     }
-
-    // 高亮当前悬浮节点（边缘发光效果）
-    const curr = renderNodes.find((n) => n.id === nodeId)
-    if (curr) {
-      const ns = this.styleManager.getNodeStyle(nodeId)
-      const nh = getNodeStyleByStateType(ns, "hovered" as G["NS"])
-      const nc = parseHexColor(nh.bgColor ?? "#fff")
-      curr.color = [nc[0], nc[1], nc[2], nh.opacity ?? 1]
-      curr.strokeColor = parseHexColor(nh.strokeColor ?? "#00ccff")
-      curr.strokeWidth = nh.strokeWidth ?? 2
-    }
-
-    // 通过 model 数据找到关联边的 ID
-    const { graphData } = this.model.getGraphModelData()
-    const relatedLinkIds = new Set<string>()
-    for (const link of graphData.links) {
-      const sid = typeof link.source === "object" ? link.source.id : link.source
-      const tid = typeof link.target === "object" ? link.target.id : link.target
-      if (String(sid) === nodeId || String(tid) === nodeId) {
-        relatedLinkIds.add(link.id)
-      }
-    }
-
-    for (const rl of renderLinks) {
-      if (relatedLinkIds.has(rl.id)) {
-        const ls = this.styleManager.getLinkStyle(rl.id)
-        const lh = getLinkStyleByStateType(ls, "hovered" as G["LS"])
-        const lhc = parseHexColor(lh.color ?? "#00ccff")
-        rl.color = [lhc[0], lhc[1], lhc[2], lh.opacity ?? 1]
-        rl.width = lh.strokeWidth ?? 1.5
-      } else {
-        const ls = this.styleManager.getLinkStyle(rl.id)
-        const lr = getLinkStyleByStateType(ls, "regular" as G["LS"])
-        const lrc = parseHexColor(lr.color ?? "#9ca3af")
-        rl.color = [lrc[0], lrc[1], lrc[2], lr.opacity ?? 0.7]
-        rl.width = lr.strokeWidth ?? 0.8
-      }
-    }
-
-    this.hoveredNodeId = nodeId
   }
 
   // ========== Data rebuilding ==========
 
-  private rebuildFromModel(): void {
+  private rebuildFromModel(fitView: boolean = true): void {
     const { graphData } = this.model.getGraphModelData()
 
     // Build lookup maps
@@ -304,12 +356,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       const gn = graphData.nodes[i]
       this.nodeMap.set(gn.id, gn)
 
-      let rn: RenderNode | null = null
-      if (this.options.mapNode) {
-        rn = this.options.mapNode(gn, i)
-      } else {
-        rn = this.defaultMapNode(gn, i)
-      }
+      const rn = this.defaultMapNode(gn, i)
 
       if (rn) {
         renderNodes.push(rn)
@@ -337,12 +384,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       const sourceId = typeof gl.source === "object" ? gl.source.id : gl.source
       const targetId = typeof gl.target === "object" ? gl.target.id : gl.target
 
-      let rl: RenderLink | null = null
-      if (this.options.mapLink) {
-        rl = this.options.mapLink(gl, i)
-      } else {
-        rl = this.defaultMapLink(gl, i)
-      }
+      const rl = this.defaultMapLink(gl, i)
 
       if (rl) {
         renderLinks.push(rl)
@@ -359,18 +401,37 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.layout.setData(simNodes, simLinks)
     this.layout.start()
 
-    // Fit view initially
-    requestAnimationFrame(() => {
-      this.renderer.fitView()
-    })
+    // Fit view (skipped when triggered by data changes like expansion)
+    if (fitView) {
+      requestAnimationFrame(() => {
+        this.renderer.fitView()
+      })
+    }
   }
 
   private defaultMapNode(
     gn: GraphNode<G["NO"], G["NT"], G["NS"]>,
     _index: number,
   ): RenderNode {
-    const nodeStyle = this.styleManager.getNodeStyle(gn.id)
-    const s = getNodeStyleByStateType(nodeStyle, "regular" as G["NS"])
+    const nodeType = gn.data?.nodeType as G["NT"] | undefined
+    // 从 rawTheme 解析（支持静态对象和回调函数）
+    const themeEntry = nodeType ? this.rawTheme?.node?.[nodeType] : undefined
+    const nodeStyle: NodeStyle<G> =
+      typeof themeEntry === "function"
+        ? (
+            themeEntry as (n: typeof gn, runtimeTheme?: unknown) => NodeStyle<G>
+          )(gn, this.runtimeTheme)
+        : ((themeEntry as NodeStyle<G> | undefined) ??
+          this.styleManager.getNodeStyle(gn.id))
+    // 将最终样式写回 styleManager，便于 hover 等后续查找使用
+    this.styleManager.setNodeStyle(gn.id, nodeStyle)
+
+    const stateType =
+      (this.renderer.plugin.resolveNodeState?.(
+        gn.id,
+        this.model.stateManager,
+      ) as G["NS"]) ?? ("regular" as G["NS"])
+    const s = getNodeStyleByStateType(nodeStyle, stateType)
     const _c = parseHexColor(s.bgColor!)
     const bgR = _c[0],
       bgG = _c[1],
@@ -388,6 +449,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       label: gn.data?.label,
       textColor: [_tc[0], _tc[1], _tc[2], 1.0],
       fontSize: s.fontSize,
+      // 图标：node.data.icon（URL 或 emoji，见 IconAtlas）
+      iconUrl: (gn.data as any)?.icon,
     }
   }
 
@@ -398,7 +461,23 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     const sourceNode = this.nodeMap.get(String(sourceId))
     const targetNode = this.nodeMap.get(String(targetId))
 
-    const linkStyle = this.styleManager.getLinkStyle(gl.id)
+    // 从 rawTheme 解析边样式（支持静态对象和回调函数）
+    const linkType = gl.data?.linkType as G["LT"] | undefined
+    const linkThemeEntry = linkType
+      ? this.rawTheme?.link?.[linkType]
+      : undefined
+    const linkStyle: LinkStyle<G> =
+      typeof linkThemeEntry === "function"
+        ? (
+            linkThemeEntry as (
+              l: typeof gl,
+              runtimeTheme?: unknown,
+            ) => LinkStyle<G>
+          )(gl, this.runtimeTheme)
+        : ((linkThemeEntry as LinkStyle<G> | undefined) ??
+          this.styleManager.getLinkStyle(gl.id))
+    // 将最终样式写回 styleManager
+    this.styleManager.setLinkStyle(gl.id, linkStyle)
     const s = getLinkStyleByStateType(linkStyle, "regular" as G["LS"])
     const _c = parseHexColor(s.color ?? "#9ca3af")
 
@@ -419,7 +498,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       sourceId: String(sourceId),
       targetId: String(targetId),
       id: gl.id,
-      label: gl.data?.label,
+      label: gl.data?.label ?? gl.data?.linkType,
+      arrowSize: s.arrowSize,
     }
   }
 
@@ -519,10 +599,63 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
   /** Clear hover state (visual + state) */
   clearHover(): void {
-    this.updateHoverVisuals(null)
-    this.hoveredNodeId = null
+    this.syncAllNodeStyles()
     this.model.stateManager.clearHoveredNodes()
     this.events.publish("nodeHover", null)
+
+    this.syncAllLinkStyles()
+    this.events.publish("linkHover", { link: null, previousLink: null })
+  }
+
+  /**
+   * 主题切换后重新解析所有节点/边的视觉样式。
+   * 重新运行 defaultMapNode/defaultMapLink（会读取新的主题调色板），
+   * 仅更新颜色/粗细等视觉字段，保持节点位置与布局不变。
+   */
+  refreshTheme(): void {
+    const { graphData } = this.model.getGraphModelData()
+
+    // 节点：按 id 找到已存在的 render node，仅替换视觉字段
+    const nodeById = new Map(this.renderer.nodes.map((n) => [n.id, n]))
+    for (let i = 0; i < graphData.nodes.length; i++) {
+      const gn = graphData.nodes[i]
+      const rn = this.defaultMapNode(gn, i)
+      const existing = nodeById.get(gn.id)
+      if (rn && existing) {
+        existing.color = rn.color
+        existing.strokeColor = rn.strokeColor
+        existing.strokeWidth = rn.strokeWidth
+        existing.radius = rn.radius
+        existing.textColor = rn.textColor
+        existing.fontSize = rn.fontSize
+      }
+    }
+
+    // 边：同理
+    const linkById = new Map(this.renderer.links.map((l) => [l.id, l]))
+    for (let i = 0; i < graphData.links.length; i++) {
+      const gl = graphData.links[i]
+      const rl = this.defaultMapLink(gl, i)
+      const existing = linkById.get(gl.id)
+      if (rl && existing) {
+        existing.color = rl.color
+        existing.width = rl.width
+        existing.arrowSize = rl.arrowSize
+      }
+    }
+
+    // 按当前状态重算最终视觉
+    this.syncAllNodeStyles()
+    this.syncAllLinkStyles()
+  }
+
+  /**
+   * 设置运行时主题值并重新应用节点/边样式（主题切换用）。
+   * 样式回调函数会收到该值作为第 2 个参数。
+   */
+  setRuntimeTheme(theme: unknown): void {
+    this.runtimeTheme = theme
+    this.refreshTheme()
   }
 
   /** Destroy and clean up */

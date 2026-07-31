@@ -1,52 +1,110 @@
-import type { GraphNode } from "@lansheng/knowledge-graph/client/type"
+import { PanelContainer, PanelLayer } from "./panel"
+import { useAppCtx } from "./AppContext"
 
-interface NodeTooltipProps {
-  node: GraphNode
-  getRulesCount: (nodeId: string) => number
-  pos: { x: number; y: number }
+const NODE_TYPE_LABELS: Record<string, string> = {
+  person: "人员",
+  phone: "手机号",
+  address: "地址",
+  account: "账户",
+  company: "公司",
+  ip: "IP地址",
+  device: "设备",
 }
 
-export function NodeTooltip({ node, getRulesCount, pos }: NodeTooltipProps) {
+interface NodeTooltipProps {
+  loadedNeighbors: Record<string, { out: number; in: number }>
+}
+
+export function NodeTooltip({ loadedNeighbors }: NodeTooltipProps) {
+  const { hoveredNode, mousePos } = useAppCtx()
+  const node = hoveredNode!
+  const pos = mousePos
+  const neighbors = (node.data as any)?.neighbors ?? {}
+  const neighborCount = Object.keys(neighbors).length
+  const totalConnected = Object.values(neighbors).reduce(
+    (sum: number, rels: any) =>
+      sum +
+      Object.values(rels).reduce((a: number, b: any) => a + (b.total ?? 0), 0),
+    0,
+  )
+
   return (
-    <div
+    <PanelContainer
+      id="node-tooltip"
+      layer={PanelLayer.Tooltip}
+      position={{ x: pos.x + 16, y: pos.y - 12 }}
       style={{
-        position: "fixed",
-        left: pos.x + 16,
-        top: pos.y - 10,
+        width: "100%",
         padding: "10px 14px",
         borderRadius: "8px",
         fontSize: "13px",
         lineHeight: 1.6,
-        border: "1px solid #e94560",
-        boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+        border: "1px solid rgb(var(--primary))",
+        boxShadow: "var(--shadow-lg)",
         pointerEvents: "none",
-        zIndex: 1000,
         whiteSpace: "nowrap",
         fontFamily: "monospace",
-        background: "#fff",
+        background: "rgb(var(--tooltip-bg))",
+        color: "rgb(var(--foreground))",
       }}
     >
-      <div style={{ color: "#e94560", fontWeight: "bold", marginBottom: 4 }}>
-        {node.id}
+      <div
+        style={{
+          color: "#e94560",
+          fontWeight: "bold",
+          marginBottom: 4,
+          fontSize: "14px",
+        }}
+      >
+        {node.data?.label ?? node.id}
       </div>
-      <div>
-        <span style={{ color: "#8899aa" }}>label: </span>
-        {node.data?.label ?? "-"}
+      <div
+        style={{
+          color: "rgb(var(--muted))",
+          fontSize: "11px",
+          marginBottom: 6,
+        }}
+      >
+        {NODE_TYPE_LABELS[node.data?.nodeType ?? ""] ?? node.data?.nodeType}
+        {" · "}
+        {neighborCount} 类关联 · 共 {totalConnected} 条
       </div>
-      <div>
-        <span style={{ color: "#8899aa" }}>type: </span>
-        {node.data?.nodeType ?? "-"}
+      <div
+        style={{
+          borderTop: "1px solid rgb(var(--border))",
+          margin: "4px 0",
+          paddingTop: 4,
+        }}
+      >
+        {Object.entries(neighbors).map(([type, rels]: [string, any]) => {
+          const entries = Object.entries(rels) as [
+            string,
+            { out: number; in: number; total: number },
+          ][]
+          const loaded = loadedNeighbors[type] ?? { out: 0, in: 0 }
+          const totalLoaded = loaded.out + loaded.in
+          const remaining =
+            entries.reduce((a, [, info]) => a + info.total, 0) - totalLoaded
+          return (
+            <div key={type} style={{ fontSize: "12px", lineHeight: 1.8 }}>
+              <span
+                style={{ color: "rgb(var(--foreground))", fontWeight: "bold" }}
+              >
+                {NODE_TYPE_LABELS[type] ?? type}
+              </span>
+              <span
+                style={{
+                  color: "rgb(var(--muted))",
+                  marginLeft: 4,
+                  fontSize: "11px",
+                }}
+              >
+                {remaining > 0 ? `可拓 ${remaining}` : "已拓完"}
+              </span>
+            </div>
+          )
+        })}
       </div>
-      <div>
-        <span style={{ color: "#8899aa" }}>count: </span>
-        {node.data?.count ?? 0}
-        <span style={{ color: "#8899aa" }}> / total: </span>
-        {node.data?.total ?? 0}
-      </div>
-      <div>
-        <span style={{ color: "#8899aa" }}>rules: </span>
-        {getRulesCount(node.id)}
-      </div>
-    </div>
+    </PanelContainer>
   )
 }

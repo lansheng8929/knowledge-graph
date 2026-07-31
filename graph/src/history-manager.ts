@@ -105,6 +105,99 @@ export class HistoryManager {
     return this.currentState
   }
 
+  /**
+   * 是否可以撤销并跳过指定 type
+   */
+  canGoBackSkipType(skipType: string): boolean {
+    let idx = this.currentIndex - 1
+    while (idx >= 0 && this.history[idx].type === skipType) idx--
+    return idx >= 0
+  }
+
+  /**
+   * 是否可以重做并跳过指定 type
+   */
+  canGoForwardSkipType(skipType: string): boolean {
+    let idx = this.currentIndex + 1
+    while (idx < this.history.length && this.history[idx].type === skipType)
+      idx++
+    return idx < this.history.length
+  }
+
+  /**
+   * 撤销时跳过指定 type 的记录（如 "snapshot"）
+   * @returns 新的 HistoryState，若无匹配则返回 undefined
+   */
+  goBackSkipType(skipType: string): HistoryState | undefined {
+    let idx = this.currentIndex - 1
+    while (idx >= 0 && this.history[idx].type === skipType) idx--
+    if (idx < 0) return undefined
+    this.currentIndex = idx
+    return this.currentState
+  }
+
+  /**
+   * 重做时跳过指定 type 的记录（如 "snapshot"）
+   * @returns 新的 HistoryState，若无匹配则返回 undefined
+   */
+  goForwardSkipType(skipType: string): HistoryState | undefined {
+    let idx = this.currentIndex + 1
+    while (idx < this.history.length && this.history[idx].type === skipType)
+      idx++
+    if (idx >= this.history.length) return undefined
+    this.currentIndex = idx
+    return this.currentState
+  }
+
+  /**
+   * 跳转到指定索引的历史记录
+   * @returns 跳转后的 HistoryState，若索引无效则返回 undefined
+   */
+  jumpTo(index: number): HistoryState | undefined {
+    if (index < 0 || index >= this.history.length) return undefined
+    this.currentIndex = index
+    return this.currentState
+  }
+
+  /**
+   * 获取完整历史记录列表（用于 UI 展示）
+   */
+  getHistory(): readonly HistoryAction[] {
+    return this.history
+  }
+
+  /**
+   * 获取指定索引的历史记录
+   */
+  getAction(index: number): HistoryAction | undefined {
+    return this.history[index]
+  }
+
+  /**
+   * 删除指定索引的历史记录
+   * 若删除的是当前或之前的记录，当前索引会相应前移
+   */
+  deleteEntry(index: number): boolean {
+    if (index < 0 || index >= this.history.length) return false
+    this.history.splice(index, 1)
+    if (this.currentIndex >= this.history.length) {
+      this.currentIndex = this.history.length - 1
+    } else if (this.currentIndex > index) {
+      this.currentIndex--
+    }
+    return true
+  }
+
+  /** 跳转到第一条历史记录 */
+  goToFirst(): HistoryState | undefined {
+    return this.jumpTo(0)
+  }
+
+  /** 跳转到最后一条历史记录 */
+  goToLast(): HistoryState | undefined {
+    return this.jumpTo(this.history.length - 1)
+  }
+
   /** 清空所有历史 */
   clear(): void {
     this.history = []

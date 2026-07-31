@@ -11,7 +11,11 @@ import type { Picker } from "./picker.js"
 import type { GraphOverlay } from "./graph-overlay.js"
 import type { RenderNode, RenderLink } from "./types.js"
 import type { GraphViewStyle } from "../theme.js"
-import type { DefaultGraphDataGenerics } from "../client/type.js"
+import type {
+  GraphDataGenerics,
+  DefaultGraphDataGenerics,
+} from "../client/type.js"
+import type { StateManager } from "../state-manager"
 
 /** 每帧渲染上下文 */
 export interface RenderContext {
@@ -52,7 +56,9 @@ export interface RenderPluginOptions {
   onPlusClick?: (nodeId: string) => void
 }
 
-export interface RenderPlugin extends Picker {
+export interface RenderPlugin<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
+> extends Picker {
   /** 插件名（调试用） */
   readonly name: string
 
@@ -63,8 +69,14 @@ export interface RenderPlugin extends Picker {
   getOverlays(): GraphOverlay[]
 
   /** 返回插件的默认样式 */
-  getDefaultStyle(): GraphViewStyle<DefaultGraphDataGenerics>
+  getDefaultStyle(): GraphViewStyle<G>
 
   /** 节点位置更新后刷新（如物理 tick 后） */
   afterPositionUpdate?(nodes: RenderNode[]): void
+
+  /** 根据优先级计算节点当前应使用的状态类型 */
+  resolveNodeState?(nodeId: string, stateManager: StateManager): string
+
+  /** 根据优先级计算边当前应使用的状态类型 */
+  resolveLinkState?(linkId: string, stateManager: StateManager): string
 }

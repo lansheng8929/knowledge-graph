@@ -1,4 +1,3 @@
-export { ExpansionService } from "./expansion-service"
 export type {
   ExpansionRule,
   ExpansionRequest,

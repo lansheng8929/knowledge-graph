@@ -12,27 +12,26 @@ import {
 } from "./interaction-manager.js"
 import type { Picker } from "./picker.js"
 import type { RenderPlugin } from "./render-plugin.js"
+import type {
+  GraphDataGenerics,
+  DefaultGraphDataGenerics,
+} from "../client/type.js"
 import type { RenderNode, RenderLink } from "./types.js"
 
-export interface GraphRendererOptions {
+export interface GraphRendererOptions<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
+> {
   container: HTMLElement
   width?: number
   height?: number
   backgroundColor?: string
   showArrows?: boolean
   labelMinScale?: number
-  labelFontSize?: number
-  /** 拾取模式: "gpu" = FBO (默认), "cpu" = CPU SDF 计算 */
-  pickerMode?: "gpu" | "cpu"
-  /** 自定义渲染插件 */
-  renderPlugin?: (
+  /** 渲染插件工厂（必填） */
+  renderPlugin: (
     gl: WebGL2RenderingContext,
     canvas: HTMLCanvasElement,
-  ) => RenderPlugin
-  /** Plus 徽标边框宽度（世界坐标单位，默认 0） */
-  plusBadgeBorderWidth?: number
-  /** Plus 徽标边框颜色（默认红色） */
-  plusBadgeBorderColor?: [number, number, number, number]
+  ) => RenderPlugin<G>
 }
 
 /**
@@ -41,8 +40,10 @@ export interface GraphRendererOptions {
 export interface GraphRendererCallbacks {
   onNodeClick?: (nodeId: string | null, event: MouseEvent) => void
   onNodeHover?: (nodeId: string | null) => void
+  onLinkHover?: (linkId: string | null) => void
   onNodeDrag?: (nodeId: string, x: number, y: number) => void
   onNodeDragEnd?: (nodeId: string) => void
+  onNodeContextMenu?: (nodeId: string, clientX: number, clientY: number) => void
   onLinkClick?: (linkId: string | null, event: MouseEvent) => void
   onBackgroundClick?: (event: MouseEvent) => void
   onZoom?: (transform: ViewTransform) => void
@@ -50,9 +51,11 @@ export interface GraphRendererCallbacks {
   onPlusClick?: (nodeId: string) => void
 }
 
-export class GraphRenderer {
+export class GraphRenderer<
+  G extends GraphDataGenerics = DefaultGraphDataGenerics,
+> {
   /** 实际渲染器 */
-  readonly backend: WebGLRenderer
+  readonly backend: WebGLRenderer<G>
 
   /** 画布元素 */
   get canvas(): HTMLCanvasElement {
@@ -80,40 +83,46 @@ export class GraphRenderer {
   }
 
   /** 获取当前渲染插件 */
-  get plugin(): RenderPlugin {
+  get plugin(): RenderPlugin<G> {
     return this.backend.plugin
+  }
+
+  /** 运行时切换画布背景色（主题切换用） */
+  setBackgroundColor(hex: string): void {
+    this.backend.setBackgroundColor(hex)
   }
 
   // ========== 回调桥接 ==========
 
   onNodeClick?: GraphRendererCallbacks["onNodeClick"]
   onNodeHover?: GraphRendererCallbacks["onNodeHover"]
+  onLinkHover?: GraphRendererCallbacks["onLinkHover"]
   onNodeDrag?: GraphRendererCallbacks["onNodeDrag"]
   onNodeDragEnd?: GraphRendererCallbacks["onNodeDragEnd"]
+  onNodeContextMenu?: GraphRendererCallbacks["onNodeContextMenu"]
   onLinkClick?: GraphRendererCallbacks["onLinkClick"]
   onBackgroundClick?: GraphRendererCallbacks["onBackgroundClick"]
   onZoom?: GraphRendererCallbacks["onZoom"]
   onPlusClick?: GraphRendererCallbacks["onPlusClick"]
 
-  constructor(opts: GraphRendererOptions) {
-    this.backend = new WebGLRenderer({
+  constructor(opts: GraphRendererOptions<G>) {
+    this.backend = new WebGLRenderer<G>({
       container: opts.container,
       width: opts.width,
       height: opts.height,
       backgroundColor: opts.backgroundColor,
       showArrows: opts.showArrows,
       labelMinScale: opts.labelMinScale,
-      labelFontSize: opts.labelFontSize,
-      pickerMode: opts.pickerMode,
       renderPlugin: opts.renderPlugin,
-      plusBadgeBorderWidth: opts.plusBadgeBorderWidth,
-      plusBadgeBorderColor: opts.plusBadgeBorderColor,
     })
 
     this.backend.onNodeClick = (...args) => this.onNodeClick?.(...args)
     this.backend.onNodeHover = (...args) => this.onNodeHover?.(...args)
+    this.backend.onLinkHover = (...args) => this.onLinkHover?.(...args)
     this.backend.onNodeDrag = (...args) => this.onNodeDrag?.(...args)
     this.backend.onNodeDragEnd = (...args) => this.onNodeDragEnd?.(...args)
+    this.backend.onNodeContextMenu = (...args) =>
+      this.onNodeContextMenu?.(...args)
     this.backend.onLinkClick = (...args) => this.onLinkClick?.(...args)
     this.backend.onBackgroundClick = (...args) =>
       this.onBackgroundClick?.(...args)

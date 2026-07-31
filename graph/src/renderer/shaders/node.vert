@@ -13,6 +13,8 @@ layout(location = 8) in float a_showPlus;      // instance: show plus button
 layout(location = 9) in float a_plusOffsetX;   // instance: plus offset X
 layout(location = 10) in float a_plusOffsetY;  // instance: plus offset Y
 layout(location = 11) in float a_plusScale;    // instance: plus size scale
+layout(location = 12) in float a_hasIcon;      // instance: has icon (0/1)
+layout(location = 13) in vec4 a_iconUv;        // instance: icon UV [u0,v0,u1,v1]
 uniform vec2 u_resolution;
 uniform vec2 u_translation;
 uniform float u_scale;
@@ -29,6 +31,8 @@ out float v_showPlus;
 out float v_plusOffsetX;
 out float v_plusOffsetY;
 out float v_plusScale;
+out float v_hasIcon;
+out vec4 v_iconUv;
 
 void main() {
   float halfSize = a_radius + a_strokeWidth;
@@ -49,4 +53,6 @@ void main() {
   v_plusOffsetX = a_plusOffsetX;
   v_plusOffsetY = a_plusOffsetY;
   v_plusScale = a_plusScale;
+  v_hasIcon = a_hasIcon;
+  v_iconUv = a_iconUv;
 }

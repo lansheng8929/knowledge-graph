@@ -7,6 +7,7 @@
 import { NODE_VS, NODE_FS, PICK_NODE_VS, PICK_NODE_FS } from "./shaders.js"
 import type { NodeRenderPipeline } from "./node-pipeline.js"
 import type { RenderNode } from "./types.js"
+import { IconAtlas, type AtlasGlyph } from "./icon-atlas.js"
 
 /** Shape type → float for shader uniform (always circle) */
 export function shapeToType(_shape?: string): number {
@@ -38,6 +39,7 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
   private uTranslation: WebGLUniformLocation | null = null
   private uScale: WebGLUniformLocation | null = null
   private uZOffset: WebGLUniformLocation | null = null
+  private uIconAtlas: WebGLUniformLocation | null = null
 
   // Uniform locations (pick)
   private uPickResolution: WebGLUniformLocation | null = null
@@ -84,6 +86,7 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
     this.uTranslation = gl.getUniformLocation(this.program, "u_translation")
     this.uScale = gl.getUniformLocation(this.program, "u_scale")
     this.uZOffset = gl.getUniformLocation(this.program, "u_zOffset")
+    this.uIconAtlas = gl.getUniformLocation(this.program, "u_iconAtlas")
 
     this.uPickResolution = gl.getUniformLocation(
       this.pickProgram,
@@ -125,6 +128,7 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
     ty: number,
     scale: number,
     zOffset = 0,
+    iconAtlas?: IconAtlas,
   ): void {
     if (nodes.length === 0) return
     const gl = this.gl
@@ -149,6 +153,11 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
     const plusOffsetX = new Float32Array(N)
     const plusOffsetY = new Float32Array(N)
     const plusScale = new Float32Array(N)
+    const hasIcon = new Float32Array(N)
+    const iconUv = new Float32Array(N * 4)
+
+    // 每个 url/文本 解析一次 UV
+    const glyphCache = new Map<string, AtlasGlyph | null>()
 
     for (let i = 0; i < N; i++) {
       const n = nodes[i]
@@ -170,6 +179,21 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
       plusOffsetX[i] = n.plusOffsetX ?? 0.5
       plusOffsetY[i] = n.plusOffsetY ?? -0.5
       plusScale[i] = n.plusScale ?? 0.35
+
+      if (iconAtlas && n.iconUrl) {
+        let glyph = glyphCache.get(n.iconUrl)
+        if (glyph === undefined) {
+          glyph = iconAtlas.getOrCreate(n.iconUrl)
+          glyphCache.set(n.iconUrl, glyph)
+        }
+        if (glyph) {
+          hasIcon[i] = 1
+          iconUv[i * 4] = glyph.uv[0]
+          iconUv[i * 4 + 1] = glyph.uv[1]
+          iconUv[i * 4 + 2] = glyph.uv[2]
+          iconUv[i * 4 + 3] = glyph.uv[3]
+        }
+      }
     }
 
     this.setupInstanceBuffer(1, center, 2)
@@ -183,11 +207,20 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
     this.setupInstanceBuffer(9, plusOffsetX, 1)
     this.setupInstanceBuffer(10, plusOffsetY, 1)
     this.setupInstanceBuffer(11, plusScale, 1)
+    this.setupInstanceBuffer(12, hasIcon, 1)
+    this.setupInstanceBuffer(13, iconUv, 4)
+
+    // 绑定图标纹理（TEXTURE1）
+    if (iconAtlas) {
+      gl.activeTexture(gl.TEXTURE1)
+      gl.bindTexture(gl.TEXTURE_2D, iconAtlas.getTexture(gl))
+      gl.uniform1i(this.uIconAtlas, 1)
+    }
 
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, N)
 
     // Reset divisors to 0 for non-instanced attributes
-    for (let loc = 1; loc <= 11; loc++) {
+    for (let loc = 1; loc <= 13; loc++) {
       gl.vertexAttribDivisor(loc, 0)
     }
     gl.bindVertexArray(null)

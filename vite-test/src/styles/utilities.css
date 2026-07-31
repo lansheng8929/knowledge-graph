@@ -1,0 +1,57 @@
+/**
+ * 语义工具类 —— 引用 tokens.css 中的主题变量
+ * 用法：<div className="bg-background text-foreground border-border shadow" />
+ */
+
+/* ── 背景 ── */
+.bg-background {
+  background-color: rgb(var(--background));
+}
+.bg-canvas {
+  background-color: rgb(var(--canvas-bg));
+}
+.bg-tooltip {
+  background-color: rgb(var(--tooltip-bg));
+}
+.bg-primary {
+  background-color: rgb(var(--primary));
+}
+.bg-hover {
+  background-color: rgb(var(--hover));
+}
+
+/* ── 文字 ── */
+.text-foreground {
+  color: rgb(var(--foreground));
+}
+.text-muted {
+  color: rgb(var(--muted));
+}
+.text-muted-foreground {
+  color: rgb(var(--muted-foreground));
+}
+.text-primary {
+  color: rgb(var(--primary));
+}
+
+/* ── 边框 ── */
+.border-border {
+  border-color: rgb(var(--border));
+}
+.border-border-strong {
+  border-color: rgb(var(--border-strong));
+}
+.border-primary {
+  border-color: rgb(var(--primary));
+}
+
+/* ── 阴影 ── */
+.shadow-sm {
+  box-shadow: var(--shadow-sm);
+}
+.shadow {
+  box-shadow: var(--shadow);
+}
+.shadow-lg {
+  box-shadow: var(--shadow-lg);
+}

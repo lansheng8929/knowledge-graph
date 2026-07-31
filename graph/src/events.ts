@@ -13,7 +13,10 @@ export interface GraphEventMap<
   G extends GraphDataGenerics = DefaultGraphDataGenerics,
 > {
   nodeHover: GraphNode<G["NO"], G["NT"], G["NS"]> | null
-  nodeClick: GraphNode<G["NO"], G["NT"], G["NS"]> | null
+  nodeClick: {
+    node: GraphNode<G["NO"], G["NT"], G["NS"]> | null
+    ctrlKey: boolean
+  }
   nodeDragEnd: GraphNode<G["NO"], G["NT"], G["NS"]> | null
   nodeRightClick: {
     node: GraphNode<G["NO"], G["NT"], G["NS"]>
