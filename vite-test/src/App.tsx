@@ -18,6 +18,7 @@ import { useGraphHover } from "./hooks/useGraphHover"
 import { useRuleMenu } from "./hooks/useRuleMenu"
 import { useGraphApp } from "./hooks/useGraphApp"
 import { useGraphSelection } from "./hooks/useGraphSelection"
+import { applyIcons } from "./icon-map"
 
 // 计算节点各方向已加载的邻居数量（纯函数）
 function getLoadedNeighbors(
@@ -115,10 +116,58 @@ export default function App() {
 
   const selCtx = useGraphSelection({ viewRef, modelRef })
 
-  const handleSearchSelect = useCallback((nodeId: string) => {
-    const url = new URL(window.location.href)
-    url.searchParams.set("ids", nodeId)
-    window.location.href = url.toString()
+  // 搜索结果选中：不跳转，把该节点直接加入当前画布（放到视口中心）
+  const handleSearchSelect = useCallback(async (nodeId: string) => {
+    const model = modelRef.current
+    const view = viewRef.current
+    if (!model || !view) return
+
+    // 请求该节点的图数据
+    const res = await fetch("/api/graph/init", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [nodeId] }),
+    })
+    const json = await res.json()
+    if (!json.success) return
+    const incoming = applyIcons(json.data as { graphData: { nodes: any[]; links: any[] } }).graphData
+
+    const current = model.getGraphModelData().graphData
+    const existNodeIds = new Set(current.nodes.map((n) => n.id))
+    const existLinkIds = new Set(current.links.map((l) => l.id))
+    const newNodes = incoming.nodes.filter((n: any) => !existNodeIds.has(n.id))
+    if (newNodes.length === 0) return
+
+    // 新节点放到当前视口中心附近，确保可见
+    const t = view.renderer.interaction.transform
+    const canvas = view.renderer.canvas
+    const worldCX = canvas.clientWidth / 2 / t.k - t.x
+    const worldCY = canvas.clientHeight / 2 / t.k - t.y
+    for (const n of newNodes) {
+      n.x = worldCX + (Math.random() - 0.5) * 20
+      n.y = worldCY + (Math.random() - 0.5) * 20
+    }
+
+    model.updateGraphData({
+      graphData: {
+        nodes: [...current.nodes, ...newNodes],
+        links: [
+          ...current.links,
+          ...incoming.links.filter((l: any) => !existLinkIds.has(l.id)),
+        ],
+      },
+    })
+    view.reheat(1)
+
+    // 记录到历史，便于撤销
+    historyManagerRef.current.pushState({
+      type: "search-add",
+      description: `新增节点 ${nodeId}`,
+      state: {
+        graphData: structuredClone(model.getGraphModelData().graphData),
+        customData: { state: model.stateManager.getState() },
+      },
+    })
   }, [])
 
   const handleAnalyze = useCallback(() => {
@@ -283,6 +332,8 @@ export default function App() {
             {/* 分析面板 */}
             {analysisPanelOpen && (
               <AnalysisPanel
+                modelRef={modelRef}
+                viewRef={viewRef}
                 onClose={() => {
                   setAnalysisTarget(null)
                   setAnalysisPanelOpen(false)

@@ -69,8 +69,8 @@ export type GraphViewModel<
  * 状态配置接口
  */
 export interface StateConfig {
-  focusNodes?: NodeId[]
-  focusLinks?: LinkId[]
+  highlightNodes?: NodeId[]
+  highlightLinks?: LinkId[]
   selectedNodes?: NodeId[]
   selectedLinks?: LinkId[]
   hiddenNodes?: NodeId[]

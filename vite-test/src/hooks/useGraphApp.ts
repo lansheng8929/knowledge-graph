@@ -227,9 +227,12 @@ export function useGraphApp(ids?: string[]) {
       | undefined
     if (customData?.state) {
       const s = customData.state
-      if (s.focusNodes?.length)
-        model.stateManager.setFocusNodes(s.focusNodes, s.focusLinks)
-      else model.stateManager.clearFocus()
+      if (s.highlightNodes?.length)
+        model.stateManager.setHighlightNodes(
+          s.highlightNodes,
+          s.highlightLinks,
+        )
+      else model.stateManager.clearHighlightNodes()
       if (s.selectedNodes?.length)
         model.stateManager.setSelectedNodes(s.selectedNodes, s.selectedLinks)
       else model.stateManager.clearSelection()
@@ -270,9 +273,12 @@ export function useGraphApp(ids?: string[]) {
       const cd = action.customData as any
       if (cd?.state) {
         const s = cd.state
-        if (s.focusNodes?.length)
-          model.stateManager.setFocusNodes(s.focusNodes, s.focusLinks)
-        else model.stateManager.clearFocus()
+        if (s.highlightNodes?.length)
+          model.stateManager.setHighlightNodes(
+            s.highlightNodes,
+            s.highlightLinks,
+          )
+        else model.stateManager.clearHighlightNodes()
         if (s.selectedNodes?.length)
           model.stateManager.setSelectedNodes(s.selectedNodes, s.selectedLinks)
         else model.stateManager.clearSelection()

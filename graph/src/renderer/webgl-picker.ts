@@ -199,6 +199,9 @@ export class WebGLPicker implements Picker {
     )
 
     // 读像素
+    // 画布 buffer 为设备像素（CSS × dpr），拾取渲染也按设备分辨率（u_resolution=设备尺寸）绘制，
+    // 因此需把传入的 CSS 屏幕坐标映射回 buffer（乘 dpr），否则在 DPR≠1（如 Windows 125% 缩放）
+    // 时命中会相对画面展示偏移到右下角。
     const px = Math.round(screenX * dpr)
     const py = Math.round(h - screenY * dpr) // WebGL Y 轴翻转
     const pixel = new Uint8Array(4)

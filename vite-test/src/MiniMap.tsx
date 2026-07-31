@@ -12,8 +12,10 @@ const MINIMAP_H = 150
 /** 世界画布最小尺寸（小图时兜底，保证蓝框比例稳定） */
 const WORLD_CANVAS_MIN_W = 800
 const WORLD_CANVAS_MIN_H = 600
-/** 节点包围盒外扩 padding */
+/** 节点包围盒外扩 padding 最小值（px，世界坐标） */
 const WORLD_PADDING = 60
+/** 节点包围盒外扩 padding 比例（相对较长边） */
+const WORLD_PADDING_RATIO = 0.1
 const NODE_DOT_RADIUS = 2
 const VIEWPORT_RECT_COLOR = "rgba(0, 102, 255, 0.25)"
 const VIEWPORT_RECT_STROKE = "#0066ff"
@@ -56,8 +58,13 @@ export default function MiniMap({ viewRef }: MiniMapProps) {
 
     const nodeW = Math.max(maxX - minX, 1)
     const nodeH = Math.max(maxY - minY, 1)
-    const cw = Math.max(WORLD_CANVAS_MIN_W, nodeW + WORLD_PADDING * 2)
-    const ch = Math.max(WORLD_CANVAS_MIN_H, nodeH + WORLD_PADDING * 2)
+    // padding 按图大小比例（至少 WORLD_PADDING），避免大图节点贴边
+    const pad = Math.max(
+      WORLD_PADDING,
+      Math.max(nodeW, nodeH) * WORLD_PADDING_RATIO,
+    )
+    const cw = Math.max(WORLD_CANVAS_MIN_W, nodeW + pad * 2)
+    const ch = Math.max(WORLD_CANVAS_MIN_H, nodeH + pad * 2)
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
 

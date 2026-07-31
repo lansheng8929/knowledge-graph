@@ -16,7 +16,7 @@ function themed(
       fontSize: 16,
     },
     hovered: {
-      bgColor: "#fff",
+      bgColor: bg,
       strokeColor: "#00ccff",
       textColor: "#2c2c2c",
       radius: 8,
@@ -25,8 +25,8 @@ function themed(
       fontSize: 16,
     },
     highlighted: {
-      bgColor: "#fff",
-      strokeColor: "#0066ff",
+      bgColor: bg,
+      strokeColor: "#fde047",
       textColor: "#2c2c2c",
       radius: 8,
       strokeWidth: 2,

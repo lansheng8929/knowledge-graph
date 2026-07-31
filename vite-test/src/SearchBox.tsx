@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from "react"
+import { useDebouncedCallback } from "./hooks/useDebounce"
+import { useRequest } from "./hooks/useRequest"
 
 interface SearchResult {
   id: string
@@ -56,39 +58,66 @@ interface SearchBoxProps {
 
 export default function SearchBox({ onSelect }: SearchBoxProps) {
   const [query, setQuery] = useState("")
-  const [results, setResults] = useState<SearchResult[]>([])
   const [open, setOpen] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  /** 键盘高亮的下标（-1 = 无） */
+  const [activeIndex, setActiveIndex] = useState(-1)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  // 请求状态机制：data=结果、run 发起、reset 清空；新请求自动中断旧请求
+  const { data: results, run, reset } = useRequest<SearchResult[]>()
 
-  useEffect(() => {
-    const q = query.trim()
-    if (!q) {
-      setResults([])
+  // 输入停止 300ms 后才发起搜索（防抖）
+  const debouncedSearch = useDebouncedCallback((q: string) => {
+    const qText = q.trim()
+    if (!qText) {
+      reset()
       setOpen(false)
+      setActiveIndex(-1)
       return
     }
+    run(async (signal) => {
+      const res = await fetch("/api/graph/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: qText, limit: 10 }),
+        signal,
+      })
+      const json = await res.json()
+      if (!json.success) return []
+      return (json.data?.nodes ?? []) as SearchResult[]
+    }).then((nodes) => {
+      setOpen(!!nodes?.length)
+      setActiveIndex(nodes?.length ? 0 : -1)
+    })
+  }, 300)
 
-    clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch("/api/graph/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: q, limit: 10 }),
-        })
-        const json = await res.json()
-        if (json.success) {
-          setResults(json.data.nodes)
-          setOpen(true)
-        }
-      } catch {
-        // ignore
+  const handleQueryChange = (value: string) => {
+    setQuery(value)
+    debouncedSearch(value)
+  }
+
+  // 键盘导航：↑/↓ 移动高亮，Enter 选中，Esc 关闭
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const list = results ?? []
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      if (open && list.length > 0) {
+        setActiveIndex((i) => (i + 1) % list.length)
       }
-    }, 300)
-
-    return () => clearTimeout(timerRef.current)
-  }, [query])
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      if (open && list.length > 0) {
+        setActiveIndex((i) => (i <= 0 ? list.length - 1 : i - 1))
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      if (open && list.length > 0 && activeIndex >= 0) {
+        handleSelect(list[activeIndex].id)
+      }
+    } else if (e.key === "Escape") {
+      setOpen(false)
+    }
+  }
 
   // 点击外部关闭下拉
   useEffect(() => {
@@ -101,10 +130,19 @@ export default function SearchBox({ onSelect }: SearchBoxProps) {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
+  // 键盘导航时把高亮项滚动到可视区
+  useEffect(() => {
+    const listEl = listRef.current
+    if (!listEl || activeIndex < 0) return
+    const item = listEl.children[activeIndex] as HTMLElement | undefined
+    item?.scrollIntoView({ block: "nearest" })
+  }, [activeIndex])
+
   const handleSelect = (nodeId: string) => {
     setQuery("")
-    setResults([])
+    reset()
     setOpen(false)
+    setActiveIndex(-1)
     onSelect(nodeId)
   }
 
@@ -113,23 +151,23 @@ export default function SearchBox({ onSelect }: SearchBoxProps) {
       <input
         placeholder="搜索节点..."
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onFocus={() => results.length > 0 && setOpen(true)}
+        onChange={(e) => handleQueryChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={() => (results?.length ?? 0) > 0 && setOpen(true)}
         style={inputStyle}
       />
-      {open && results.length > 0 && (
-        <div style={dropdownStyle}>
-          {results.map((r) => (
+      {open && results && results.length > 0 && (
+        <div ref={listRef} style={dropdownStyle}>
+          {results.map((r, idx) => (
             <div
               key={r.id}
-              style={itemStyle}
+              style={{
+                ...itemStyle,
+                background:
+                  idx === activeIndex ? "rgb(var(--hover))" : "transparent",
+              }}
               onClick={() => handleSelect(r.id)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = "rgb(var(--hover))"
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = "rgb(var(--background))"
-              }}
+              onMouseEnter={() => setActiveIndex(idx)}
             >
               <span style={{ color: "#1976d2", fontWeight: "bold" }}>
                 {r.data?.label ?? r.id}

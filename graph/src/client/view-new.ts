@@ -658,6 +658,33 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.refreshTheme()
   }
 
+  /**
+   * 设置高亮节点并刷新视觉。
+   * 供分析面板等外部调用，把已在画布上的节点标记为 highlighted。
+   */
+  setHighlightNodes(nodeIds: string[], linkIds: string[] = []): void {
+    if (nodeIds.length > 0) {
+      this.model.stateManager.setHighlightNodes(nodeIds, linkIds)
+    } else {
+      this.model.stateManager.clearHighlightNodes()
+    }
+    this.syncAllNodeStyles()
+    this.syncAllLinkStyles()
+  }
+
+  /**
+   * 设置/清除悬停节点并刷新视觉。
+   * 供分析面板悬浮联动：对画布上对应节点实时应用 hover 效果。
+   */
+  setHoveredNodes(nodeIds: string[]): void {
+    if (nodeIds.length > 0) {
+      this.model.stateManager.setHoveredNodes(nodeIds)
+    } else {
+      this.model.stateManager.clearHoveredNodes()
+    }
+    this.syncAllNodeStyles()
+  }
+
   /** Destroy and clean up */
   destroy(): void {
     this.layout.destroy()

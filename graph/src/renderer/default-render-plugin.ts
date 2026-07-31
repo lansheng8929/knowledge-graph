@@ -147,6 +147,7 @@ export class DefaultRenderPlugin<
     if (stateManager.isHoveredNode(nodeId)) return "hovered"
     if (stateManager.getSelectedNodes().includes(nodeId)) return "selected"
     if (stateManager.getRootNodes().includes(nodeId)) return "root"
+    if (stateManager.getHighlightNodes().includes(nodeId)) return "highlighted"
     return "regular"
   }
 

@@ -25,8 +25,8 @@ export class StateManager<
   constructor(events: GraphEvents<G>) {
     this.events = events
     this.state = {
-      focusNodes: [],
-      focusLinks: [],
+      highlightNodes: [],
+      highlightLinks: [],
       selectedNodes: [],
       selectedLinks: [],
       hiddenNodes: [],
@@ -40,64 +40,66 @@ export class StateManager<
   // ============ 焦点状态管理 ============
 
   /**
-   * 设置焦点节点
+   * 设置高亮节点
    */
-  setFocusNodes(nodeIds: NodeId[], linkIds?: LinkId[]): void {
-    this.state.focusNodes = [...new Set(nodeIds)]
-    this.state.focusLinks = linkIds ? [...new Set(linkIds)] : []
+  setHighlightNodes(nodeIds: NodeId[], linkIds?: LinkId[]): void {
+    this.state.highlightNodes = [...new Set(nodeIds)]
+    this.state.highlightLinks = linkIds ? [...new Set(linkIds)] : []
 
-    this.events.publish("focusChange", {
-      nodeIds: this.state.focusNodes,
-      linkIds: this.state.focusLinks,
+    this.events.publish("highlightChange", {
+      nodeIds: this.state.highlightNodes,
+      linkIds: this.state.highlightLinks,
     })
 
     this.publishMetaDataChange()
   }
 
   /**
-   * 添加焦点节点
+   * 添加高亮节点
    */
-  addFocusNodes(nodeIds: NodeId[], linkIds?: LinkId[]): void {
-    this.state.focusNodes = [...new Set([...this.state.focusNodes, ...nodeIds])]
+  addHighlightNodes(nodeIds: NodeId[], linkIds?: LinkId[]): void {
+    this.state.highlightNodes = [
+      ...new Set([...this.state.highlightNodes, ...nodeIds]),
+    ]
     if (linkIds) {
-      this.state.focusLinks = [
-        ...new Set([...this.state.focusLinks, ...linkIds]),
+      this.state.highlightLinks = [
+        ...new Set([...this.state.highlightLinks, ...linkIds]),
       ]
     }
 
-    this.events.publish("focusChange", {
-      nodeIds: this.state.focusNodes,
-      linkIds: this.state.focusLinks,
+    this.events.publish("highlightChange", {
+      nodeIds: this.state.highlightNodes,
+      linkIds: this.state.highlightLinks,
     })
 
     this.publishMetaDataChange()
   }
 
   /**
-   * 移除焦点节点
+   * 移除高亮节点
    */
-  removeFocusNodes(nodeIds: NodeId[]): void {
+  removeHighlightNodes(nodeIds: NodeId[]): void {
     const nodeIdSet = new Set(nodeIds)
-    this.state.focusNodes = this.state.focusNodes.filter(
+    this.state.highlightNodes = this.state.highlightNodes.filter(
       (id) => !nodeIdSet.has(id),
     )
 
-    this.events.publish("focusChange", {
-      nodeIds: this.state.focusNodes,
-      linkIds: this.state.focusLinks,
+    this.events.publish("highlightChange", {
+      nodeIds: this.state.highlightNodes,
+      linkIds: this.state.highlightLinks,
     })
 
     this.publishMetaDataChange()
   }
 
   /**
-   * 清空焦点
+   * 清空高亮
    */
-  clearFocus(): void {
-    this.state.focusNodes = []
-    this.state.focusLinks = []
+  clearHighlightNodes(): void {
+    this.state.highlightNodes = []
+    this.state.highlightLinks = []
 
-    this.events.publish("focusChange", {
+    this.events.publish("highlightChange", {
       nodeIds: [],
       linkIds: [],
     })
@@ -106,24 +108,24 @@ export class StateManager<
   }
 
   /**
-   * 获取焦点节点
+   * 获取高亮节点
    */
-  getFocusNodes(): NodeId[] {
-    return [...this.state.focusNodes]
+  getHighlightNodes(): NodeId[] {
+    return [...this.state.highlightNodes]
   }
 
   /**
-   * 获取焦点连线
+   * 获取高亮连线
    */
-  getFocusLinks(): LinkId[] {
-    return [...this.state.focusLinks]
+  getHighlightLinks(): LinkId[] {
+    return [...this.state.highlightLinks]
   }
 
   /**
-   * 判断节点是否在焦点中
+   * 判断节点是否在高亮中
    */
-  isFocused(nodeId: NodeId): boolean {
-    return this.state.focusNodes.includes(nodeId)
+  isHighlighted(nodeId: NodeId): boolean {
+    return this.state.highlightNodes.includes(nodeId)
   }
 
   // ============ 选中状态管理 ============
@@ -500,14 +502,14 @@ export class StateManager<
    * 获取节点的所有状态
    */
   getNodeState(nodeId: NodeId): {
-    focused: boolean
+    highlighted: boolean
     selected: boolean
     hidden: boolean
     hovered: boolean
     root: boolean
   } {
     return {
-      focused: this.isFocused(nodeId),
+      highlighted: this.isHighlighted(nodeId),
       selected: this.isSelected(nodeId),
       hidden: this.isHidden(nodeId),
       hovered: this.isHoveredNode(nodeId),
@@ -519,13 +521,13 @@ export class StateManager<
    * 获取边的所有状态
    */
   getLinkState(linkId: LinkId): {
-    focused: boolean
+    highlighted: boolean
     selected: boolean
     hidden: boolean
     hovered: boolean
   } {
     return {
-      focused: this.state.focusLinks.includes(linkId),
+      highlighted: this.state.highlightLinks.includes(linkId),
       selected: this.state.selectedLinks.includes(linkId),
       hidden: this.state.hiddenLinks.includes(linkId),
       hovered: this.isHoveredLink(linkId),
@@ -539,8 +541,8 @@ export class StateManager<
    */
   getState(): StateInfo {
     return {
-      focusNodes: [...this.state.focusNodes],
-      focusLinks: [...this.state.focusLinks],
+      highlightNodes: [...this.state.highlightNodes],
+      highlightLinks: [...this.state.highlightLinks],
       selectedNodes: [...this.state.selectedNodes],
       selectedLinks: [...this.state.selectedLinks],
       hiddenNodes: [...this.state.hiddenNodes],
@@ -557,13 +559,13 @@ export class StateManager<
   updateState(config: StateConfig): void {
     let changed = false
 
-    if (config.focusNodes !== undefined) {
-      this.state.focusNodes = [...new Set(config.focusNodes)]
+    if (config.highlightNodes !== undefined) {
+      this.state.highlightNodes = [...new Set(config.highlightNodes)]
       changed = true
     }
 
-    if (config.focusLinks !== undefined) {
-      this.state.focusLinks = [...new Set(config.focusLinks)]
+    if (config.highlightLinks !== undefined) {
+      this.state.highlightLinks = [...new Set(config.highlightLinks)]
       changed = true
     }
 
@@ -594,10 +596,13 @@ export class StateManager<
 
     if (changed) {
       // 发布各类事件
-      if (config.focusNodes !== undefined || config.focusLinks !== undefined) {
-        this.events.publish("focusChange", {
-          nodeIds: this.state.focusNodes,
-          linkIds: this.state.focusLinks,
+      if (
+        config.highlightNodes !== undefined ||
+        config.highlightLinks !== undefined
+      ) {
+        this.events.publish("highlightChange", {
+          nodeIds: this.state.highlightNodes,
+          linkIds: this.state.highlightLinks,
         })
       }
 
@@ -636,8 +641,8 @@ export class StateManager<
    */
   reset(): void {
     this.state = {
-      focusNodes: [],
-      focusLinks: [],
+      highlightNodes: [],
+      highlightLinks: [],
       selectedNodes: [],
       selectedLinks: [],
       hiddenNodes: [],
@@ -647,7 +652,7 @@ export class StateManager<
       hoveredLinks: [],
     }
 
-    this.events.publish("focusChange", { nodeIds: [], linkIds: [] })
+    this.events.publish("highlightChange", { nodeIds: [], linkIds: [] })
     this.events.publish("selectionChange", { nodeIds: [], linkIds: [] })
     this.events.publish("hiddenChange", { nodeIds: [], linkIds: [] })
     this.events.publish("rootNodesChange", { nodeIds: [] })

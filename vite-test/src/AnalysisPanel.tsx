@@ -1,6 +1,9 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import type { GraphModel } from "@lansheng/knowledge-graph"
+import type { MyGraphView } from "./graph-types"
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
+import { useRequest } from "./hooks/useRequest"
 
 // ─── 分析类型配置 ─────────────────────────────────
 
@@ -65,6 +68,8 @@ interface AnalysisGraphData {
 }
 
 interface AnalysisPanelProps {
+  modelRef: React.RefObject<GraphModel | null>
+  viewRef: React.RefObject<MyGraphView | null>
   onClose: () => void
   onExpand: (graphData: AnalysisGraphData) => void
 }
@@ -82,45 +87,79 @@ const inputStyle: React.CSSProperties = {
 }
 
 export default function AnalysisPanel({
+  modelRef,
+  viewRef,
   onClose,
   onExpand,
 }: AnalysisPanelProps) {
   const { analysisTarget } = useAppCtx()
+  const [analysisType, setAnalysisType] = useState(ANALYSIS_TYPES[0].value)
+  const [items, setItems] = useState<any[]>([])
+  const [graphData, setGraphData] = useState<AnalysisGraphData | null>(null)
+  const [params, setParams] = useState<Record<string, string>>({
+    timeWindow: "1d",
+  })
+  // 请求状态机制：loading 状态、过期响应保护、自动中断
+  const { run, isLoading: loading } = useRequest<{
+    items: any[]
+    graphData: AnalysisGraphData | null
+  }>()
+
+  // 面板关闭时清理画布上的高亮/悬浮
+  useEffect(() => {
+    return () => {
+      viewRef.current?.setHighlightNodes([])
+      viewRef.current?.setHoveredNodes([])
+    }
+  }, [viewRef])
+
+  // 判断节点是否已在画布上
+  const isOnCanvas = (id: string) =>
+    modelRef.current
+      ?.getGraphModelData()
+      .graphData.nodes.some((n) => n.id === id) ?? false
 
   if (!analysisTarget) return null
   const nodeIds = analysisTarget.ids
   const nodeLabels = analysisTarget.labels
-  const [analysisType, setAnalysisType] = useState(ANALYSIS_TYPES[0].value)
-  const [items, setItems] = useState<any[]>([])
-  const [graphData, setGraphData] = useState<AnalysisGraphData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [params, setParams] = useState<Record<string, string>>({
-    timeWindow: "1d",
-  })
 
   const config = ANALYSIS_TYPES.find((t) => t.value === analysisType)!
 
-  const runAnalysis = async () => {
-    setLoading(true)
-    try {
-      const body: Record<string, any> = { nodeIds, type: analysisType }
-      for (const p of config.params) {
-        const val = params[p.key]?.trim()
-        if (val) body[p.key] = val
-      }
+  const runAnalysis = () => {
+    const body: Record<string, any> = { nodeIds, type: analysisType }
+    for (const p of config.params) {
+      const val = params[p.key]?.trim()
+      if (val) body[p.key] = val
+    }
+    run(async (signal) => {
       const res = await fetch("/api/graph/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal,
       })
-      if (!res.ok) return
+      if (!res.ok) throw new Error(`分析失败 (${res.status})`)
       const json = await res.json()
-      if (json.success) {
-        setItems(json.data.items ?? [])
-        setGraphData(json.data.graphData ?? null)
+      if (!json.success) throw new Error("分析失败")
+      return json.data as { items: any[]; graphData: AnalysisGraphData | null }
+    }).then((data) => {
+      if (!data) return
+      const newItems = data.items ?? []
+      setItems(newItems)
+      setGraphData(data.graphData ?? null)
+
+      // 高亮已在画布上的结果节点（stateManager highlighted → highlighted 视觉）
+      const model = modelRef.current
+      const view = viewRef.current
+      if (model && view) {
+        const ids = new Set(
+          model.getGraphModelData().graphData.nodes.map((n) => n.id),
+        )
+        view.setHighlightNodes(
+          newItems.filter((i) => ids.has(i.id)).map((i) => i.id),
+        )
       }
-    } catch {}
-    setLoading(false)
+    })
   }
 
   const renderParams = () => {
@@ -321,9 +360,14 @@ export default function AnalysisPanel({
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = "rgb(var(--hover))"
+              // 实时在画布对应节点上应用 hover 效果
+              if (isOnCanvas(item.id)) {
+                viewRef.current?.setHoveredNodes([item.id])
+              }
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.background = "rgb(var(--background))"
+              viewRef.current?.setHoveredNodes([])
             }}
           >
             <div style={{ fontWeight: "bold", color: "rgb(var(--primary))" }}>

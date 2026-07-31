@@ -36,7 +36,7 @@ export interface GraphEventMap<
   backgroundClick: void
   zoom: { k: number; x: number; y: number }
 
-  focusChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
+  highlightChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   selectionChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   hiddenChange: { nodeIds: NodeId[]; linkIds: LinkId[] }
   rootNodesChange: { nodeIds: NodeId[] }

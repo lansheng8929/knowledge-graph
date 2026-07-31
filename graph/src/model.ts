@@ -66,8 +66,8 @@ export class GraphModel<
   }
 
   /**
-   * 更新焦点节点，自动关联相关连线和目标节点
-   * @deprecated 请使用 stateManager.setFocusNodes 代替
+   * 更新高亮节点，自动关联相关连线和目标节点
+   * @deprecated 请使用 stateManager.setHighlightNodes 代替
    */
   updeteFoucsNodes(nodeIds: NodeId[]) {
     const nodes: NodeId[] = [...nodeIds]
@@ -92,7 +92,10 @@ export class GraphModel<
       })
     })
 
-    this.stateManager.setFocusNodes([...new Set(nodes)], [...new Set(links)])
+    this.stateManager.setHighlightNodes(
+      [...new Set(nodes)],
+      [...new Set(links)],
+    )
   }
 
   /**
