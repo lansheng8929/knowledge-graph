@@ -42,13 +42,13 @@ seed 默认密码规则：`<username>123`（可用 `SEED_PASSWORD` 统一、`SEE
 
 ## 配置（env）
 
-| 变量                        | 默认                                       | 说明                                          |
-| --------------------------- | ------------------------------------------ | --------------------------------------------- |
-| `AUTH_SECRET`               | `dev-secret-change-me`                     | JWT HMAC 密钥（生产必改）                     |
-| `TOKEN_TTL_SECONDS`         | 3600                                       | token 有效期                                  |
-| `USER_STORE`                | memory                                     | `memory` \| `postgres`                       |
-| `AUTH_DB_DSN`               | postgresql://auth:auth@localhost:5432/auth | postgres 存储用                               |
-| `AUTH_BOOTSTRAP_ADMIN_PASSWORD` | （空=不创建）                          | 初始 admin 密码（仅 bootstrap，生产 Secret 注入） |
+| 变量                            | 默认                                       | 说明                                              |
+| ------------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| `AUTH_SECRET`                   | `dev-secret-change-me`                     | JWT HMAC 密钥（生产必改）                         |
+| `TOKEN_TTL_SECONDS`             | 3600                                       | token 有效期                                      |
+| `USER_STORE`                    | memory                                     | `memory` \| `postgres`                            |
+| `AUTH_DB_DSN`                   | postgresql://auth:auth@localhost:5432/auth | postgres 存储用                                   |
+| `AUTH_BOOTSTRAP_ADMIN_PASSWORD` | （空=不创建）                              | 初始 admin 密码（仅 bootstrap，生产 Secret 注入） |
 
 ## 本地运行
 
