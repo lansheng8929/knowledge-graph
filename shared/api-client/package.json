@@ -1,0 +1,11 @@
+{
+  "name": "@lansheng/api-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./generated/graph.ts",
+  "types": "./generated/graph.ts",
+  "scripts": {
+    "generate": "bash ../../scripts/generate-api-client.sh"
+  }
+}

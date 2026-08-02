@@ -1,0 +1,181 @@
+# infra/docker-compose.yml — 本地一键起全栈（T2.5.1）
+#
+# 复用现有 Neo4j（infra/neo4j/docker-compose.yml 的容器 knowledge-graph-neo4j，
+# 网络 vite-test_default、数据 volume vite-test_neo4j_data 均不丢失）。
+# 因此：graph-query-service 通过 NEO4J_URI=bolt://knowledge-graph-neo4j:7687 访问。
+#
+# 启动：
+#   docker compose -f infra/docker-compose.yml up -d
+# 验证：
+#   curl http://localhost:8080/api/v1/graph/init -X POST -H 'Content-Type: application/json' -d '{"ids":[]}'
+#   curl http://localhost:8080/api/v1/rules  | head
+#
+# 说明：
+#   - 服务默认不映射 host 端口（经网关 :8080 统一出口）；如需直连调试，去掉下方 ports 注释。
+#   - PostgreSQL（graph-rule-service 生产用 RULE_STORE=postgres）可按需加入，见注释块。
+#   - 可观测（OTel Collector / Loki / Prometheus）按需加服务，见注释块。
+
+networks:
+  # 复用 vite-test 的默认网络，使服务可用容器名访问现有 Neo4j
+  default:
+    name: vite-test_default
+    external: true
+
+services:
+  graph-query-service:
+    build:
+      # context 为仓库根：Dockerfile 需 COPY shared/pep-client（L2 客户端库）
+      context: ../
+      dockerfile: services/graph-query-service/Dockerfile
+      args:
+        # 可选：构建时经代理拉取依赖（export HTTP_PROXY/HTTPS_PROXY 后生效）
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: kg-graph-query
+    environment:
+      NEO4J_URI: bolt://knowledge-graph-neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password123
+      RULE_SERVICE_URL: http://graph-rule-service:8002
+      CORS_ALLOW_ORIGINS: ""
+      # ABAC L2（T4.5）：经 OPA 决策；fail-closed（OPA 不可达→deny）
+      ENABLE_PEP: "true"
+      OPA_URL: http://opa:8181
+      # 审计 sink（T4.8）：postgres 落库（audit_log 表）
+      AUDIT_SINK: postgres
+      AUDIT_DSN: postgresql://kg:kg@postgres:5432/kg
+    depends_on:
+      - postgres
+    # ports: ["8001:8001"]   # 直连调试用（与本地 uvicorn 冲突时注释）
+    restart: unless-stopped
+
+  graph-rule-service:
+    build:
+      # context 为仓库根：Dockerfile 需 COPY shared/pep-client（L2 客户端库）
+      context: ../
+      dockerfile: services/graph-rule-service/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: kg-graph-rule
+    environment:
+      RULE_STORE: postgres
+      PG_DSN: postgresql://kg:kg@postgres:5432/kg
+      CORS_ALLOW_ORIGINS: ""
+      # ABAC L2（T4.5.1 Rule Service）：validate 时经 OPA 决策
+      ENABLE_PEP: "true"
+      OPA_URL: http://opa:8181
+      # 审计 sink（T4.8）：postgres 落库（audit_log 表）
+      AUDIT_SINK: postgres
+      AUDIT_DSN: postgresql://kg:kg@postgres:5432/kg
+    depends_on:
+      - postgres
+    # ports: ["8002:8002"]
+    restart: unless-stopped
+
+  # ── T4.1.1：auth-service（IDP/签发+校验 JWT）────────
+  auth-service:
+    build:
+      context: ../services/auth-service
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: kg-auth
+    environment:
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      CORS_ALLOW_ORIGINS: ""
+      # 用户存储（T4.1）：postgres 落库（auth_users 表）
+      USER_STORE: postgres
+      AUTH_DB_DSN: postgresql://kg:kg@postgres:5432/kg
+      # 初始管理员密码（仅 bootstrap；生产由 Secret 注入）
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: kg-gateway
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - graph-query-service
+      - graph-rule-service
+      - auth-service
+    restart: unless-stopped
+
+  # ── 前端 web（prod：Nginx 托管 + 代理网关，全容器）──
+  web:
+    build:
+      context: ../
+      dockerfile: apps/shell/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: kg-web
+    ports:
+      - "3001:80"
+    depends_on:
+      - gateway
+    restart: unless-stopped
+
+  # ── OPA（ABAC PDP，T4.2）────────────────────────
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: kg-opa
+    # --addr=0.0.0.0 使宿主端口映射可访问（默认仅容器内 localhost）
+    command:
+      [
+        "run",
+        "--server",
+        "--addr=0.0.0.0:8181",
+        "--log-level=info",
+        "/policies",
+      ]
+    volumes:
+      - ../policies:/policies:ro
+    ports:
+      - "8181:8181"
+    restart: unless-stopped
+
+  # ── PostgreSQL（生产存储：规则/用户/审计，T2.1.3 / T4.1 / T4.8）──
+  postgres:
+    image: postgres:16-alpine
+    container_name: kg-postgres
+    environment:
+      POSTGRES_USER: kg
+      POSTGRES_PASSWORD: kg
+      POSTGRES_DB: kg
+    ports:
+      - "5432:5432"
+    volumes:
+      - kg_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ── 可观测（可选，T2.4 配套）────────────────────────
+  # otel-collector:
+  #   image: otel/opentelemetry-collector-contrib:latest
+  #   container_name: kg-otel
+  #   command: ["--config=/etc/otel-config.yaml"]
+  #   volumes:
+  #     - ./otel/otel-config.yaml:/etc/otel-config.yaml:ro
+  #   ports: ["4318:4318"]
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: kg-prometheus
+  #   volumes:
+  #     - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   ports: ["9090:9090"]
+  # loki:
+  #   image: grafana/loki:latest
+  #   container_name: kg-loki
+  #   ports: ["3100:3100"]
+
+volumes:
+  kg_pg_data:

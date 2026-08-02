@@ -1,0 +1,853 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Knowledge Graph Query Service",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Health Healthz Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/graph/init": {
+      "post": {
+        "summary": "Init Graph",
+        "operationId": "init_graph_api_v1_graph_init_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_InitData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/init": {
+      "post": {
+        "summary": "Init Graph",
+        "operationId": "init_graph_api_graph_init_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_InitData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/graph/search": {
+      "post": {
+        "summary": "Search Nodes",
+        "operationId": "search_nodes_api_v1_graph_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SearchData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/search": {
+      "post": {
+        "summary": "Search Nodes",
+        "operationId": "search_nodes_api_graph_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SearchData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/graph/expand": {
+      "post": {
+        "summary": "Expand Graph",
+        "operationId": "expand_graph_api_v1_graph_expand_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PageResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/expand": {
+      "post": {
+        "summary": "Expand Graph",
+        "operationId": "expand_graph_api_graph_expand_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PageResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/graph/analyze": {
+      "post": {
+        "summary": "Analyze Node",
+        "operationId": "analyze_node_api_v1_graph_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AnalyzeData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/graph/analyze": {
+      "post": {
+        "summary": "Analyze Node",
+        "operationId": "analyze_node_api_graph_analyze_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AnalyzeData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalysisRequest": {
+        "properties": {
+          "nodeIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Nodeids"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "call_circle"
+          },
+          "timeWindow": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timewindow"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nodeIds"
+        ],
+        "title": "AnalysisRequest"
+      },
+      "AnalyzeData": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "call_circle"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyzeItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "graphData": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GraphData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "AnalyzeData",
+        "description": "analyze 响应 data。"
+      },
+      "AnalyzeItem": {
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "title": "Sourceid",
+            "default": ""
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "relation": {
+            "type": "string",
+            "title": "Relation",
+            "default": ""
+          },
+          "time": {
+            "type": "string",
+            "title": "Time",
+            "default": ""
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "default": 0
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "AnalyzeItem",
+        "description": "analyze 结果条目（call_circle）。"
+      },
+      "Envelope_AnalyzeData_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalyzeData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[AnalyzeData]"
+      },
+      "Envelope_InitData_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InitData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[InitData]"
+      },
+      "Envelope_PageResult_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[PageResult]"
+      },
+      "Envelope_SearchData_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "Envelope[SearchData]"
+      },
+      "ExpandRequest": {
+        "properties": {
+          "sourceNodeId": {
+            "type": "string",
+            "title": "Sourcenodeid"
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid",
+            "default": ""
+          },
+          "existingNodeIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Existingnodeids"
+          },
+          "existingLinkIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Existinglinkids"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sourceNodeId"
+        ],
+        "title": "ExpandRequest"
+      },
+      "GraphData": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/GraphLink"
+            },
+            "type": "array",
+            "title": "Links"
+          }
+        },
+        "type": "object",
+        "title": "GraphData"
+      },
+      "GraphLink": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LinkData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "target",
+          "data"
+        ],
+        "title": "GraphLink"
+      },
+      "GraphNode": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NodeData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "data"
+        ],
+        "title": "GraphNode"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InitData": {
+        "properties": {
+          "graphData": {
+            "$ref": "#/components/schemas/GraphData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "graphData"
+        ],
+        "title": "InitData",
+        "description": "init 响应 data：{ graphData }（后端 query_init 嵌套结构）。"
+      },
+      "InitRequest": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Ids"
+          }
+        },
+        "type": "object",
+        "title": "InitRequest"
+      },
+      "LinkData": {
+        "properties": {
+          "linkType": {
+            "type": "string",
+            "title": "Linktype",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "time": {
+            "type": "string",
+            "title": "Time",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "LinkData"
+      },
+      "NodeData": {
+        "properties": {
+          "nodeType": {
+            "type": "string",
+            "title": "Nodetype",
+            "default": "default"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "icon": {
+            "type": "string",
+            "title": "Icon",
+            "default": ""
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "default": 0
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "neighbors": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Neighbors"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "NodeData"
+      },
+      "PageResult": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/GraphLink"
+            },
+            "type": "array",
+            "title": "Links"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "hasMore": {
+            "type": "boolean",
+            "title": "Hasmore",
+            "default": false
+          },
+          "rulesMap": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rulesmap"
+          }
+        },
+        "type": "object",
+        "title": "PageResult"
+      },
+      "SearchData": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/GraphNode"
+            },
+            "type": "array",
+            "title": "Nodes"
+          }
+        },
+        "type": "object",
+        "title": "SearchData",
+        "description": "search 响应 data。"
+      },
+      "SearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "SearchRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

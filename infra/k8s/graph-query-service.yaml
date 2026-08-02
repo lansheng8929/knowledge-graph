@@ -1,0 +1,58 @@
+# graph-query-service — Deployment + Service（T2.5.2 骨架）
+# 说明：其余服务（graph-rule-service / gateway）按此模式类推。
+# 密钥经 K8s Secret（kg-secrets）注入，Vault 接管见 T2.5.3。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-query-service
+  labels:
+    app: graph-query-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graph-query-service
+  template:
+    metadata:
+      labels:
+        app: graph-query-service
+    spec:
+      containers:
+        - name: app
+          image: graph-query-service:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8001
+          env:
+            - name: NEO4J_URI
+              value: "bolt://neo4j:7687"
+            - name: NEO4J_USER
+              valueFrom:
+                secretKeyRef:
+                  name: kg-secrets
+                  key: neo4j-user
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: kg-secrets
+                  key: neo4j-password
+            - name: RULE_SERVICE_URL
+              value: "http://graph-rule-service:8002"
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8001 }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8001 }
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graph-query-service
+spec:
+  selector:
+    app: graph-query-service
+  ports:
+    - port: 8001
+      targetPort: 8001

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>知识图谱平台 · Shell</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        font-family: system-ui, sans-serif;
+        overflow: hidden;
+      }
+      /* 壳层导航：固定高度，不参与子应用空间 */
+      #shell-nav {
+        flex: none;
+        display: flex;
+        gap: 12px;
+        padding: 8px 16px;
+        background: #1f2937;
+        color: #e5e7eb;
+        align-items: center;
+      }
+      #shell-nav a {
+        color: #e5e7eb;
+        text-decoration: none;
+        font-size: 14px;
+      }
+      #shell-nav a.active {
+        color: #60a5fa;
+      }
+      /* 子应用占剩余空间；作为其绝对定位工具栏的参照系 */
+      #shell-main {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+      }
+      #single-spa-application\:graph-app {
+        position: absolute;
+        inset: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <nav id="shell-nav">
+      <strong>KG 平台</strong>
+      <a href="/graph" data-route="/graph">图谱</a>
+      <a href="/" data-route="/">首页</a>
+    </nav>
+    <main id="shell-main">
+      <!-- single-spa 子应用挂载容器 -->
+      <div id="single-spa-application:graph-app"></div>
+    </main>
+    <!-- T2.3.4 动态 importmap：由 importmap.json 决定加载哪个子应用版本。
+         更新/回滚子应用 = 只改 importmap.json（部署态文件），shell 零重建零部署。 -->
+    <script>
+      // 在任何模块执行前同步拉取 importmap 并注入，保证 import("graph-app") 可解析。
+      // （子应用产物由 bash scripts/publish-graph-app.sh 发布到 ./subapps/）
+      ;(function () {
+        function applyImportMap(map) {
+          var s = document.createElement("script")
+          s.type = "importmap"
+          s.textContent = JSON.stringify(map)
+          document.head.appendChild(s)
+        }
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "./importmap.json", false)
+        try {
+          xhr.send()
+          applyImportMap(JSON.parse(xhr.responseText))
+        } catch (e) {
+          console.warn("[shell] importmap 加载失败，使用静态兜底", e)
+          applyImportMap({
+            imports: { "graph-app": "./subapps/graph-app@0.2.0.js" },
+          })
+        }
+      })()
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

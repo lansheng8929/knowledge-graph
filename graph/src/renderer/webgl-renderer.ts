@@ -78,6 +78,8 @@ export class WebGLRenderer<
   private height: number
   private _destroyed = false
   private _rafId = 0
+  // 首次尺寸就绪时是否已自动 fitView（修复 macOS 挂载初期 height=0 导致节点小/左上角）
+  private _autoFitDone = false
 
   // 回调
   onNodeClick?: (nodeId: string | null, event: MouseEvent) => void
@@ -236,8 +238,9 @@ export class WebGLRenderer<
     this.plugin.render({
       nodes: this.nodes,
       links: this.links,
-      width: w,
-      height: h,
+      // u_resolution 用 CSS 尺寸（与 fitView/交互的 transform 同一坐标空间）
+      width: this.width,
+      height: this.height,
       tx: t.x,
       ty: t.y,
       scale: t.k,
@@ -253,8 +256,15 @@ export class WebGLRenderer<
     // 覆盖层
     const overlays = this.plugin.getOverlays()
     for (let i = 0; i < overlays.length; i++) {
-      overlays[i].renderPickBuffer(w, h, t.x, t.y, t.k)
-      overlays[i].render(w, h, t.x, t.y, t.k, -0.6 - i * 0.01)
+      overlays[i].renderPickBuffer(this.width, this.height, t.x, t.y, t.k)
+      overlays[i].render(
+        this.width,
+        this.height,
+        t.x,
+        t.y,
+        t.k,
+        -0.6 - i * 0.01,
+      )
     }
   }
 
@@ -283,12 +293,26 @@ export class WebGLRenderer<
     this.canvas.height = this.height * dpr
     this.gl.viewport(0, 0, this.width * dpr, this.height * dpr)
     this.plugin.resize(this.width, this.height)
+
+    // 首次尺寸就绪（0 → 非 0）且已有节点 → 自动 fitView。
+    // 修复：数据加载时容器 height 可能为 0（single-spa 挂载初期/macOS 时序），
+    // 那帧 fitView 被跳过且无重试，导致相机停在默认态（节点小、堆在左上角）。
+    if (
+      !this._autoFitDone &&
+      this.width > 0 &&
+      this.height > 0 &&
+      this.nodes.length > 0
+    ) {
+      this._autoFitDone = true
+      this.fitView(40)
+    }
   }
 
   // ========== Camera ==========
 
-  fitView(padding = 40): void {
-    if (this.nodes.length === 0) return
+  fitView(padding = 0): void {
+    // 尺寸为 0 时（如 single-spa 挂载初期容器高度未就绪）跳过，避免 k=0 / NaN 变换
+    if (this.nodes.length === 0 || this.width <= 0 || this.height <= 0) return
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -299,10 +323,16 @@ export class WebGLRenderer<
       maxX = Math.max(maxX, n.x + n.radius)
       maxY = Math.max(maxY, n.y + n.radius)
     }
-    const graphW = maxX - minX + padding * 2
-    const graphH = maxY - minY + padding * 2
-    const k = Math.min(this.width / graphW, this.height / graphH, 2)
+    // padding 为像素留白：可用区域 = 画布尺寸 - 2*padding
+    // （此前 padding 是“世界单位”加到 bbox 上，图很大时视觉留白趋近 0）
+    const graphW = Math.max(1, maxX - minX)
+    const graphH = Math.max(1, maxY - minY)
+    const availW = Math.max(1, this.width - padding * 2)
+    const availH = Math.max(1, this.height - padding * 2)
+    const k = Math.min(availW / graphW, availH / graphH, 2)
     const t = this.interaction.transform
+    // 世界平移语义（配合 shader `(world + u_translation) * u_scale`）：
+    // world=中心 → 映射到画布中心；四周留 padding 像素
     t.k = k
     t.x = this.width / (2 * k) - (minX + maxX) / 2
     t.y = this.height / (2 * k) - (minY + maxY) / 2

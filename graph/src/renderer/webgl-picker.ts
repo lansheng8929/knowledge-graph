@@ -174,11 +174,12 @@ export class WebGLPicker implements Picker {
     gl.depthFunc(gl.LEQUAL)
 
     // 1) Render links (z = 0.0, behind nodes)
+    // u_resolution 用 CSS 尺寸（与主渲染/fitView 同空间）；viewport 仍为 device（FBO）
     if (this.linkRenderer) {
       this.linkRenderer.renderPicking(
         this.links,
-        w,
-        h,
+        w / dpr,
+        h / dpr,
         this.tx,
         this.ty,
         this.k,
@@ -190,8 +191,8 @@ export class WebGLPicker implements Picker {
     // 2) Render nodes (z = -0.5, in front of links)
     this.nodeRenderer.renderPicking(
       this.nodes,
-      w,
-      h,
+      w / dpr,
+      h / dpr,
       this.tx,
       this.ty,
       this.k,

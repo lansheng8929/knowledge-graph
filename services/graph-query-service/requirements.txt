@@ -1,0 +1,12 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+neo4j>=5.0
+pydantic>=2.7
+prometheus-client>=0.20
+psycopg[binary]>=3.1  # 审计 postgres sink
+opentelemetry-api>=1.24
+opentelemetry-sdk>=1.24
+opentelemetry-exporter-otlp-proto-http>=1.24
+opentelemetry-instrumentation-fastapi>=0.49b0
+# ABAC PEP 客户端（L2）：本地 venv 用 `pip install -e ../../shared/pep-client`；
+# Docker 镜像由 Dockerfile 单独 COPY 安装（相对路径超出构建上下文）

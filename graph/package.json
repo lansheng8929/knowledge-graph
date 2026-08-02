@@ -12,7 +12,7 @@
   "scripts": {
     "tsc": "tsc --noEmit --pretty",
     "create-entity": "node graph/entity/create-entity.js",
-    "dev": "cd vite-test && npm run dev"
+    "dev": "bun run --cwd apps/graph-app dev"
   },
   "devDependencies": {
     "@types/d3-force": "^3.0.10",

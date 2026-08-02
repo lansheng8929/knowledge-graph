@@ -141,6 +141,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   // Node/link lookup
   private nodeMap = new Map<string, GraphNode<G["NO"], G["NT"], G["NS"]>>()
   private linkMap = new Map<string, GraphLink<G>>()
+  // 首次布局稳定后是否已自动 fitView（避免 init 后布局演化导致节点超出视野）
+  private _autoFitOnEndDone = false
 
   events: GraphEvents<G>
   styleManager: StyleManager<G>
@@ -190,6 +192,15 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.layout = opts.layout ?? new ForceSimulation(opts.forceConfig)
     this.layout.onTick = (simNodes) => {
       this.onPhysicsTick(simNodes)
+    }
+    // 布局首次稳定后自动 fitView 一次：
+    // init 后 RAF 的 fitView 用的是布局初始位置（边界不准），布局演化后节点会超出视野；
+    // 在模拟稳定（onEnd）后按最终边界再 fit 一次，保证所有节点入画。
+    this.layout.onEnd = () => {
+      if (!this._autoFitOnEndDone) {
+        this._autoFitOnEndDone = true
+        this.renderer.fitView(40)
+      }
     }
 
     // Wire renderer callbacks
@@ -566,7 +577,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   }
 
   /** Fit all nodes in view */
-  fitView(padding?: number): void {
+  fitView(padding: number): void {
     this.renderer.fitView(padding)
   }
 

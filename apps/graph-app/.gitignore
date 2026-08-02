@@ -1,0 +1,16 @@
+# dependencies
+node_modules
+bun.lock
+package-lock.json
+
+# output
+dist
+
+# env
+.env
+.env.local
+.env.production.local
+
+# logs / caches
+*.log
+.eslintcache

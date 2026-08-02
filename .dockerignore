@@ -1,0 +1,14 @@
+# Docker build context（仓库根）排除项：避免 node_modules/.venv/dist 等大目录进上下文
+.git
+.gitignore
+node_modules
+**/node_modules
+**/.venv
+**/.pytest_cache
+**/*.egg-info
+dist
+**/dist
+.vscode
+.DS_Store
+logs
+*.log

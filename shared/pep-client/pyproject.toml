@@ -1,0 +1,13 @@
+[project]
+name = "pep-client"
+version = "0.1.0"
+description = "Python ABAC PEP client (local reference, not published)"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["pep_client"]

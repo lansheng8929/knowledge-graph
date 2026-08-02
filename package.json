@@ -1,0 +1,17 @@
+{
+  "name": "knowledge-graph",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "shared/*",
+    "graph"
+  ],
+  "scripts": {
+    "graph:dev": "bun run --cwd apps/graph-app dev",
+    "graph:build": "bun run --cwd apps/graph-app build",
+    "graph:tsc": "bun run --cwd graph tsc",
+    "check:contract": "bash scripts/check-api-contract.sh"
+  }
+}

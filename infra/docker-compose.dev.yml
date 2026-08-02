@@ -1,0 +1,159 @@
+# docker-compose.dev.yml — 开发模式全容器（含热更新）
+#
+# 与生产（docker-compose.yml）同构，但：
+#   - 后端容器挂载 app 源码 + uvicorn --reload → 改本地代码自动重载
+#   - 前端容器挂载整个仓库 + vite dev --host → 改源码热更新（HMR）
+#   - 数据源复用现有卷（vite-test_neo4j_data），与生产共用一套数据
+#
+# 启动：docker compose -f infra/docker-compose.dev.yml up -d --build
+# 入口：http://localhost:3001/graph?user=analyst
+# 注意：dev 与 prod 的 neo4j 共用数据卷，勿同时运行（up.sh 已自动切换）
+
+name: kg-dev
+
+services:
+  # ── 数据源（复用现有 Neo4j 数据卷）──────────────────
+  neo4j:
+    image: neo4j:5-community
+    container_name: kg-dev-neo4j
+    environment:
+      - NEO4J_AUTH=neo4j/password123
+      - NEO4J_server_memory_heap_max__size=2G
+      - NEO4J_server_memory_pagecache_size=1.5G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    ports:
+      - "7687:7687"
+    restart: unless-stopped
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: kg-dev-opa
+    command:
+      [
+        "run",
+        "--server",
+        "--addr=0.0.0.0:8181",
+        "--log-level=info",
+        "/policies",
+      ]
+    volumes:
+      - ../policies:/policies:ro
+    ports:
+      - "8181:8181"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: kg-dev-postgres
+    environment:
+      POSTGRES_USER: kg
+      POSTGRES_PASSWORD: kg
+      POSTGRES_DB: kg
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ── 后端（挂载源码 + --reload 热更新）────────────────
+  query:
+    build:
+      context: ../
+      dockerfile: services/graph-query-service/Dockerfile
+    container_name: kg-dev-query
+    volumes:
+      - ../services/graph-query-service/app:/app/app # 源码热更新
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+    environment:
+      NEO4J_URI: bolt://kg-dev-neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password123
+      RULE_SERVICE_URL: http://kg-dev-rule:8002
+      ENABLE_PEP: "true"
+      OPA_URL: http://kg-dev-opa:8181
+      AUDIT_SINK: postgres
+      AUDIT_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+  rule:
+    build:
+      context: ../
+      dockerfile: services/graph-rule-service/Dockerfile
+    container_name: kg-dev-rule
+    volumes:
+      - ../services/graph-rule-service/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
+    environment:
+      RULE_STORE: postgres
+      PG_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+      ENABLE_PEP: "true"
+      OPA_URL: http://kg-dev-opa:8181
+      AUDIT_SINK: postgres
+      AUDIT_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: ../services/auth-service
+      dockerfile: Dockerfile
+    container_name: kg-dev-auth
+    volumes:
+      - ../services/auth-service/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8004
+    environment:
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      USER_STORE: postgres
+      AUTH_DB_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+      # 初始管理员密码（仅 bootstrap；生产由 Secret 注入）
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+    ports:
+      - "8004:8004"
+    restart: unless-stopped
+
+  # ── 前端（挂载仓库源码 + 容器内装依赖 + vite dev HMR）──
+  web:
+    image: oven/bun:1.1
+    container_name: kg-dev-web
+    working_dir: /repo
+    volumes:
+      - ..:/repo
+      # 遮蔽 host 的 node_modules（macOS 原生二进制）→ 容器内装 Linux 版
+      - web_node_modules:/repo/node_modules
+    command: sh -c "bun install --frozen-lockfile 2>/dev/null || bun install; cd apps/shell && bun dev --host 0.0.0.0"
+    environment:
+      # 容器内 proxy 目标（指向服务名）
+      VITE_PROXY_TARGET: http://kg-dev-query:8001
+      VITE_AUTH_PROXY: http://kg-dev-auth:8004
+    ports:
+      - "3001:3001"
+    depends_on:
+      - query
+      - rule
+      - auth
+      - opa
+    restart: unless-stopped
+
+# 复用现有 Neo4j 数据卷（与生产共用，勿同时跑 dev/prod）
+volumes:
+  neo4j_data:
+    name: vite-test_neo4j_data
+    external: true
+  neo4j_logs:
+    name: vite-test_neo4j_logs
+    external: true
+  neo4j_import:
+    name: vite-test_neo4j_import
+    external: true
+  neo4j_plugins:
+    name: vite-test_neo4j_plugins
+    external: true
+  pg_data:
+  web_node_modules:
