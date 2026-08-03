@@ -11,8 +11,8 @@
     "esModuleInterop": true,
     "jsx": "react-jsx",
     "paths": {
-      "@lansheng/knowledge-graph": ["../../graph/index.ts"],
-      "@lansheng/knowledge-graph/*": ["../../graph/*"]
+      "@lansheng/knowledge-graph": ["../../graph/src/index.ts"],
+      "@lansheng/knowledge-graph/*": ["../../graph/src/*"]
     }
   },
   "include": ["src", "../../graph", "../../graph-app/src"]

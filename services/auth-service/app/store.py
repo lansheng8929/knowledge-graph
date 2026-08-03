@@ -6,7 +6,28 @@
 """
 
 import json
+import time
 from typing import Dict, List, Optional
+
+
+def _connect_with_retry(dsn: str, attempts: int = 15, base_delay: float = 0.5):
+    """psycopg.connect 带线性退避重试。
+
+    依赖数据库（Postgres）可能尚未就绪（容器启动竞态），连接会抛
+    OperationalError；重试避免 uvicorn worker 在 import 阶段直接崩掉
+    （表现为容器 unhealthy、登录 500）。仅启动期执行，最长等待约 1 分钟。
+    """
+    import psycopg
+
+    last_exc: Optional[Exception] = None
+    for i in range(1, attempts + 1):
+        try:
+            return psycopg.connect(dsn)
+        except psycopg.OperationalError as exc:
+            last_exc = exc
+            time.sleep(base_delay * i)
+    assert last_exc is not None
+    raise last_exc
 
 
 class UserStore:
@@ -63,9 +84,7 @@ class PostgresUserStore(UserStore):
         self._dsn = dsn
 
     def _conn(self):
-        import psycopg
-
-        conn = psycopg.connect(self._dsn)
+        conn = _connect_with_retry(self._dsn)
         conn.execute(
             """CREATE TABLE IF NOT EXISTS auth_users (
                 username TEXT PRIMARY KEY,
@@ -113,11 +132,14 @@ class PostgresUserStore(UserStore):
                      teams=EXCLUDED.teams, password_hash=EXCLUDED.password_hash,
                      disabled=EXCLUDED.disabled""",
                 (
-                    user["username"], user.get("uid", ""), user.get("tenantId", "default"),
+                    user["username"],
+                    user.get("uid", ""),
+                    user.get("tenantId", "default"),
                     int(user.get("clearance", 0)),
                     json.dumps(list(user.get("roles", []))),
                     json.dumps(list(user.get("teams", []))),
-                    user["password_hash"], bool(user.get("disabled", False)),
+                    user["password_hash"],
+                    bool(user.get("disabled", False)),
                 ),
             )
 

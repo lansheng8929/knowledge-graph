@@ -57,6 +57,12 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kg -d kg"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
 
   # ── 后端（挂载源码 + --reload 热更新）────────────────
@@ -77,6 +83,9 @@ services:
       OPA_URL: http://kg-dev-opa:8181
       AUDIT_SINK: postgres
       AUDIT_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8001:8001"
     restart: unless-stopped
@@ -96,6 +105,9 @@ services:
       OPA_URL: http://kg-dev-opa:8181
       AUDIT_SINK: postgres
       AUDIT_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8002:8002"
     restart: unless-stopped
@@ -114,6 +126,9 @@ services:
       AUTH_DB_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
       # 初始管理员密码（仅 bootstrap；生产由 Secret 注入）
       AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8004:8004"
     restart: unless-stopped

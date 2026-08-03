@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-pep_client/__init__.py
-pep_client/client.py
-pep_client.egg-info/PKG-INFO
-pep_client.egg-info/SOURCES.txt
-pep_client.egg-info/dependency_links.txt
-pep_client.egg-info/top_level.txt

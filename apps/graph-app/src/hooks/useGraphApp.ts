@@ -159,9 +159,8 @@ export function useGraphApp(ids?: string[]) {
       try {
         const initData = await fetchInitData(ids ?? [])
         model.updateGraphData({ graphData: initData.graphData })
-        viewRef.current?.reheat(1)
-        // single-spa 挂载初期容器高度可能为 0，延迟一帧等渲染器同步尺寸/节点后再 fitView
-        requestAnimationFrame(() => viewRef.current?.fitView(50))
+        // init：一次性算法排布并 fitView，不再等待物理引擎冷却
+        viewRef.current?.settleLayout()
         historyManagerRef.current.pushState({
           type: "init",
           description: "初始图谱",

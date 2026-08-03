@@ -17,8 +17,8 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "paths": {
-      "@lansheng/knowledge-graph": ["../../graph/index.ts"],
-      "@lansheng/knowledge-graph/*": ["../../graph/*"],
+      "@lansheng/knowledge-graph": ["../../graph/src/index.ts"],
+      "@lansheng/knowledge-graph/*": ["../../graph/src/*"],
       "@lansheng/api-client": ["../../shared/api-client/generated/graph.ts"]
     }
   },

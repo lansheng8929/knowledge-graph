@@ -49,6 +49,9 @@ export interface Layout {
   /** 重新加热（对基于力的布局有效，其他布局可忽略） */
   reheat(alpha?: number): void
 
+  /** 一次性同步排布（不进入冷却动画）；基于力的布局建议实现，未实现可忽略 */
+  settle?(iterations?: number): void
+
   /** 固定节点位置 */
   fixNode(nodeId: string, x?: number, y?: number): void
 

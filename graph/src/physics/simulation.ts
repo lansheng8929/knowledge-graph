@@ -136,6 +136,24 @@ export class ForceSimulation implements Layout {
     this.simulation?.alpha(alpha).restart()
   }
 
+  /**
+   * 一次性同步排布（算法布局）：构建力模型后同步迭代指定次数即停止，
+   * 不启动冷却动画——init 后直接按算法铺开节点，无需等待引擎冷却。
+   * 注意：d3 的 simulation.tick() 只更新坐标、不派发 tick 事件（tick 事件
+   * 由定时器 step() 派发），故手动 tick 后需显式调用 onTick 把最终位置推给
+   * 渲染器，再触发 onEnd（fitView 等）。
+   */
+  settle(iterations = 300): void {
+    this.start()
+    const sim = this.simulation
+    if (!sim) return
+    // 停掉定时器，改由手动同步推进
+    sim.stop()
+    sim.tick(iterations)
+    this.onTick?.(this.nodes)
+    this.onEnd?.()
+  }
+
   /** Update config and restart */
   updateConfig(config: Partial<ForceConfig>): void {
     Object.assign(this.config, config)

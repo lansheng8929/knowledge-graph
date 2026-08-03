@@ -603,6 +603,20 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.layout.reheat(alpha)
   }
 
+  /**
+   * 一次性算法排布并 fitView（不等待物理引擎冷却）。
+   * 供 init 使用：数据载入后直接按算法铺开节点并收进视野。
+   */
+  settleLayout(iterations?: number): void {
+    if (this.layout.settle) {
+      this.layout.settle(iterations ?? 300)
+    } else {
+      this.layout.start()
+    }
+    // 容器尺寸可能尚未就绪（single-spa 挂载初期 height=0），下一帧再 fitView
+    requestAnimationFrame(() => this.renderer.fitView(40))
+  }
+
   /** Get underlying canvas */
   getCanvas(): HTMLCanvasElement {
     return this.renderer.canvas

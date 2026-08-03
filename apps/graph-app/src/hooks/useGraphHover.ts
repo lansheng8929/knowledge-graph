@@ -43,6 +43,7 @@ export function useGraphHover(
     })
     const unsub5 = model.events.subscribe("nodeClick", ({ node, ctrlKey }) => {
       if (!node) return
+      console.log("[nodeClick]", node.id)
       setSelectedNodeIds((prev) => {
         const next = new Set(prev)
         if (ctrlKey) {

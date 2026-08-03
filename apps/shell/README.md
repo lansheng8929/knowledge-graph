@@ -25,6 +25,6 @@ bun run --cwd apps/shell dev      # :3001
 
 - [x] T2.3.1 壳工程（root-config 注册 graph-app）
 - [x] T2.3.2 路由段 `/graph/*`（本地引用，import-map 动态下发待后续）
-- [ ] T2.3.3 鉴权注入（Phase 4 IDP 后）
+- [x] T2.3.3 鉴权注入（登录界面 + Bearer 注入，T4.1.1）
 - [ ] T2.3.4 主题 CSS 变量统一
 - [ ] T2.3.5 样式/JS 隔离约定验证

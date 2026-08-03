@@ -46,7 +46,8 @@ services:
       AUDIT_SINK: postgres
       AUDIT_DSN: postgresql://kg:kg@postgres:5432/kg
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     # ports: ["8001:8001"]   # 直连调试用（与本地 uvicorn 冲突时注释）
     restart: unless-stopped
 
@@ -71,7 +72,8 @@ services:
       AUDIT_SINK: postgres
       AUDIT_DSN: postgresql://kg:kg@postgres:5432/kg
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     # ports: ["8002:8002"]
     restart: unless-stopped
 
@@ -93,7 +95,8 @@ services:
       # 初始管理员密码（仅 bootstrap；生产由 Secret 注入）
       AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   gateway:
@@ -156,6 +159,12 @@ services:
       - "5432:5432"
     volumes:
       - kg_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kg -d kg"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
 
   # ── 可观测（可选，T2.4 配套）────────────────────────

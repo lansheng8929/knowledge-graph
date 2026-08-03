@@ -42,3 +42,18 @@ bun.lock
 
 # TypeScript emit output
 graph/tsconfig.tsbuildinfo
+
+# 本地实验/沙箱目录
+vite-test/
+
+# Python（编译/依赖/测试产物）
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 前端构建产物（single-spa bundle，经 build:single-spa 可再生）
+dist-single-spa/

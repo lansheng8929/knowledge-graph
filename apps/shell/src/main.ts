@@ -5,7 +5,7 @@
  * 后续可演进为 import-map 动态下发（生产远程加载）。
  */
 
-import { registerApplication, start } from "single-spa"
+import { navigateToUrl, registerApplication, start } from "single-spa"
 
 // T2.3.4 前端单模块更新：
 //   - 开发(dev)：同仓 import 源码 → 改码即热更（不改构建）
@@ -18,29 +18,12 @@ const loadGraphApp = import.meta.env.DEV
   ? () => import("../../graph-app/src/single-spa")
   : () => import(/* @vite-ignore */ GRAPH_APP_ENTRY)
 
-// T4.1.1 演示登录：向 auth-service 换取 JWT（经网关 /api/v1/auth/login）
-// 用户选择：URL ?user= 优先 → localStorage kg-user → 默认 analyst
-// 演示密码规则：<username>123（admin123/analyst123/...）
-async function ensureToken(username: string): Promise<void> {
-  if ((window as { __KG_TOKEN__?: string }).__KG_TOKEN__) return
-  try {
-    const res = await fetch("/api/v1/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password: `${username}123` }),
-    })
-    if (!res.ok) {
-      console.warn(`[shell] 登录失败 ${username}: ${res.status}`)
-      return
-    }
-    const j = (await res.json()) as { data?: { token?: string } }
-    const token = j?.data?.token ?? ""
-    if (token) (window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = token
-  } catch (e) {
-    // dev 直连后端（无网关鉴权）时可忽略
-    console.warn("[shell] token 获取失败（dev 直连时忽略）", e)
-  }
-}
+// ── token 生命周期（内存 + sessionStorage）────────────
+// 生产流程：无默认/演示账号、无 URL 覆盖；token 由登录界面换取后注入。
+// sessionStorage 仅会话内持久：刷新保持登录，关闭标签页即失效需重新登录。
+const TOKEN_KEY = "kg-token"
+let token = sessionStorage.getItem(TOKEN_KEY) ?? ""
+;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = token || undefined
 
 // ─────────────────────────────────────────────────────
 // 配置：隐藏壳层导航的路由前缀。
@@ -89,9 +72,110 @@ function onRouteChange(): void {
 window.addEventListener("single-spa:app-change", onRouteChange)
 onRouteChange()
 
-// 启动前先确保演示登录 token（网关鉴权默认启用）
-const urlUser = new URLSearchParams(location.search).get("user")
-const username = urlUser || localStorage.getItem("kg-user") || "analyst"
-void ensureToken(username).then(() => {
+// ── 登录状态机（生产流程）───────────────────────────────
+
+let started = false
+function startSpa(): void {
+  if (started) return
+  started = true
   start()
+}
+
+/** 解码 JWT 的 exp（秒）；非法返回 null。 */
+function tokenExpiry(t: string): number | null {
+  try {
+    const payload = t.split(".")[1] ?? ""
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+    return (JSON.parse(json) as { exp?: number }).exp ?? null
+  } catch {
+    return null
+  }
+}
+
+function hasValidToken(t: string): boolean {
+  const exp = tokenExpiry(t)
+  return exp !== null && exp * 1000 > Date.now()
+}
+
+const loginView = document.getElementById("login-view") as HTMLElement
+const loginForm = document.getElementById("login-form") as HTMLFormElement
+const loginError = document.getElementById("login-error") as HTMLElement
+const usernameInput = document.getElementById(
+  "login-username",
+) as HTMLInputElement
+const passwordInput = document.getElementById(
+  "login-password",
+) as HTMLInputElement
+const loginSubmit = document.getElementById("login-submit") as HTMLButtonElement
+const logoutBtn = document.getElementById("logout-btn") as HTMLButtonElement
+
+function showLogin(): void {
+  loginView.hidden = false
+  usernameInput.focus()
+}
+function hideLogin(): void {
+  loginView.hidden = true
+}
+function clearAuth(): void {
+  token = ""
+  ;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = undefined
+  sessionStorage.removeItem(TOKEN_KEY)
+}
+
+async function handleLogin(e: Event): Promise<void> {
+  e.preventDefault()
+  const username = usernameInput.value.trim()
+  const password = passwordInput.value
+  if (!username || !password) {
+    loginError.textContent = "请输入用户名和密码"
+    return
+  }
+  loginError.textContent = ""
+  loginSubmit.disabled = true
+  loginSubmit.textContent = "登录中…"
+  try {
+    const res = await fetch("/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        detail?: string
+      } | null
+      throw new Error(body?.detail ?? `登录失败（HTTP ${res.status}）`)
+    }
+    const j = (await res.json()) as { data?: { token?: string } }
+    const tok = j?.data?.token
+    if (!tok) throw new Error("服务端未返回 token")
+    token = tok
+    ;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = tok
+    sessionStorage.setItem(TOKEN_KEY, tok)
+    hideLogin()
+    startSpa()
+    // 登录后落在首页（菜单栏可见），不直接进入图谱模块
+    if (location.pathname !== "/") navigateToUrl("/")
+  } catch (err) {
+    loginError.textContent = err instanceof Error ? err.message : String(err)
+  } finally {
+    loginSubmit.disabled = false
+    loginSubmit.textContent = "登 录"
+  }
+}
+
+logoutBtn.addEventListener("click", () => {
+  clearAuth()
+  passwordInput.value = ""
+  showLogin()
 })
+
+loginForm.addEventListener("submit", handleLogin)
+
+// 启动前先确认登录态：有未过期 token 直接进系统，否则显示登录界面
+if (hasValidToken(token)) {
+  hideLogin()
+  startSpa()
+} else {
+  clearAuth()
+  showLogin()
+}
