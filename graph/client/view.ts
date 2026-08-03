@@ -94,6 +94,7 @@ export class ConnGraphView<
   declare colorTracker: ColorTracker
   declare canvas: HTMLCanvasElement | null
   declare shadowLayerManager: ShadowLayerManager
+  private contextNode: GraphNode<G["NO"], G["NT"], G["NS"]> | null = null
   /** 默认的工具互动层（向后兼容，等价于 shadowLayerManager.getLayer("tools")） */
   get toolShadowCanvas(): HTMLCanvasElement | null {
     return this.shadowLayerManager.getLayer("tools")?.canvas ?? null
@@ -436,12 +437,46 @@ export class ConnGraphView<
       },
       true,
     )
+    this.container.addEventListener(
+      "pointerdown",
+      (event) => {
+        this.handleCanvasPointerDown(event as MouseEvent)
+      },
+      true,
+    )
+    this.container.addEventListener(
+      "pointercancel",
+      (event) => {
+        this.cancelNodeContext(event as MouseEvent)
+      },
+      true,
+    )
+    this.container.addEventListener(
+      "lostpointercapture",
+      (event) => {
+        this.cancelNodeContext(event as MouseEvent)
+      },
+      true,
+    )
+    window.addEventListener("blur", () => {
+      this.cancelNodeContext(new MouseEvent("blur"))
+    })
   }
 
   /**
    * 更新鼠标位置缓存
    */
   private handleCanvasPointermove(event: MouseEvent) {
+    // 右键按住节点的径向手势：持续上报指针位置
+    if (this.contextNode) {
+      this.model.events.publish("nodeContextMove", {
+        node: this.contextNode,
+        position: this.toCanvasLocal(event),
+        event,
+      })
+      return
+    }
+
     if (!this.canvas) return
 
     const rect = this.canvas.getBoundingClientRect()
@@ -479,6 +514,12 @@ export class ConnGraphView<
    * 处理画布点击
    */
   private handleCanvasClick(event: MouseEvent) {
+    // 结束右键径向手势（松开）
+    if (this.contextNode) {
+      this.endNodeContext(event)
+      return
+    }
+
     if (!this.canvas) return
 
     const rect = this.canvas.getBoundingClientRect()
@@ -515,6 +556,88 @@ export class ConnGraphView<
         this.forceGraph.d3ReheatSimulation()
         break
     }
+  }
+
+  /**
+   * 处理画布右键按下：命中节点则开始径向手势
+   */
+  private handleCanvasPointerDown(event: MouseEvent) {
+    if (event.button !== 2) return // 仅右键
+    if (this.contextNode) return // 已有手势进行中
+
+    const hoveredNode = this.getHoveredNode()
+    if (!hoveredNode) return
+
+    this.contextNode = hoveredNode
+
+    const screenPos = this.forceGraph.graph2ScreenCoords(
+      hoveredNode.x ?? 0,
+      hoveredNode.y ?? 0,
+    )
+    const zoomScale = this.getZoomScale()
+
+    this.model.events.publish("nodeContextStart", {
+      node: hoveredNode,
+      screenPos,
+      radius: this.getCollisionRadius(hoveredNode) * zoomScale,
+      zoomScale,
+      event,
+    })
+  }
+
+  /** 当前悬停的节点（由 hover 状态维护） */
+  private getHoveredNode(): GraphNode<G["NO"], G["NT"], G["NS"]> | null {
+    const hoveredIds = this.model.stateManager.getHoveredNodes()
+    if (hoveredIds.length === 0) return null
+    return this.model.getNodeById(hoveredIds[0]) ?? null
+  }
+
+  /** 当前缩放比例（每 1 图谱单位对应的屏幕像素） */
+  private getZoomScale(): number {
+    const p1 = this.forceGraph.graph2ScreenCoords(0, 0)
+    const p2 = this.forceGraph.graph2ScreenCoords(1, 0)
+    const k = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+    return k > 0 ? k : 1
+  }
+
+  /** 将事件坐标换算为 canvas 本地坐标 */
+  private toCanvasLocal(event: MouseEvent): { x: number; y: number } {
+    if (!this.canvas) return { x: NaN, y: NaN }
+    const rect = this.canvas.getBoundingClientRect()
+    const scaleX = rect.width > 0 ? this.canvas.width / rect.width : 1
+    const scaleY = rect.height > 0 ? this.canvas.height / rect.height : 1
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+    }
+  }
+
+  /** 结束当前右键手势（松开） */
+  private endNodeContext(event: MouseEvent) {
+    if (!this.contextNode) return
+    const node = this.contextNode
+    this.contextNode = null
+
+    this.model.events.publish("nodeContextEnd", {
+      node,
+      position: this.toCanvasLocal(event),
+      canceled: false,
+      event,
+    })
+  }
+
+  /** 取消当前右键手势（丢失指针/失焦） */
+  private cancelNodeContext(event: MouseEvent) {
+    if (!this.contextNode) return
+    const node = this.contextNode
+    this.contextNode = null
+
+    this.model.events.publish("nodeContextEnd", {
+      node,
+      position: this.toCanvasLocal(event),
+      canceled: true,
+      event,
+    })
   }
 
   // ==================== 事件处理方法 ====================
