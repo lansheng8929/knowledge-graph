@@ -114,6 +114,8 @@ export class WebGLRenderer<
     const gl = this.canvas.getContext("webgl2", {
       antialias: true,
       premultipliedAlpha: false,
+      // 保留绘制缓冲：截图/导出画布时需要，也便于自动化验证渲染结果
+      preserveDrawingBuffer: true,
     })
     if (!gl) throw new Error("WebGL2 not supported")
     this.gl = gl

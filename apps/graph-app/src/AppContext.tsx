@@ -12,11 +12,13 @@ import type {
 import type { useGraphApp } from "./hooks/useGraphApp"
 import type { useGraphHover } from "./hooks/useGraphHover"
 import type { useRuleMenu } from "./hooks/useRuleMenu"
+import type { useGraphFilters } from "./hooks/useGraphFilters"
 
 export type AppContextValue = ReturnType<typeof useGraphApp>["ctx"] &
   ReturnType<typeof useGraphHover>["ctx"] &
   ReturnType<typeof useRuleMenu>["ctx"] &
-  ReturnType<typeof useGraphSelection>
+  ReturnType<typeof useGraphSelection> &
+  ReturnType<typeof useGraphFilters>
 
 const Ctx = createContext<AppContextValue | null>(null)
 

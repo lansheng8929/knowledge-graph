@@ -266,6 +266,8 @@ def query_expand(
                         "linkType": rel_type,
                         "label": link_label,
                         "time": link_time,
+                        "intimacy": r.get("intimacy", 0.5),
+                        "clusterId": r.get("clusterId", ""),
                     },
                 }
             )
@@ -369,6 +371,8 @@ def query_analyze(driver: Driver, req: m.AnalysisRequest) -> Dict[str, Any]:
                             "linkType": record["relType"],
                             "label": r.get("label", ""),
                             "time": r.get("time", ""),
+                            "intimacy": r.get("intimacy", 0.5),
+                            "clusterId": r.get("clusterId", ""),
                         },
                     }
                 )

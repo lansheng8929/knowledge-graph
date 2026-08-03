@@ -9,6 +9,7 @@ import {
   GraphModel,
   GraphView,
   DefaultRenderPlugin,
+  type GraphViewOptions,
 } from "@lansheng/knowledge-graph"
 import type { AppGraphDataGenerics, MyGraphView } from "../graph-types"
 import {
@@ -28,7 +29,11 @@ import type {
   GraphViewModel,
   DefaultGraphDataGenerics,
 } from "@lansheng/knowledge-graph/client/type"
-import { type ExpansionFetcher, ExpansionService } from "../expansion-service"
+import {
+  type ExpansionFetcher,
+  type ExpansionResponse,
+  ExpansionService,
+} from "../expansion-service"
 import { useTheme } from "./useTheme"
 import { getPalette, type Theme } from "../theme"
 import { applyIcons } from "../icon-map"
@@ -92,6 +97,17 @@ export function useGraphApp(ids?: string[]) {
         linkStrength: 0.2,
         centerStrength: 0.1,
         velocityDecay: 0.4,
+        // 亲密度→物理拉扯力（在调用方外部定义）：亲密越高距离越近、强度越大
+        linkDistanceFn: (link) => {
+          const i = link.intimacy
+          if (i === undefined) return undefined
+          return 100 * (1.5 - i * 0.7)
+        },
+        linkStrengthFn: (link) => {
+          const i = link.intimacy
+          if (i === undefined) return undefined
+          return 0.2 * (0.3 + i * 0.9)
+        },
       },
       theme: {
         node: {
@@ -104,7 +120,22 @@ export function useGraphApp(ids?: string[]) {
           ip: (node, t) => createIpStyle(node, t as Theme),
           device: (node, t) => createDeviceStyle(node, t as Theme),
         },
-        link: { default: (_link, t) => createDefaultLinkStyle(t as Theme) },
+        // 边的关系类型是后端动态值（USE_DEVICE / CALLED 等），无法静态枚举；
+        // 用 Proxy 让任意 linkType 都解析到默认边样式（插件的兜底声明），
+        // 未来如需按关系类型定制，给具体 key 覆盖即可。
+        link: new Proxy(
+          {
+            default: (_link: unknown, t: unknown) =>
+              createDefaultLinkStyle(t as Theme),
+          },
+          {
+            get: (target, key) =>
+              (target as Record<PropertyKey, unknown>)[key] ??
+              (target as Record<PropertyKey, unknown>).default,
+          },
+        ) as unknown as NonNullable<
+          GraphViewOptions<AppGraphDataGenerics>["theme"]
+        >["link"],
       },
       renderPlugin: (gl, canvas) =>
         new DefaultRenderPlugin<AppGraphDataGenerics>({

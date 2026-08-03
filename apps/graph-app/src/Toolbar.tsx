@@ -13,6 +13,11 @@ import {
   Map,
   Sun,
   Moon,
+  Clock,
+  Filter,
+  Table,
+  Download,
+  GitBranch,
 } from "lucide-react"
 import SearchBox from "./SearchBox"
 import type { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
@@ -58,6 +63,16 @@ interface ToolbarProps {
   onRedo: () => void
   onSearchSelect: (nodeId: string) => void
   onAnalyze?: () => void
+  timePanelOpen: boolean
+  filterPanelOpen: boolean
+  tablePanelOpen: boolean
+  onToggleTimePanel: () => void
+  onToggleFilterPanel: () => void
+  onToggleTablePanel: () => void
+  onExportJSON: () => void
+  onExportCSV: () => void
+  treeMode: boolean
+  onToggleTreeLayout: () => void
 }
 
 export default function Toolbar({
@@ -70,6 +85,16 @@ export default function Toolbar({
   onRedo,
   onSearchSelect,
   onAnalyze,
+  timePanelOpen,
+  filterPanelOpen,
+  tablePanelOpen,
+  onToggleTimePanel,
+  onToggleFilterPanel,
+  onToggleTablePanel,
+  onExportJSON,
+  onExportCSV,
+  treeMode,
+  onToggleTreeLayout,
 }: ToolbarProps) {
   const { zIndex } = usePanel({ id: "toolbar", layer: PanelLayer.Toolbar })
   const {
@@ -152,6 +177,44 @@ export default function Toolbar({
       </span>
 
       <button
+        onClick={onToggleTimePanel}
+        style={{
+          ...btnStyle,
+          background: timePanelOpen ? "rgba(233,69,96,0.25)" : "transparent",
+          border: timePanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
+        }}
+        title="时间线回放"
+      >
+        <Clock size={14} />
+      </button>
+      <button
+        onClick={onToggleFilterPanel}
+        style={{
+          ...btnStyle,
+          background: filterPanelOpen ? "rgba(233,69,96,0.25)" : "transparent",
+          border: filterPanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
+        }}
+        title="属性过滤"
+      >
+        <Filter size={14} />
+      </button>
+      <button
+        onClick={onToggleTablePanel}
+        style={{
+          ...btnStyle,
+          background: tablePanelOpen ? "rgba(233,69,96,0.25)" : "transparent",
+          border: tablePanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
+        }}
+        title="表格视图"
+      >
+        <Table size={14} />
+      </button>
+
+      <span style={{ fontSize: "11px", color: "#999", margin: "0 2px" }}>
+        |
+      </span>
+
+      <button
         onClick={deactivateSelectionMode}
         style={{
           ...btnStyle,
@@ -211,6 +274,35 @@ export default function Toolbar({
         title="分析"
       >
         <BarChart3 size={14} />
+      </button>
+      <button
+        onClick={onExportJSON}
+        disabled={selectedNodeIds.size === 0}
+        style={btnStyle}
+        title="导出选中子图 JSON"
+      >
+        <Download size={13} />
+        <span style={{ fontSize: "10px" }}>JSON</span>
+      </button>
+      <button
+        onClick={onExportCSV}
+        disabled={selectedNodeIds.size === 0}
+        style={btnStyle}
+        title="导出选中节点 CSV"
+      >
+        <Download size={13} />
+        <span style={{ fontSize: "10px" }}>CSV</span>
+      </button>
+      <button
+        onClick={onToggleTreeLayout}
+        style={{
+          ...btnStyle,
+          background: treeMode ? "rgba(230,126,0,0.15)" : "transparent",
+          border: treeMode ? "1px solid #e67e00" : "1px solid #ccc",
+        }}
+        title={treeMode ? "切回力导向布局" : "树形布局（以选中节点为根）"}
+      >
+        <GitBranch size={14} />
       </button>
       <Search size={14} style={{ color: "rgb(var(--muted))" }} />
       <SearchBox onSelect={onSearchSelect} />

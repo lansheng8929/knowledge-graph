@@ -139,6 +139,19 @@ export function RuleMenu({
     return ""
   }
 
+  // 剩余可拓方向列表（与方向下拉的选项逻辑一致：减去已加载数）
+  const getRemainDirections = (
+    targetType: string,
+    relationType: string,
+  ): string[] => {
+    const info = neighbors[targetType]?.[relationType]
+    const loaded = loadedNeighbors[targetType] ?? { out: 0, in: 0 }
+    const opts: string[] = []
+    if ((info?.out ?? 0) - loaded.out > 0) opts.push("out")
+    if ((info?.in ?? 0) - loaded.in > 0) opts.push("in")
+    return opts
+  }
+
   // 当前组装的规则条件列表
   const defaultTarget = targetTypeOptions[0] ?? ""
   const defaultRel = defaultTarget
@@ -180,11 +193,20 @@ export function RuleMenu({
     setConditions((prev) => {
       const updated = prev.map((c, i) => (i === idx ? { ...c, ...patch } : c))
 
-      if ("targetType" in patch) {
+      if ("targetType" in patch || "relationType" in patch) {
         const c = updated[idx]
         const avail = getAvailableRelations(c.targetType)
         if (c.relationType && !avail.includes(c.relationType)) {
           updated[idx] = { ...c, relationType: avail[0], filters: [] }
+        }
+        // 筛选后：方向自动选中第一个可用方向（与下拉选项一致）
+        const remainDirs = getRemainDirections(
+          updated[idx].targetType,
+          updated[idx].relationType,
+        )
+        updated[idx] = {
+          ...updated[idx],
+          direction: remainDirs[0] ?? "",
         }
       }
       return updated

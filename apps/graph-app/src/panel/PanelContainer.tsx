@@ -68,6 +68,7 @@ const ResizeHandle = ({
  * 非拖拽模式：position 受控，父组件传什么位置就渲染在哪。
  * 拖拽模式：position 为初始位置，拖拽由 useDrag 内部管理。
  * resizable 模式：右下角可拖拽缩放。
+ * 关闭按钮：draggable 模式顶部 panel-grip 提供红色圆点关闭按钮（onClose 存在时）。
  */
 export const PanelContainer = memo(function PanelContainer({
   id,
@@ -120,7 +121,6 @@ export const PanelContainer = memo(function PanelContainer({
         startW: panelSize.w,
         startH: panelSize.h,
       }
-
       const onMove = (ev: Event) => {
         const d = dragRef.current
         if (!d) return
@@ -129,7 +129,6 @@ export const PanelContainer = memo(function PanelContainer({
         const maxH = window.innerHeight - PAD * 2
         const clientX = Math.min(maxW, me.clientX)
         const clientY = Math.min(maxH, me.clientY)
-
         setPanelSize({
           w: Math.max(minW, Math.min(d.startW + clientX - d.startX, maxW)),
           h: Math.max(minH, Math.min(d.startH + clientY - d.startY, maxH)),

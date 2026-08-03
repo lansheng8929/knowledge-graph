@@ -18,7 +18,13 @@ export * from "./type"
 export { GraphView } from "./client/view-new.js"
 export type { GraphViewOptions } from "./client/view-new.js"
 export { GraphRenderer, DefaultRenderPlugin } from "./renderer/index.js"
-export { ForceSimulation } from "./physics/index.js"
-export type { ForceConfig, SimNode, SimLink, Layout } from "./physics/index.js"
+export { ForceSimulation, TreeLayout } from "./physics/index.js"
+export type {
+  ForceConfig,
+  SimNode,
+  SimLink,
+  Layout,
+  TreeLayoutOptions,
+} from "./physics/index.js"
 
 export * as d3 from "./vendor/d3-force/src/index.js"

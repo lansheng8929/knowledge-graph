@@ -65,6 +65,8 @@ export interface RenderLink {
   width: number
   id: string
   label?: string
+  /** 亲密度（0~1，来自边数据，用于聚类可视化：越高越粗/越实） */
+  intimacy?: number
   /** 源头节点 ID（用于弧线分组） */
   sourceId?: string
   /** 目标节点 ID */

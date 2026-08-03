@@ -317,6 +317,79 @@ def random_datetime(start_year=2018, end_year=2026):
     return f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:{second:02d}Z"
 
 
+# ─── 聚类 / 亲密度 ────────────────────────────────────
+CLUSTER_SIZE = 60  # 每簇实体数（统一编号规则：i//CLUSTER_SIZE 相同 → 同簇/团伙）
+
+
+def cluster_of(i: int) -> str:
+    """按统一编号规则分簇：i//CLUSTER_SIZE 相同 → 同簇（团伙）。"""
+    return f"c{i // CLUSTER_SIZE + 1}"
+
+
+def intimacy_between(c1: str, c2: str) -> float:
+    """亲密度（边聚类属性）：同簇高（0.70~1.00），跨簇低（0.10~0.45）。"""
+    if c1 == c2:
+        return round(random.uniform(0.70, 1.00), 2)
+    return round(random.uniform(0.10, 0.45), 2)
+
+
+def pick_entity_indices(
+    owner_i: int, total: int, count: int, same_cluster_prob: float = 0.8
+):
+    """为 owner 选关联实体索引：优先同簇（形成聚类），小概率跨簇（噪声）。"""
+    lo = (owner_i // CLUSTER_SIZE) * CLUSTER_SIZE
+    hi = min(lo + CLUSTER_SIZE, total)
+    same_pool = list(range(lo, hi))
+    picked: list[int] = []
+    attempts = 0
+    while len(picked) < count and attempts < count * 30:
+        attempts += 1
+        if same_pool and random.random() < same_cluster_prob:
+            idx = random.choice(same_pool)
+        else:
+            idx = random.randint(0, total - 1)
+        if idx not in picked:
+            picked.append(idx)
+    while len(picked) < count:
+        idx = random.randint(0, total - 1)
+        if idx not in picked:
+            picked.append(idx)
+    return picked
+
+
+def pick_pair(total: int, same_cluster_prob: float = 0.75):
+    """CALLED/TRANSACTED 配对：优先同簇（形成团伙内网络），小概率跨簇。"""
+    if random.random() < same_cluster_prob:
+        lo = random.randrange(0, max(1, total), CLUSTER_SIZE)
+        hi = min(lo + CLUSTER_SIZE, total)
+        if hi - lo >= 2:
+            return random.randint(lo, hi - 1), random.randint(lo, hi - 1)
+    return random.randint(0, total - 1), random.randint(0, total - 1)
+
+
+def make_link(
+    link_id: int,
+    source: str,
+    target: str,
+    link_type: str,
+    label: str,
+    time: str,
+    src_c: str,
+    tgt_c: str,
+) -> dict:
+    """构造带聚类属性（intimacy/clusterId）的边。"""
+    return {
+        "id": f"link-{link_id}",
+        "source": source,
+        "target": target,
+        "linkType": link_type,
+        "label": label,
+        "time": time,
+        "intimacy": intimacy_between(src_c, tgt_c),
+        "clusterId": src_c if src_c == tgt_c else src_c,
+    }
+
+
 # ─── 数据生成 ────────────────────────────────────────
 
 
@@ -336,6 +409,7 @@ def generate():
                 "caseWeight": random.randint(1, 10),
                 "gender": random.choice(["男", "女"]),
                 "age": random.randint(18, 80),
+                "clusterId": cluster_of(i),
             }
         )
 
@@ -347,6 +421,7 @@ def generate():
                 "nodeType": "phone",
                 "label": random_phone(),
                 "icon": "phone",
+                "clusterId": cluster_of(i),
             }
         )
 
@@ -363,6 +438,7 @@ def generate():
                 "nodeType": "address",
                 "label": addr,
                 "icon": "address",
+                "clusterId": cluster_of(i),
             }
         )
 
@@ -374,6 +450,7 @@ def generate():
                 "nodeType": "account",
                 "label": random_account(),
                 "icon": "account",
+                "clusterId": cluster_of(i),
             }
         )
 
@@ -390,6 +467,7 @@ def generate():
                 "nodeType": "company",
                 "label": c,
                 "icon": "company",
+                "clusterId": cluster_of(i),
             }
         )
 
@@ -406,6 +484,7 @@ def generate():
                 "nodeType": "ip",
                 "label": ip,
                 "icon": "ip",
+                "clusterId": cluster_of(i),
             }
         )
 
@@ -422,6 +501,7 @@ def generate():
                 "nodeType": "device",
                 "label": d,
                 "icon": "device",
+                "clusterId": cluster_of(i),
             }
         )
 
@@ -433,141 +513,75 @@ def generate():
 
     for pi, person in enumerate(persons):
         pid = person["id"]
+        pc = person["clusterId"]
 
-        # OWNS → 2-3 部手机
+        # OWNS → 2-3 部手机（优先同簇）
         phone_count = random.randint(2, 3)
-        phone_indices = random.sample(range(N), phone_count)
-        for idx in phone_indices:
-            links.append(
-                {
-                    "id": f"link-{link_id}",
-                    "source": pid,
-                    "target": phones[idx]["id"],
-                    "linkType": "OWNS",
-                    "label": "名下手机号",
-                    "time": random_datetime(2015, 2024),
-                }
-            )
+        for idx in pick_entity_indices(pi, N, phone_count):
+            links.append(make_link(link_id, pid, phones[idx]["id"], "OWNS",
+                                   "名下手机号", random_datetime(2015, 2024), pc, phones[idx]["clusterId"]))
             link_id += 1
 
-        # RESIDES_AT → 1 地址
-        links.append(
-            {
-                "id": f"link-{link_id}",
-                "source": pid,
-                "target": addresses[pi]["id"],
-                "linkType": "RESIDES_AT",
-                "label": "居住地址",
-                "time": random_datetime(2015, 2024),
-            }
-        )
+        # RESIDES_AT → 1 地址（同簇）
+        links.append(make_link(link_id, pid, addresses[pi]["id"], "RESIDES_AT",
+                               "居住地址", random_datetime(2015, 2024), pc, addresses[pi]["clusterId"]))
         link_id += 1
 
-        # WORKS_AT → 1 公司
-        links.append(
-            {
-                "id": f"link-{link_id}",
-                "source": pid,
-                "target": companies[pi % len(companies)]["id"],
-                "linkType": "WORKS_AT",
-                "label": "工作单位",
-                "time": random_datetime(2015, 2024),
-            }
-        )
+        # WORKS_AT → 1 公司（同簇）
+        links.append(make_link(link_id, pid, companies[pi % len(companies)]["id"], "WORKS_AT",
+                               "工作单位", random_datetime(2015, 2024), pc,
+                               companies[pi % len(companies)]["clusterId"]))
         link_id += 1
 
-        # HAS_ACCOUNT → 1-2 账户
+        # HAS_ACCOUNT → 1-2 账户（优先同簇）
         acc_count = random.randint(1, 2)
-        acc_indices = random.sample(range(N), acc_count)
-        for idx in acc_indices:
-            links.append(
-                {
-                    "id": f"link-{link_id}",
-                    "source": pid,
-                    "target": accounts[idx]["id"],
-                    "linkType": "HAS_ACCOUNT",
-                    "label": "名下账户",
-                    "time": random_datetime(2015, 2024),
-                }
-            )
+        for idx in pick_entity_indices(pi, N, acc_count):
+            links.append(make_link(link_id, pid, accounts[idx]["id"], "HAS_ACCOUNT",
+                                   "名下账户", random_datetime(2015, 2024), pc, accounts[idx]["clusterId"]))
             link_id += 1
 
-        # LOGIN_IP → 2-3 IP
+        # LOGIN_IP → 2-3 IP（优先同簇）
         ip_count = random.randint(2, 3)
-        ip_indices = random.sample(range(len(ips)), min(ip_count, len(ips)))
-        for idx in ip_indices:
-            links.append(
-                {
-                    "id": f"link-{link_id}",
-                    "source": pid,
-                    "target": ips[idx]["id"],
-                    "linkType": "LOGIN_IP",
-                    "label": "登录IP",
-                    "time": random_datetime(2024, 2026),
-                }
-            )
+        for idx in pick_entity_indices(pi, len(ips), ip_count):
+            links.append(make_link(link_id, pid, ips[idx]["id"], "LOGIN_IP",
+                                   "登录IP", random_datetime(2024, 2026), pc, ips[idx]["clusterId"]))
             link_id += 1
 
-        # USE_DEVICE → 1-2 设备
+        # USE_DEVICE → 1-2 设备（优先同簇）
         dev_count = random.randint(1, 2)
-        dev_indices = random.sample(range(len(devices)), min(dev_count, len(devices)))
-        for idx in dev_indices:
-            links.append(
-                {
-                    "id": f"link-{link_id}",
-                    "source": pid,
-                    "target": devices[idx]["id"],
-                    "linkType": "USE_DEVICE",
-                    "label": "使用设备",
-                    "time": random_datetime(2020, 2025),
-                }
-            )
+        for idx in pick_entity_indices(pi, len(devices), dev_count):
+            links.append(make_link(link_id, pid, devices[idx]["id"], "USE_DEVICE",
+                                   "使用设备", random_datetime(2020, 2025), pc, devices[idx]["clusterId"]))
             link_id += 1
 
-    # 手机间通话网络（CALLED）
+    # 手机间通话网络（CALLED，优先同簇 → 团伙内高频通话）
     call_pairs = set()
     for _ in range(N * 2):
-        a = random.randint(0, N - 1)
-        b = random.randint(0, N - 1)
+        a, b = pick_pair(N)
         if a == b:
             continue
         pair = (min(a, b), max(a, b))
         if pair in call_pairs:
             continue
         call_pairs.add(pair)
-        links.append(
-            {
-                "id": f"link-{link_id}",
-                "source": phones[a]["id"],
-                "target": phones[b]["id"],
-                "linkType": "CALLED",
-                "label": "通话记录",
-                "time": random_datetime(2025, 2026),
-            }
-        )
+        links.append(make_link(link_id, phones[a]["id"], phones[b]["id"], "CALLED",
+                               "通话记录", random_datetime(2025, 2026),
+                               phones[a]["clusterId"], phones[b]["clusterId"]))
         link_id += 1
 
-    # 账户间转账网络（TRANSACTED）
+    # 账户间转账网络（TRANSACTED，优先同簇）
     trans_pairs = set()
     for _ in range(N):
-        a = random.randint(0, N - 1)
-        b = random.randint(0, N - 1)
+        a, b = pick_pair(N)
         if a == b:
             continue
         pair = (min(a, b), max(a, b))
         if pair in trans_pairs:
             continue
         trans_pairs.add(pair)
-        links.append(
-            {
-                "id": f"link-{link_id}",
-                "source": accounts[a]["id"],
-                "target": accounts[b]["id"],
-                "linkType": "TRANSACTED",
-                "label": "转账记录",
-                "time": random_datetime(2025, 2026),
-            }
-        )
+        links.append(make_link(link_id, accounts[a]["id"], accounts[b]["id"], "TRANSACTED",
+                               "转账记录", random_datetime(2025, 2026),
+                               accounts[a]["clusterId"], accounts[b]["clusterId"]))
         link_id += 1
 
     print(f"生成 {len(all_nodes)} 节点, {len(links)} 关系")
@@ -610,13 +624,16 @@ def seed_to_neo4j(nodes, links):
                     MATCH (s {{id: $source}})
                     MATCH (t {{id: $target}})
                     MERGE (s)-[r:{lt} {{id: $id}}]->(t)
-                    SET r.label = $label, r.time = $time
+                    SET r.label = $label, r.time = $time,
+                        r.intimacy = $intimacy, r.clusterId = $clusterId
                     """,
                     source=link["source"],
                     target=link["target"],
                     id=link["id"],
                     label=link["label"],
                     time=link["time"],
+                    intimacy=link.get("intimacy", 0.5),
+                    clusterId=link.get("clusterId", "c-unknown"),
                 )
             print(f"  UPSERT 关系 {min(i + batch_size, len(links))}/{len(links)}")
 

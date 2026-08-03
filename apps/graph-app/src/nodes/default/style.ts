@@ -47,11 +47,11 @@ export function themed(
       fontSize: 16,
     },
     hidden: {
-      bgColor: "#fff",
+      bgColor: bg,
       strokeColor: stroke,
       textColor,
       radius: 8,
-      strokeWidth: 1.5,
+      strokeWidth: 2,
       opacity: 0.15,
       fontSize: 16,
     },

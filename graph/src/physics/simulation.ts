@@ -31,6 +31,8 @@ export interface SimNode extends SimulationNodeDatum {
 
 export interface SimLink extends SimulationLinkDatum<SimNode> {
   id?: string
+  /** 亲密度（0~1）：影响边拉扯力——越高距离越近、强度越大 */
+  intimacy?: number
 }
 
 export interface ForceConfig {
@@ -52,9 +54,22 @@ export interface ForceConfig {
   alphaMin?: number
   /** Max iterations for force link. Default: 1 */
   linkIterations?: number
+  /**
+   * 自定义每条边 rest distance（可据 link.intimacy 等属性返回不同值）；
+   * 返回 undefined 时回退到 linkDistance。由调用方外部定义亲密度→拉扯力策略。
+   */
+  linkDistanceFn?: (link: SimLink) => number | undefined
+  /** 自定义每条边 strength（同上）；返回 undefined 时回退到 linkStrength */
+  linkStrengthFn?: (link: SimLink) => number | undefined
 }
 
-const DEFAULT_CONFIG: Required<ForceConfig> = {
+/** 可选函数字段保持可选，其余必填 */
+type RequiredForceConfig = Required<
+  Omit<ForceConfig, "linkDistanceFn" | "linkStrengthFn">
+> &
+  Partial<Pick<ForceConfig, "linkDistanceFn" | "linkStrengthFn">>
+
+const DEFAULT_CONFIG: RequiredForceConfig = {
   repulsion: -300,
   linkDistance: 80,
   linkStrength: 0.3,
@@ -64,13 +79,14 @@ const DEFAULT_CONFIG: Required<ForceConfig> = {
   velocityDecay: 0.3,
   alphaMin: 0.001,
   linkIterations: 1,
+  // linkDistanceFn / linkStrengthFn 缺省不设置（由调用方外部定义亲密度→拉扯力）
 }
 
 export class ForceSimulation implements Layout {
   private simulation: Simulation<SimNode, SimLink> | null = null
   private nodes: SimNode[] = []
   private links: SimLink[] = []
-  private config: Required<ForceConfig>
+  private config: RequiredForceConfig
   private centerX = 0
   private centerY = 0
 
@@ -88,6 +104,19 @@ export class ForceSimulation implements Layout {
     this.links = links
   }
 
+  /** 构建力导向边：distance/strength 由外部 linkDistanceFn/linkStrengthFn 定义（未提供则用常量） */
+  private buildLinkForce() {
+    return forceLink<SimNode, SimLink>(this.links)
+      .id((d) => d.id)
+      .distance(
+        (d) => this.config.linkDistanceFn?.(d) ?? this.config.linkDistance,
+      )
+      .strength(
+        (d) => this.config.linkStrengthFn?.(d) ?? this.config.linkStrength,
+      )
+      .iterations(this.config.linkIterations)
+  }
+
   /** Start or restart the simulation */
   start(): void {
     if (this.simulation) {
@@ -95,14 +124,7 @@ export class ForceSimulation implements Layout {
     }
 
     this.simulation = forceSimulation<SimNode>(this.nodes)
-      .force(
-        "link",
-        forceLink<SimNode, SimLink>(this.links)
-          .id((d) => d.id)
-          .distance(this.config.linkDistance)
-          .strength(this.config.linkStrength)
-          .iterations(this.config.linkIterations),
-      )
+      .force("link", this.buildLinkForce())
       .force("charge", forceManyBody().strength(this.config.repulsion))
       .force(
         "center",
@@ -160,13 +182,7 @@ export class ForceSimulation implements Layout {
     if (this.simulation) {
       const sim = this.simulation
       sim.force("charge", forceManyBody().strength(this.config.repulsion))
-      sim.force(
-        "link",
-        forceLink<SimNode, SimLink>(this.links)
-          .id((d) => d.id)
-          .distance(this.config.linkDistance)
-          .strength(this.config.linkStrength),
-      )
+      sim.force("link", this.buildLinkForce())
       sim.force(
         "center",
         forceCenter(this.centerX, this.centerY).strength(

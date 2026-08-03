@@ -1,3 +1,5 @@
 export { ForceSimulation } from "./simulation.js"
 export type { SimNode, SimLink, ForceConfig } from "./simulation.js"
+export { TreeLayout } from "./tree-layout.js"
+export type { TreeLayoutOptions } from "./tree-layout.js"
 export type { Layout } from "./layout.js"

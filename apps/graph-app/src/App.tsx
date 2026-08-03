@@ -10,9 +10,13 @@ import { LinkTooltip } from "./LinkTooltip"
 import { RuleMenu } from "./RuleMenu"
 import SnapshotPanel from "./SnapshotPanel"
 import AnalysisPanel from "./AnalysisPanel"
+import { ForceSimulation, TreeLayout } from "@lansheng/knowledge-graph"
+import { exportSelection } from "./export-utils"
 import Toolbar from "./Toolbar"
 import SelectionOverlay from "./SelectionOverlay"
+import SelectionBar from "./SelectionBar"
 import { AppProvider } from "./AppContext"
+import { useGraphFilters } from "./hooks/useGraphFilters"
 import { PanelProvider } from "./panel"
 import { useGraphHover } from "./hooks/useGraphHover"
 import { useRuleMenu } from "./hooks/useRuleMenu"
@@ -20,6 +24,9 @@ import { useGraphApp } from "./hooks/useGraphApp"
 import { useGraphSelection } from "./hooks/useGraphSelection"
 import { applyIcons } from "./icon-map"
 import { graphApi } from "./api/client"
+import TimePanel from "./TimePanel"
+import FilterPanel from "./FilterPanel"
+import TablePanel from "./TablePanel"
 
 // 计算节点各方向已加载的邻居数量（纯函数）
 function getLoadedNeighbors(
@@ -87,6 +94,12 @@ export default function App() {
       handleRedo,
     },
   } = graphApp
+
+  const [timePanelOpen, setTimePanelOpen] = useState(false)
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false)
+  const [tablePanelOpen, setTablePanelOpen] = useState(false)
+  const [treeMode, setTreeMode] = useState(false)
+  const graphFilters = useGraphFilters(modelRef)
 
   const graphHover = useGraphHover(modelRef, {
     onPlusToolClick: (node) => {
@@ -198,11 +211,44 @@ export default function App() {
     viewRef.current?.fitView(50)
   }, [])
 
+  // 导出选中子图（JSON 全量 / CSV 表格）
+  const handleExportSelection = useCallback(
+    (fmt: "json" | "csv") => {
+      const model = modelRef.current
+      if (!model || selectedNodeIds.size === 0) return
+      exportSelection(model, selectedNodeIds, fmt)
+    },
+    [selectedNodeIds],
+  )
+
+  // 布局切换：力导向 ⇄ 树形（根=选中节点，无选中取画布首节点）
+  const forceConfig = {
+    repulsion: -200,
+    linkDistance: 100,
+    linkStrength: 0.2,
+    centerStrength: 0.1,
+    velocityDecay: 0.4,
+  }
+  const toggleTreeLayout = useCallback(() => {
+    const view = viewRef.current
+    if (!view) return
+    if (treeMode) {
+      view.setLayout(new ForceSimulation(forceConfig))
+      setTreeMode(false)
+    } else {
+      const rootId =
+        selectedNodeIds.size > 0 ? [...selectedNodeIds][0] : undefined
+      view.setLayout(new TreeLayout({ rootId, levelGap: 170, siblingGap: 64 }))
+      setTreeMode(true)
+    }
+  }, [treeMode, selectedNodeIds])
+
   const appCtx = {
     ...graphApp.ctx,
     ...graphHover.ctx,
     ...ruleMenuHook.ctx,
     ...selCtx,
+    ...graphFilters,
   }
 
   return (
@@ -228,6 +274,16 @@ export default function App() {
             onRedo={handleRedo}
             onSearchSelect={handleSearchSelect}
             onAnalyze={handleAnalyze}
+            timePanelOpen={timePanelOpen}
+            filterPanelOpen={filterPanelOpen}
+            tablePanelOpen={tablePanelOpen}
+            onToggleTimePanel={() => setTimePanelOpen((v) => !v)}
+            onToggleFilterPanel={() => setFilterPanelOpen((v) => !v)}
+            onToggleTablePanel={() => setTablePanelOpen((v) => !v)}
+            onExportJSON={() => handleExportSelection("json")}
+            onExportCSV={() => handleExportSelection("csv")}
+            treeMode={treeMode}
+            onToggleTreeLayout={toggleTreeLayout}
           />
 
           {/* Loading overlay (shown on top of the graph container) */}
@@ -373,6 +429,26 @@ export default function App() {
 
             {/* ─── 小地图 ─── */}
             {miniMapOpen && !loading && <MiniMap viewRef={viewRef} />}
+
+            {/* ─── 时间线回放 / 属性过滤 / 表格视图（P2） ─── */}
+            {timePanelOpen && (
+              <TimePanel onClose={() => setTimePanelOpen(false)} />
+            )}
+            {filterPanelOpen && (
+              <FilterPanel onClose={() => setFilterPanelOpen(false)} />
+            )}
+            {tablePanelOpen && (
+              <TablePanel
+                modelRef={modelRef}
+                viewRef={viewRef}
+                onClose={() => setTablePanelOpen(false)}
+              />
+            )}
+            <SelectionBar
+              modelRef={modelRef}
+              viewRef={viewRef}
+              onAnalyze={handleAnalyze}
+            />
 
             {/* 规则选择菜单 */}
             {ruleMenu && (

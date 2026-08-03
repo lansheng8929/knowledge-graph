@@ -17,16 +17,9 @@ import type { deviceStyle } from "./nodes/device/style"
 export type MyGraphView = GraphView<AppGraphDataGenerics>
 
 export interface AppGraphDataGenerics extends GraphDataGenerics {
-  NT:
-    | "default"
-    | "person"
-    | "phone"
-    | "address"
-    | "account"
-    | "company"
-    | "ip"
-    | "device"
+  NT: string
   NS: "regular" | "root" | "highlighted" | "selected" | "hidden" | "hovered"
-  LT: "default"
+  // 关系类型来自后端（Neo4j 关系类型，如 USE_DEVICE / CALLED），运行时为任意字符串
+  LT: string
   LS: "regular" | "highlighted" | "selected" | "hidden" | "hovered"
 }

@@ -311,6 +311,12 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       this.syncAllNodeStyles()
       this.syncAllLinkStyles()
     })
+
+    // 隐藏状态变化（时间线/属性过滤）：刷新节点与边视觉为 hidden 态
+    this.events.subscribe("hiddenChange", () => {
+      this.syncAllNodeStyles()
+      this.syncAllLinkStyles()
+    })
   }
 
   // ========== 状态驱动的视觉同步 ==========
@@ -325,9 +331,14 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
         ) as G["NS"]) ?? ("regular" as G["NS"])
       const style = this.styleManager.getNodeStyle(rn.id)
       const s = getNodeStyleByStateType(style, stateType)
+      const alpha = s.opacity ?? 1
       const c = parseHexColor(s.bgColor!)
-      rn.color = [c[0], c[1], c[2], s.opacity!]
-      rn.strokeColor = parseHexColor(s.strokeColor!)
+      const sc = parseHexColor(s.strokeColor ?? "#666")
+      const tc = parseHexColor(s.textColor ?? "#2c2c2c")
+      rn.color = [c[0], c[1], c[2], alpha]
+      // 透明度同步应用到边框与文字标签（hidden 态整体淡出）
+      rn.strokeColor = [sc[0], sc[1], sc[2], alpha]
+      rn.textColor = [tc[0], tc[1], tc[2], alpha]
       rn.strokeWidth = s.strokeWidth!
     }
   }
@@ -340,10 +351,12 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
           rl.id,
           this.model.stateManager,
         ) as G["LS"]) ?? ("regular" as G["LS"])
+
       const s = getLinkStyleByStateType(
         this.styleManager.getLinkStyle(rl.id),
         stateType,
       )
+
       const c = parseHexColor(s.color ?? "#9ca3af")
       rl.color = [c[0], c[1], c[2], s.opacity ?? 0.7]
       rl.width = s.strokeWidth ?? 0.8
@@ -403,6 +416,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
           id: gl.id,
           source: sourceId,
           target: targetId,
+          // 亲密度传给物理引擎：影响边拉扯力（关系越强节点越紧）
+          intimacy: (gl.data as any)?.intimacy,
         })
       }
     }
@@ -473,6 +488,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     const targetNode = this.nodeMap.get(String(targetId))
 
     // 从 rawTheme 解析边样式（支持静态对象和回调函数）
+    // 插件需为每种 linkType 注册样式（与 defaultMapNode 一致，内部不做 key 回退）
     const linkType = gl.data?.linkType as G["LT"] | undefined
     const linkThemeEntry = linkType
       ? this.rawTheme?.link?.[linkType]
@@ -577,6 +593,24 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   }
 
   /** Fit all nodes in view */
+  /** 切换布局引擎（如 力导向 ⇄ 树形），并用当前画布数据重建排布 */
+  setLayout(layout: Layout): void {
+    if (this.layout && this.layout !== layout) {
+      this.layout.stop?.()
+      this.layout.destroy?.()
+    }
+    this.layout = layout
+    this.layout.onTick = (simNodes) => {
+      this.onPhysicsTick(simNodes)
+    }
+    // 切换布局不自动 fitView：保持当前视角，由用户手动 Fit View
+    this.layout.onEnd = () => {
+      if (!this._autoFitOnEndDone) this._autoFitOnEndDone = true
+    }
+    // 用当前 model 数据重建并启动新布局（rebuildFromModel 内会 setData + start）
+    this.rebuildFromModel(false)
+  }
+
   fitView(padding: number): void {
     this.renderer.fitView(padding)
   }

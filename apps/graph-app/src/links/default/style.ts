@@ -4,7 +4,7 @@ import { getPalette, type Theme } from "../../theme"
 export const defaultLinkStyle: LinkStyle<any> = {
   regular: {
     color: "#9ca3af",
-    strokeWidth: 0.1,
+    strokeWidth: 1.2,
     opacity: 0.8,
     arrowSize: 8,
   },
@@ -37,10 +37,10 @@ export const defaultLinkStyle: LinkStyle<any> = {
 export function createDefaultLinkStyle(theme: Theme): LinkStyle<any> {
   const p = getPalette(theme).link
   return {
-    regular: { color: p.default, strokeWidth: 0.1, opacity: 0.8, arrowSize: 8 },
-    hovered: { color: p.hovered, strokeWidth: 1.5, opacity: 1 },
-    highlighted: { color: p.highlighted, strokeWidth: 1.5, opacity: 1 },
-    selected: { color: p.selected, strokeWidth: 1.5, opacity: 1 },
+    regular: { color: p.default, strokeWidth: 1.2, opacity: 0.8, arrowSize: 8 },
+    hovered: { color: p.hovered, strokeWidth: 2, opacity: 1 },
+    highlighted: { color: p.highlighted, strokeWidth: 2, opacity: 1 },
+    selected: { color: p.selected, strokeWidth: 2, opacity: 1 },
     hidden: { color: p.hidden, strokeWidth: 0.8, opacity: 0.1 },
   }
 }

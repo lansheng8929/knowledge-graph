@@ -444,7 +444,7 @@ export class LinkBatchRenderer {
         midData[i * 2 + 1] = my
       }
 
-      widthData[i] = l.width + 4
+      widthData[i] = l.width + 8
     }
 
     this.instancedAttrib(1, startData, 2)
