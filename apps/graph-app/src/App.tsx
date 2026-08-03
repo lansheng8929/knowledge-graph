@@ -133,11 +133,16 @@ export default function App() {
     const newNodes = incoming.nodes.filter((n: any) => !existNodeIds.has(n.id))
     if (newNodes.length === 0) return
 
-    // 新节点放到当前视口中心附近，确保可见
+    // 统一策略（兼容空/非空画布）：新节点放到“当前视口中心的世界坐标”，并把物理
+    // 引擎中心同步锚定到该点，使中心力 forceCenter 拉向视口中心而非固定原点 (0,0)：
+    //  - 空画布：相机从未 fitView（默认态 k=1,x=0,y=0），视口中心世界坐标=(W/2,H/2)，
+    //    节点聚在屏幕中央，不会被中心力拉回世界原点 → 左上角；
+    //  - 非空画布：视口中心世界坐标≈当前视野中央，增量节点出现在视野中央、不跳视角。
     const t = view.renderer.interaction.transform
     const canvas = view.renderer.canvas
     const worldCX = canvas.clientWidth / 2 / t.k - t.x
     const worldCY = canvas.clientHeight / 2 / t.k - t.y
+    view.setPhysicsCenter(worldCX, worldCY)
     for (const n of newNodes) {
       n.x = worldCX + (Math.random() - 0.5) * 20
       n.y = worldCY + (Math.random() - 0.5) * 20

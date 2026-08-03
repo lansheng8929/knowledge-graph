@@ -604,6 +604,17 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   }
 
   /**
+   * 把物理引擎中心设到指定世界坐标。
+   * 搜索新增时传当前视口中心——统一兼容两种情况：
+   *  - 空画布（相机从未 fitView，默认态 k=1,x=0,y=0）：视口中心世界坐标=(W/2,H/2)，
+   *    物理中心跟随 → 节点聚在屏幕中央，不被中心力拉回世界原点(左上角)；
+   *  - 非空画布：视口中心世界坐标≈当前视野中央 → 增量节点出现在视野中央、不跳视角。
+   */
+  setPhysicsCenter(x: number, y: number): void {
+    this.layout.setCenter?.(x, y)
+  }
+
+  /**
    * 一次性算法排布并 fitView（不等待物理引擎冷却）。
    * 供 init 使用：数据载入后直接按算法铺开节点并收进视野。
    */

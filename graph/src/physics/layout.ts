@@ -49,6 +49,9 @@ export interface Layout {
   /** 重新加热（对基于力的布局有效，其他布局可忽略） */
   reheat(alpha?: number): void
 
+  /** 设置布局中心（对基于力的布局=forceCenter 目标点；其他布局可忽略） */
+  setCenter?(x: number, y: number): void
+
   /** 一次性同步排布（不进入冷却动画）；基于力的布局建议实现，未实现可忽略 */
   settle?(iterations?: number): void
 
