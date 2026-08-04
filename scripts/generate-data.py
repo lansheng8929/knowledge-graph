@@ -15,6 +15,12 @@
 关系规模（约 25,000 条）：
   每人 2-3 部手机、1 地址、1 公司、1-2 账户、2-3 IP、1-2 设备
   手机间通话网络、账户间转账网络
+
+# 1. 把脚本复制进容器
+docker cp scripts/generate-data.py kg-dev-query:/tmp/generate-data.py
+
+# 2. 容器内替换连接地址并执行（副本内改，不动工作区文件）
+docker exec kg-dev-query sh -c "sed -i 's|bolt://localhost:7687|bolt://kg-dev-neo4j:7687|' /tmp/generate-data.py && python /tmp/generate-data.py"
 """
 
 import random
@@ -518,40 +524,99 @@ def generate():
         # OWNS → 2-3 部手机（优先同簇）
         phone_count = random.randint(2, 3)
         for idx in pick_entity_indices(pi, N, phone_count):
-            links.append(make_link(link_id, pid, phones[idx]["id"], "OWNS",
-                                   "名下手机号", random_datetime(2015, 2024), pc, phones[idx]["clusterId"]))
+            links.append(
+                make_link(
+                    link_id,
+                    pid,
+                    phones[idx]["id"],
+                    "OWNS",
+                    "名下手机号",
+                    random_datetime(2015, 2024),
+                    pc,
+                    phones[idx]["clusterId"],
+                )
+            )
             link_id += 1
 
         # RESIDES_AT → 1 地址（同簇）
-        links.append(make_link(link_id, pid, addresses[pi]["id"], "RESIDES_AT",
-                               "居住地址", random_datetime(2015, 2024), pc, addresses[pi]["clusterId"]))
+        links.append(
+            make_link(
+                link_id,
+                pid,
+                addresses[pi]["id"],
+                "RESIDES_AT",
+                "居住地址",
+                random_datetime(2015, 2024),
+                pc,
+                addresses[pi]["clusterId"],
+            )
+        )
         link_id += 1
 
         # WORKS_AT → 1 公司（同簇）
-        links.append(make_link(link_id, pid, companies[pi % len(companies)]["id"], "WORKS_AT",
-                               "工作单位", random_datetime(2015, 2024), pc,
-                               companies[pi % len(companies)]["clusterId"]))
+        links.append(
+            make_link(
+                link_id,
+                pid,
+                companies[pi % len(companies)]["id"],
+                "WORKS_AT",
+                "工作单位",
+                random_datetime(2015, 2024),
+                pc,
+                companies[pi % len(companies)]["clusterId"],
+            )
+        )
         link_id += 1
 
         # HAS_ACCOUNT → 1-2 账户（优先同簇）
         acc_count = random.randint(1, 2)
         for idx in pick_entity_indices(pi, N, acc_count):
-            links.append(make_link(link_id, pid, accounts[idx]["id"], "HAS_ACCOUNT",
-                                   "名下账户", random_datetime(2015, 2024), pc, accounts[idx]["clusterId"]))
+            links.append(
+                make_link(
+                    link_id,
+                    pid,
+                    accounts[idx]["id"],
+                    "HAS_ACCOUNT",
+                    "名下账户",
+                    random_datetime(2015, 2024),
+                    pc,
+                    accounts[idx]["clusterId"],
+                )
+            )
             link_id += 1
 
         # LOGIN_IP → 2-3 IP（优先同簇）
         ip_count = random.randint(2, 3)
         for idx in pick_entity_indices(pi, len(ips), ip_count):
-            links.append(make_link(link_id, pid, ips[idx]["id"], "LOGIN_IP",
-                                   "登录IP", random_datetime(2024, 2026), pc, ips[idx]["clusterId"]))
+            links.append(
+                make_link(
+                    link_id,
+                    pid,
+                    ips[idx]["id"],
+                    "LOGIN_IP",
+                    "登录IP",
+                    random_datetime(2024, 2026),
+                    pc,
+                    ips[idx]["clusterId"],
+                )
+            )
             link_id += 1
 
         # USE_DEVICE → 1-2 设备（优先同簇）
         dev_count = random.randint(1, 2)
         for idx in pick_entity_indices(pi, len(devices), dev_count):
-            links.append(make_link(link_id, pid, devices[idx]["id"], "USE_DEVICE",
-                                   "使用设备", random_datetime(2020, 2025), pc, devices[idx]["clusterId"]))
+            links.append(
+                make_link(
+                    link_id,
+                    pid,
+                    devices[idx]["id"],
+                    "USE_DEVICE",
+                    "使用设备",
+                    random_datetime(2020, 2025),
+                    pc,
+                    devices[idx]["clusterId"],
+                )
+            )
             link_id += 1
 
     # 手机间通话网络（CALLED，优先同簇 → 团伙内高频通话）
@@ -564,9 +629,18 @@ def generate():
         if pair in call_pairs:
             continue
         call_pairs.add(pair)
-        links.append(make_link(link_id, phones[a]["id"], phones[b]["id"], "CALLED",
-                               "通话记录", random_datetime(2025, 2026),
-                               phones[a]["clusterId"], phones[b]["clusterId"]))
+        links.append(
+            make_link(
+                link_id,
+                phones[a]["id"],
+                phones[b]["id"],
+                "CALLED",
+                "通话记录",
+                random_datetime(2025, 2026),
+                phones[a]["clusterId"],
+                phones[b]["clusterId"],
+            )
+        )
         link_id += 1
 
     # 账户间转账网络（TRANSACTED，优先同簇）
@@ -579,9 +653,18 @@ def generate():
         if pair in trans_pairs:
             continue
         trans_pairs.add(pair)
-        links.append(make_link(link_id, accounts[a]["id"], accounts[b]["id"], "TRANSACTED",
-                               "转账记录", random_datetime(2025, 2026),
-                               accounts[a]["clusterId"], accounts[b]["clusterId"]))
+        links.append(
+            make_link(
+                link_id,
+                accounts[a]["id"],
+                accounts[b]["id"],
+                "TRANSACTED",
+                "转账记录",
+                random_datetime(2025, 2026),
+                accounts[a]["clusterId"],
+                accounts[b]["clusterId"],
+            )
+        )
         link_id += 1
 
     print(f"生成 {len(all_nodes)} 节点, {len(links)} 关系")
