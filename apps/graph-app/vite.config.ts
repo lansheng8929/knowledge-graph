@@ -26,6 +26,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 3000,
+    watch: {
+      // 容器化 dev：Docker Desktop 不转发 host 文件事件 → 轮询保证 HMR
+      usePolling: true,
+      interval: 100,
+    },
     proxy: {
       "/api": {
         target: "http://localhost:8001",
