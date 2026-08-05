@@ -85,25 +85,29 @@ export default function SelectionBar({
         alignItems: "center",
         gap: 8,
         padding: "8px 14px",
-        background: "rgba(15,23,42,0.92)",
-        border: "1px solid #334155",
+        background: "rgb(var(--background))",
+        border: "1px solid rgb(var(--border))",
         borderRadius: 999,
-        color: "#e2e8f0",
+        color: "rgb(var(--foreground))",
         fontFamily: "monospace",
         fontSize: 12,
-        boxShadow: "0 6px 24px rgba(0,0,0,0.35)",
+        boxShadow: "var(--shadow)",
         zIndex: 500,
       }}
     >
       <span>已选 {selectedNodeIds.size} 个节点</span>
-      <span style={{ width: 1, height: 16, background: "#334155" }} />
+      <span
+        style={{ width: 1, height: 16, background: "rgb(var(--background))" }}
+      />
       <button onClick={onAnalyze} style={barBtn} title="分析选中（通话圈等）">
         <BarChart3 size={13} /> 分析
       </button>
       <button onClick={fitSelected} style={barBtn} title="聚焦选中节点">
         <ScanSearch size={13} /> 聚焦
       </button>
-      <span style={{ width: 1, height: 16, background: "#334155" }} />
+      <span
+        style={{ width: 1, height: 16, background: "rgb(var(--background))" }}
+      />
       <button onClick={clear} style={barBtn} title="关闭（清空选择）">
         <X size={13} />
       </button>
@@ -119,8 +123,8 @@ const barBtn: React.CSSProperties = {
   fontFamily: "monospace",
   padding: "4px 10px",
   background: "rgba(255,255,255,0.06)",
-  border: "1px solid #475569",
+  border: "1px solid rgb(var(--border))",
   borderRadius: 6,
   cursor: "pointer",
-  color: "#e2e8f0",
+  color: "rgb(var(--foreground))",
 }
