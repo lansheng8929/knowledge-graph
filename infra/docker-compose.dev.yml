@@ -133,6 +133,55 @@ services:
       - "8004:8004"
     restart: unless-stopped
 
+  # ── 数据导入模块（T3.1 / import-module-plan P1）──────
+  ingestion:
+    build:
+      context: ../services/graph-ingestion
+      dockerfile: Dockerfile
+    container_name: kg-dev-ingestion
+    volumes:
+      - ../services/graph-ingestion/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8003
+    environment:
+      NEO4J_URI: bolt://kg-dev-neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password123
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
+
+  import:
+    build:
+      context: ../services/file-import-service
+      dockerfile: Dockerfile
+    container_name: kg-dev-import
+    volumes:
+      - ../services/file-import-service/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8005
+    environment:
+      INGESTION_BASE_URL: http://kg-dev-ingestion:8003
+      # 与 auth-service 同一密钥：dev 直连（无网关）时校验 Authorization JWT
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+    ports:
+      - "8005:8005"
+    restart: unless-stopped
+
+  # ── 通用业务能力组件（审批/任务/报表/审计，业务无关）────
+  business-core:
+    build:
+      context: ../services/business-core-service
+      dockerfile: Dockerfile
+    container_name: kg-dev-business-core
+    volumes:
+      - ../services/business-core-service/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8006
+    environment:
+      BUSINESS_CORE_STORE: postgres
+      PG_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+    ports:
+      - "8006:8006"
+    restart: unless-stopped
+
   # ── 前端（挂载仓库源码 + 容器内装依赖 + vite dev HMR）──
   web:
     image: oven/bun:1.1
@@ -147,6 +196,8 @@ services:
       # 容器内 proxy 目标（指向服务名）
       VITE_PROXY_TARGET: http://kg-dev-query:8001
       VITE_AUTH_PROXY: http://kg-dev-auth:8004
+      VITE_INGEST_PROXY: http://kg-dev-ingestion:8003
+      VITE_IMPORT_PROXY: http://kg-dev-import:8005
     ports:
       - "3001:3001"
     depends_on:
@@ -154,6 +205,9 @@ services:
       - rule
       - auth
       - opa
+      - ingestion
+      - import
+      - business-core
     restart: unless-stopped
 
 # 复用现有 Neo4j 数据卷（与生产共用，勿同时跑 dev/prod）

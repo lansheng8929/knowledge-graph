@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from .config import settings
 from .jwt import issue, verify
+from .org import compute_sub_uids
 from .security import hash_password, verify_password
 from .store import UserStore, create_user_store
 
@@ -26,8 +27,8 @@ logger = logging.getLogger(__name__)
 # ── L1 网关 PEP 粗判（T4.4.1）：路径前缀 → 必需角色（空集合=放行）──────
 # 匹配规则：最长前缀命中；主体 roles 与必需角色无交集 → 403
 L1_RULES = [
-    ("/api/v1/ingest/", {"privileged"}),   # 数据写入仅特权角色
-    ("/api/v1/graph/expand", {"analyst"}), # 拓出需至少 analyst
+    ("/api/v1/ingest/", {"privileged"}),  # 数据写入仅特权角色
+    ("/api/v1/graph/expand", {"analyst"}),  # 拓出需至少 analyst
 ]
 
 
@@ -44,13 +45,15 @@ class UserCreate(BaseModel):
     clearance: int = 0
     roles: list[str] = []
     teams: list[str] = []
+    managerUid: str = ""
+    orgPath: str = ""
 
 
 def _bearer_token(request: Request) -> str:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
-    return auth[len("Bearer "):].strip()
+    return auth[len("Bearer ") :].strip()
 
 
 def _subject_from_token(token: str) -> dict:
@@ -59,11 +62,15 @@ def _subject_from_token(token: str) -> dict:
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"invalid token: {e}") from e
     return {
+        "username": payload.get("sub", ""),
         "tenantId": payload.get("tenantId", "default"),
         "clearance": int(payload.get("clearance", 0)),
         "uid": payload.get("uid", payload.get("sub", "anonymous")),
         "roles": list(payload.get("roles", [])),
         "teams": list(payload.get("teams", [])),
+        "orgPath": payload.get("orgPath", ""),
+        "managerUid": payload.get("managerUid", ""),
+        "subUids": list(payload.get("subUids", [])),
     }
 
 
@@ -136,9 +143,15 @@ def create_app() -> FastAPI:
         if not verify_password(req.password, user.get("password_hash", "")):
             logger.info("login failed (bad password): %s", req.username)
             raise HTTPException(status_code=401, detail="invalid username or password")
+        # 组织层级（T4.6+ 需求2）：登录时计算下级集合，随 JWT/主体上下文注入，
+        # 供上级可看下级数据、审批、任务分派、报表聚合等复用
+        login_user = {
+            **user,
+            "subUids": compute_sub_uids(store.list(), user.get("uid", "")),
+        }
         token = issue(
             subject=req.username,
-            user=user,
+            user=login_user,
             secret=settings.auth_secret,
             ttl_seconds=settings.token_ttl_seconds,
         )
@@ -160,7 +173,10 @@ def create_app() -> FastAPI:
     def list_users(request: Request) -> dict:
         subject = _subject_from_token(_bearer_token(request))
         _require_admin(subject)
-        return {"success": True, "data": {"users": [store._public(u) for u in store.list()]}}
+        return {
+            "success": True,
+            "data": {"users": [store._public(u) for u in store.list()]},
+        }
 
     def create_user(req: UserCreate, request: Request) -> dict:
         subject = _subject_from_token(_bearer_token(request))
@@ -175,6 +191,8 @@ def create_app() -> FastAPI:
                 "clearance": int(req.clearance),
                 "roles": list(req.roles),
                 "teams": list(req.teams),
+                "managerUid": req.managerUid,
+                "orgPath": req.orgPath,
                 "password_hash": hash_password(req.password),
                 "disabled": False,
             }
@@ -183,7 +201,25 @@ def create_app() -> FastAPI:
         return {"success": True, "data": {"username": req.username}}
 
     def userinfo(request: Request) -> dict:
-        subject = _subject_from_token(_bearer_token(request))
+        token = _bearer_token(request)
+        payload = verify(token, settings.auth_secret)
+        subject = _subject_from_token(token)
+        username = str(payload.get("sub", ""))
+        user = store.get(username) if username else None
+        if user is not None:
+            # 实时查库返回最新用户属性（团队/组织/上下级可能已变，token 是登录快照）
+            fresh = {
+                "username": username,
+                "uid": user.get("uid", subject.get("uid", "")),
+                "tenantId": user.get("tenantId", subject.get("tenantId", "default")),
+                "clearance": int(user.get("clearance", subject.get("clearance", 0))),
+                "roles": list(user.get("roles", [])),
+                "teams": list(user.get("teams", [])),
+                "orgPath": user.get("orgPath", subject.get("orgPath", "")),
+                "managerUid": user.get("managerUid", subject.get("managerUid", "")),
+                "subUids": compute_sub_uids(store.list(), user.get("uid", "")),
+            }
+            return {"success": True, "data": {"user": fresh}}
         return {"success": True, "data": {"user": subject}}
 
     app.add_api_route("/api/v1/auth/users", list_users, methods=["GET"])

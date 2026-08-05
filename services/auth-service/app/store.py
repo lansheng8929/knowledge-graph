@@ -80,6 +80,12 @@ class MemoryUserStore(UserStore):
 class PostgresUserStore(UserStore):
     """PostgreSQL 用户目录（表 auth_users）。需 psycopg。"""
 
+    # 显式列序（与 _row_to_user 索引一致；避免依赖物理列序/ALTER 追加列错位）
+    _COLUMNS = (
+        "username, uid, tenant_id, clearance, roles, teams, "
+        "manager_uid, org_path, password_hash, disabled"
+    )
+
     def __init__(self, dsn: str) -> None:
         self._dsn = dsn
 
@@ -90,9 +96,13 @@ class PostgresUserStore(UserStore):
                 username TEXT PRIMARY KEY,
                 uid TEXT, tenant_id TEXT, clearance INT,
                 roles JSONB, teams JSONB,
+                manager_uid TEXT, org_path TEXT,
                 password_hash TEXT, disabled BOOLEAN DEFAULT FALSE
             )"""
         )
+        # 兼容既有表（早期无组织层级列）
+        conn.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS manager_uid TEXT")
+        conn.execute("ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS org_path TEXT")
         return conn
 
     @staticmethod
@@ -104,32 +114,38 @@ class PostgresUserStore(UserStore):
             "clearance": row[3],
             "roles": row[4] or [],
             "teams": row[5] or [],
-            "password_hash": row[6],
-            "disabled": row[7],
+            "managerUid": row[6],
+            "orgPath": row[7],
+            "password_hash": row[8],
+            "disabled": row[9],
         }
 
     def get(self, username: str) -> Optional[Dict]:
         with self._conn() as conn:
             row = conn.execute(
-                "SELECT * FROM auth_users WHERE username=%s", (username,)
+                f"SELECT {self._COLUMNS} FROM auth_users WHERE username=%s",
+                (username,),
             ).fetchone()
         return self._row_to_user(row) if row else None
 
     def list(self) -> List[Dict]:
         with self._conn() as conn:
-            rows = conn.execute("SELECT * FROM auth_users").fetchall()
+            rows = conn.execute(f"SELECT {self._COLUMNS} FROM auth_users").fetchall()
         return [self._row_to_user(r) for r in rows]
 
     def upsert(self, user: Dict) -> None:
         with self._conn() as conn:
             conn.execute(
                 """INSERT INTO auth_users
-                   (username, uid, tenant_id, clearance, roles, teams, password_hash, disabled)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                   (username, uid, tenant_id, clearance, roles, teams,
+                    manager_uid, org_path, password_hash, disabled)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                    ON CONFLICT (username) DO UPDATE SET
                      uid=EXCLUDED.uid, tenant_id=EXCLUDED.tenant_id,
                      clearance=EXCLUDED.clearance, roles=EXCLUDED.roles,
-                     teams=EXCLUDED.teams, password_hash=EXCLUDED.password_hash,
+                     teams=EXCLUDED.teams, manager_uid=EXCLUDED.manager_uid,
+                     org_path=EXCLUDED.org_path,
+                     password_hash=EXCLUDED.password_hash,
                      disabled=EXCLUDED.disabled""",
                 (
                     user["username"],
@@ -138,6 +154,8 @@ class PostgresUserStore(UserStore):
                     int(user.get("clearance", 0)),
                     json.dumps(list(user.get("roles", []))),
                     json.dumps(list(user.get("teams", []))),
+                    user.get("managerUid", ""),
+                    user.get("orgPath", ""),
                     user["password_hash"],
                     bool(user.get("disabled", False)),
                 ),

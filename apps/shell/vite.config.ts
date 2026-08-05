@@ -50,6 +50,16 @@ export default defineConfig({
         target: process.env.VITE_AUTH_PROXY ?? "http://localhost:8004",
         changeOrigin: true,
       },
+      "/api/v1/ingest": {
+        // 数据导入写入口 graph-ingestion（容器化 dev 指向 kg-dev-ingestion）
+        target: process.env.VITE_INGEST_PROXY ?? "http://localhost:8003",
+        changeOrigin: true,
+      },
+      "/api/v1/import": {
+        // 数据导入模块 file-import-service（容器化 dev 指向 kg-dev-import）
+        target: process.env.VITE_IMPORT_PROXY ?? "http://localhost:8005",
+        changeOrigin: true,
+      },
       "/api": {
         // 容器化 dev 用 VITE_PROXY_TARGET 指向 kg-dev-query
         target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8001",

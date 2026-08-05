@@ -17,7 +17,7 @@ from . import models as m
 from .config import settings
 from .tags import TagValidationError, validate_tags
 
-_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fa5]+$")
 
 
 @asynccontextmanager
@@ -135,10 +135,13 @@ def create_app() -> FastAPI:
                 props = {
                     "label": l.label,
                     "time": l.time,
+                    "rank": l.rank,
                     "tenantId": l.tenantId,
                     "classification": l.classification,
                     "owner": l.owner,
                     "visibility": l.visibility,
+                    # T3.1：边自有属性（rank/业务属性等）一并入库，供查询/渲染
+                    **l.props,
                 }
                 session.run(
                     f"""
@@ -159,10 +162,16 @@ def create_app() -> FastAPI:
         }
 
     app.add_api_route(
-        "/api/v1/ingest/nodes", ingest_nodes, methods=["POST"], response_model=m.IngestResult
+        "/api/v1/ingest/nodes",
+        ingest_nodes,
+        methods=["POST"],
+        response_model=m.IngestResult,
     )
     app.add_api_route(
-        "/api/v1/ingest/links", ingest_links, methods=["POST"], response_model=m.IngestResult
+        "/api/v1/ingest/links",
+        ingest_links,
+        methods=["POST"],
+        response_model=m.IngestResult,
     )
 
     return app

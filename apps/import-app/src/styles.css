@@ -1,0 +1,523 @@
+/**
+ * import-app 样式 —— 主题化：所有颜色取自壳层 token（apps/shell/src/styles/tokens.css）。
+ * 全部选择器带 kg- 前缀，作用于 #single-spa-application:import-app 内部，不污染全局。
+ */
+
+.kg-import {
+  height: 100%;
+  overflow-y: auto;
+  background: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+  box-sizing: border-box;
+}
+.kg-import * {
+  box-sizing: border-box;
+}
+.kg-import input,
+.kg-import select,
+.kg-import button {
+  font-family: inherit;
+}
+
+/* 头部 */
+.kg-import-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 32px 22px;
+  border-bottom: 1px solid rgb(var(--border) / 0.6);
+  background: linear-gradient(
+    180deg,
+    rgb(var(--canvas-bg)),
+    rgb(var(--background))
+  );
+}
+.kg-import-head h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.kg-import-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgb(var(--muted-foreground));
+}
+.kg-import-steps {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kg-import-steps li {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: rgb(var(--muted));
+  border: 1px solid rgb(var(--border) / 0.7);
+  background: rgb(var(--background) / 0.4);
+}
+.kg-import-steps li.on {
+  color: #0b1220;
+  background: linear-gradient(
+    135deg,
+    rgb(var(--border-hover)),
+    rgb(var(--overlay-bg))
+  );
+  border-color: transparent;
+  font-weight: 700;
+}
+.kg-import-steps li.done {
+  color: rgb(var(--border-hover));
+  border-color: rgb(var(--border-hover) / 0.4);
+}
+
+/* 主体 */
+.kg-import-body {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 24px 56px;
+}
+.kg-import-card {
+  margin-bottom: 20px;
+  padding: 20px 22px;
+  border-radius: 14px;
+  border: 1px solid rgb(var(--border) / 0.7);
+  background: rgb(var(--surface));
+}
+.kg-import-card h2 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: rgb(var(--foreground));
+}
+
+/* 纵向堆叠间距：space-y-2 = 相邻子元素之间 0.5rem */
+.space-y-2 > * + * {
+  margin-top: 0.5rem;
+}
+
+/* 文件选择 */
+.kg-file-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 132px;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1.5px dashed rgb(var(--border) / 0.8);
+  background: rgb(var(--background) / 0.4);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.kg-file-drop:hover {
+  border-color: rgb(var(--overlay-bg) / 0.7);
+  background: rgb(var(--overlay-bg) / 0.06);
+}
+.kg-file-drop.has {
+  border-color: rgb(var(--border-hover) / 0.6);
+  border-style: solid;
+}
+.kg-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.kg-file-icon {
+  font-size: 26px;
+}
+.kg-file-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--foreground));
+  word-break: break-all;
+}
+.kg-file-hint {
+  font-size: 12px;
+  color: rgb(var(--muted));
+}
+
+/* 单文件主拖拽区 + 角色标签 */
+.kg-file-drop-main {
+  min-height: 156px;
+  border-width: 2px;
+}
+.kg-file-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 解析模板选择器 */
+.kg-template-desc {
+  margin: 0;
+  font-size: 12px;
+  color: rgb(var(--muted));
+}
+
+/* 每文件配置框 */
+.kg-file-box-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.kg-file-box-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgb(var(--foreground));
+  word-break: break-all;
+  margin-right: auto;
+}
+.kg-file-box-fields {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.kg-file-detail {
+  border: 1px solid rgb(var(--border) / 0.6);
+  border-radius: 10px;
+  background: rgb(var(--background) / 0.4);
+}
+.kg-file-detail summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--muted-foreground));
+  cursor: pointer;
+  user-select: none;
+}
+.kg-file-detail[open] summary {
+  border-bottom: 1px solid rgb(var(--border) / 0.6);
+}
+.kg-file-detail-body {
+  padding: 12px 14px;
+}
+
+/* 结果任务行 */
+.kg-task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid rgb(var(--border) / 0.6);
+  border-radius: 10px;
+  background: rgb(var(--background) / 0.4);
+}
+.kg-task-file {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--foreground));
+}
+
+/* 配置表单 */
+.kg-config-title {
+  margin: 18px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--muted-foreground));
+}
+.kg-config-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.kg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kg-field-label {
+  font-size: 12px;
+  color: rgb(var(--muted-foreground));
+}
+.kg-field-hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgb(var(--muted));
+}
+.kg-field input,
+.kg-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgb(var(--border) / 0.8);
+  background: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-size: 13px;
+  outline: none;
+}
+.kg-field input:focus,
+.kg-field select:focus {
+  border-color: rgb(var(--overlay-bg));
+}
+
+/* 操作按钮 */
+.kg-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 4px;
+}
+.kg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s ease;
+}
+.kg-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.kg-btn-primary {
+  color: rgb(var(--primary-foreground));
+  background: rgb(var(--primary));
+  box-shadow: 0 8px 24px rgb(var(--primary) / 0.3);
+}
+.kg-btn-primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 32px rgb(var(--primary) / 0.4);
+}
+.kg-btn-ghost {
+  color: rgb(var(--foreground));
+  border: 1px solid rgb(var(--border) / 0.8);
+  background: rgb(var(--background) / 0.5);
+}
+.kg-btn-ghost:hover {
+  background: rgb(var(--hover));
+}
+.kg-btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 7px;
+}
+
+/* 就地预览加载态 */
+.kg-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: rgb(var(--muted-foreground));
+  font-size: 14px;
+}
+
+/* 统计 */
+.kg-stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.kg-stat {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgb(var(--border) / 0.7);
+  background: rgb(var(--surface));
+  text-align: center;
+}
+.kg-stat b {
+  display: block;
+  font-size: 26px;
+  font-weight: 800;
+  color: rgb(var(--foreground));
+  font-variant-numeric: tabular-nums;
+}
+.kg-stat span {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgb(var(--muted));
+}
+.kg-stat.warn b {
+  color: rgb(var(--warning));
+}
+.kg-stat.bad b {
+  color: rgb(var(--danger));
+}
+.kg-stat.ok b {
+  color: rgb(var(--success));
+}
+
+/* 消息 */
+.kg-msg {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.kg-msg ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.kg-msg-err {
+  border: 1px solid rgb(var(--danger) / 0.35);
+  background: rgb(var(--danger) / 0.08);
+  color: rgb(var(--danger));
+}
+.kg-msg-warn {
+  border: 1px solid rgb(var(--warning) / 0.35);
+  background: rgb(var(--warning) / 0.07);
+  color: rgb(var(--warning));
+}
+.kg-import-error {
+  max-width: 1040px;
+  margin: 16px auto 0;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--danger) / 0.4);
+  background: rgb(var(--danger) / 0.1);
+  color: rgb(var(--danger));
+  font-size: 13px;
+}
+
+/* 表格 */
+.kg-table-wrap {
+  overflow-x: auto;
+}
+.kg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.kg-table th {
+  text-align: left;
+  padding: 8px 10px;
+  color: rgb(var(--muted-foreground));
+  font-weight: 600;
+  border-bottom: 1px solid rgb(var(--border) / 0.8);
+  white-space: nowrap;
+}
+.kg-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgb(var(--border) / 0.4);
+  vertical-align: top;
+}
+.kg-table td.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.kg-table td.dim {
+  color: rgb(var(--muted-foreground));
+  font-size: 12px;
+}
+.kg-empty {
+  padding: 20px;
+  text-align: center;
+  color: rgb(var(--muted));
+  font-size: 13px;
+}
+
+/* 标签 */
+.kg-tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: rgb(var(--primary));
+  background: rgb(var(--primary) / 0.12);
+  border: 1px solid rgb(var(--primary) / 0.3);
+}
+.kg-tag-blue {
+  color: rgb(var(--border-hover));
+  background: rgb(var(--border-hover) / 0.1);
+  border-color: rgb(var(--border-hover) / 0.3);
+}
+
+/* 任务状态 */
+.kg-task-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.kg-pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.kg-pill.running,
+.kg-pill.pending {
+  color: rgb(var(--border-hover));
+  background: rgb(var(--border-hover) / 0.12);
+}
+.kg-pill.success {
+  color: rgb(var(--success));
+  background: rgb(var(--success) / 0.12);
+}
+.kg-pill.failed {
+  color: rgb(var(--danger));
+  background: rgb(var(--danger) / 0.12);
+}
+.kg-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgb(var(--overlay-bg) / 0.25);
+  border-top-color: rgb(var(--overlay-bg));
+  animation: kg-spin 0.8s linear infinite;
+}
+@keyframes kg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 滚动条 */
+.kg-import::-webkit-scrollbar {
+  width: 10px;
+}
+.kg-import::-webkit-scrollbar-thumb {
+  background: rgb(var(--muted) / 0.28);
+  border-radius: 999px;
+  border: 2px solid rgb(var(--background));
+}
+
+/* 响应式 */
+@media (max-width: 900px) {
+  .kg-config-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .kg-import-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+@media (max-width: 600px) {
+  .kg-import-files {
+    grid-template-columns: 1fr;
+  }
+  .kg-stat-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

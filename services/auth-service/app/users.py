@@ -7,6 +7,7 @@
 from typing import Dict, List
 
 # 种子用户（仅属性；密码由 seed 脚本提供）
+# managerUid = 直属上级 uid（组织层级，org.compute_sub_uids 推导下级集合）
 SEED_USERS: List[Dict] = [
     {
         "username": "admin",
@@ -15,6 +16,8 @@ SEED_USERS: List[Dict] = [
         "clearance": 3,
         "roles": ["admin", "analyst", "privileged"],
         "teams": ["ops"],
+        "managerUid": "",
+        "orgPath": "default/ops",
     },
     {
         "username": "analyst",
@@ -22,7 +25,9 @@ SEED_USERS: List[Dict] = [
         "tenantId": "default",
         "clearance": 1,
         "roles": ["analyst"],
-        "teams": [],
+        "teams": ["analysis"],
+        "managerUid": "u-admin",
+        "orgPath": "default/ops/analysts",
     },
     {
         "username": "viewer",
@@ -30,7 +35,9 @@ SEED_USERS: List[Dict] = [
         "tenantId": "default",
         "clearance": 0,
         "roles": ["viewer"],
-        "teams": [],
+        "teams": ["analysis"],
+        "managerUid": "u-analyst",
+        "orgPath": "default/ops/analysts/viewers",
     },
     {
         "username": "other-tenant",
@@ -39,5 +46,7 @@ SEED_USERS: List[Dict] = [
         "clearance": 2,
         "roles": ["analyst"],
         "teams": [],
+        "managerUid": "",
+        "orgPath": "other-tenant",
     },
 ]

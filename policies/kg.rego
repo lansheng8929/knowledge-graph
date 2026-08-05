@@ -29,13 +29,38 @@ clearance_ok if { input.subject.clearance >= input.resource.classification }
 # ── 动作白名单 ───────────────────────────────────────
 action_ok if { input.action in ["init", "search", "expand", "analyze", "ingest", "rule_validate"] }
 
-# ── 属主 / 可见性（任一满足）─────────────────────────
+# ── 属主 / 可见性（分层，2026-08-05 精细化）────────────
+# public    同租户全员可见
+# private   仅属主本人
+# internal  属主范围：本人 / 属主所在团队 / 属主的下级
+# secret    属主范围 + 额外要求密级 >= 2
 owner_or_visibility_ok if { input.resource.visibility == "public" }
 
-owner_or_visibility_ok if { input.resource.owner == input.subject.uid }
+owner_or_visibility_ok if {
+    input.resource.visibility == "private"
+    input.resource.owner == input.subject.uid
+}
 
 owner_or_visibility_ok if {
+    input.resource.visibility == "internal"
+    owner_scope_ok
+}
+
+owner_or_visibility_ok if {
+    input.resource.visibility == "secret"
+    input.subject.clearance >= 2
+    owner_scope_ok
+}
+
+# 属主范围：本人 / 属主所在团队 / 属主的下级
+owner_scope_ok if { input.resource.owner == input.subject.uid }
+
+owner_scope_ok if {
     input.resource.owner in object.get(input.subject, "teams", [])
+}
+
+owner_scope_ok if {
+    input.resource.owner in object.get(input.subject, "subUids", [])
 }
 
 # ── 节点类型限制（示例：普通角色不可见 device）────────

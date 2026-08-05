@@ -19,7 +19,7 @@ DEFAULT_TAGS = {
     "visibility": "internal",
 }
 
-VALID_VISIBILITY = {"public", "internal", "secret"}
+VALID_VISIBILITY = {"public", "internal", "secret", "private"}
 MIN_CLASSIFICATION = 0
 MAX_CLASSIFICATION = 3
 

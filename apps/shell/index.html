@@ -16,23 +16,48 @@
         font-family: system-ui, sans-serif;
         overflow: hidden;
       }
-      /* 壳层导航：固定高度，不参与子应用空间 */
+      /* 壳层导航：固定高度，不参与子应用空间（颜色取平台主题 token） */
       #shell-nav {
         flex: none;
         display: flex;
         gap: 12px;
         padding: 8px 16px;
-        background: #1f2937;
-        color: #e5e7eb;
+        background: rgb(var(--surface));
+        color: rgb(var(--foreground));
+        border-bottom: 1px solid rgb(var(--border) / 0.6);
         align-items: center;
       }
       #shell-nav a {
-        color: #e5e7eb;
+        color: rgb(var(--muted-foreground));
         text-decoration: none;
         font-size: 14px;
       }
       #shell-nav a.active {
-        color: #60a5fa;
+        color: rgb(var(--overlay-bg));
+      }
+      /* 当前用户芯片（右上角，点击进个人中心 /user） */
+      #shell-user {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        border: 1px solid rgb(var(--border) / 0.7);
+        background: rgb(var(--background) / 0.5);
+        color: rgb(var(--foreground));
+        font-size: 13px;
+        text-decoration: none;
+      }
+      #shell-user::before {
+        content: "👤";
+        font-size: 12px;
+      }
+      #shell-user:hover {
+        border-color: rgb(var(--overlay-bg));
+      }
+      #shell-user[hidden] {
+        display: none;
       }
       /* 子应用占剩余空间；作为其绝对定位工具栏的参照系 */
       #shell-main {
@@ -40,11 +65,21 @@
         min-height: 0;
         position: relative;
       }
-      #single-spa-application\:graph-app {
+      #single-spa-application\:graph-app,
+      #single-spa-application\:import-app,
+      #single-spa-application\:user-app {
         position: absolute;
         inset: 0;
+        /* 空容器不拦截鼠标事件（否则未挂载的空容器叠在上面会吃掉点击）；
+           仅当有内容（已挂载）时恢复可交互 */
+        pointer-events: none;
       }
-      /* ── 登录界面（T2.3.3 生产鉴权）────────────── */
+      #single-spa-application\:graph-app:not(:empty),
+      #single-spa-application\:import-app:not(:empty),
+      #single-spa-application\:user-app:not(:empty) {
+        pointer-events: auto;
+      }
+      /* ── 登录界面（T2.3.3 生产鉴权，颜色取主题 token）── */
       #login-view {
         position: fixed;
         inset: 0;
@@ -52,7 +87,11 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(circle at 30% 20%, #1f2937, #0b1220 70%);
+        background: radial-gradient(
+          circle at 30% 20%,
+          rgb(var(--surface)),
+          rgb(var(--background)) 70%
+        );
       }
       #login-view[hidden] {
         display: none;
@@ -61,10 +100,10 @@
         width: 320px;
         padding: 32px 28px;
         border-radius: 12px;
-        background: #111827;
-        border: 1px solid #374151;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        color: #e5e7eb;
+        background: rgb(var(--surface));
+        border: 1px solid rgb(var(--border) / 0.7);
+        box-shadow: 0 20px 60px rgb(0 0 0 / 0.5);
+        color: rgb(var(--foreground));
       }
       .login-card h1 {
         margin: 0 0 4px;
@@ -73,12 +112,12 @@
       .login-card p.sub {
         margin: 0 0 20px;
         font-size: 13px;
-        color: #9ca3af;
+        color: rgb(var(--muted-foreground));
       }
       .login-card label {
         display: block;
         font-size: 13px;
-        color: #9ca3af;
+        color: rgb(var(--muted-foreground));
         margin: 12px 0 4px;
       }
       .login-card input {
@@ -86,14 +125,14 @@
         width: 100%;
         padding: 9px 10px;
         border-radius: 6px;
-        border: 1px solid #374151;
-        background: #1f2937;
-        color: #e5e7eb;
+        border: 1px solid rgb(var(--border) / 0.8);
+        background: rgb(var(--background));
+        color: rgb(var(--foreground));
         font-size: 14px;
         outline: none;
       }
       .login-card input:focus {
-        border-color: #60a5fa;
+        border-color: rgb(var(--overlay-bg));
       }
       .login-card button {
         width: 100%;
@@ -101,8 +140,8 @@
         padding: 10px;
         border: none;
         border-radius: 6px;
-        background: #2563eb;
-        color: #fff;
+        background: rgb(var(--primary));
+        color: rgb(var(--primary-foreground));
         font-size: 14px;
         cursor: pointer;
       }
@@ -114,22 +153,21 @@
         min-height: 18px;
         margin-top: 10px;
         font-size: 13px;
-        color: #f87171;
+        color: rgb(var(--danger));
       }
-      /* 壳层导航：退出登录 */
+      /* 壳层导航：退出登录（跟随右侧用户芯片，不再独占 auto） */
       #logout-btn {
-        margin-left: auto;
         padding: 4px 10px;
-        border: 1px solid #4b5563;
+        border: 1px solid rgb(var(--border) / 0.8);
         border-radius: 6px;
         background: transparent;
-        color: #e5e7eb;
+        color: rgb(var(--muted-foreground));
         font-size: 13px;
         cursor: pointer;
       }
       #logout-btn:hover {
-        border-color: #f87171;
-        color: #f87171;
+        border-color: rgb(var(--danger));
+        color: rgb(var(--danger));
       }
     </style>
   </head>
@@ -137,12 +175,16 @@
     <nav id="shell-nav">
       <strong>KG 平台</strong>
       <a href="/graph" data-route="/graph">图谱</a>
+      <a href="/import" data-route="/import">数据导入</a>
       <a href="/" data-route="/">首页</a>
+      <a href="/user" data-route="/user" id="shell-user" hidden></a>
       <button id="logout-btn" type="button" title="退出登录">退出</button>
     </nav>
     <main id="shell-main">
       <!-- single-spa 子应用挂载容器 -->
       <div id="single-spa-application:graph-app"></div>
+      <div id="single-spa-application:import-app"></div>
+      <div id="single-spa-application:user-app"></div>
     </main>
     <!-- T2.3.3 登录界面（生产鉴权）：启动前必须登录换取 JWT -->
     <div id="login-view" hidden>

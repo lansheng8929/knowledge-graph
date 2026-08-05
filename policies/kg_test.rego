@@ -72,6 +72,63 @@ test_no_owner_no_public_deny if {
     }
 }
 
+# ── 可见性分层（private / internal / secret）─────────
+test_private_owner_allow if {
+    allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u1", "teams": ["dept-a"]},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "u1", "visibility": "private"},
+        "action": "expand",
+    }
+}
+
+test_private_team_member_deny if {
+    not allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u2", "teams": ["dept-a"]},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "u1", "visibility": "private"},
+        "action": "expand",
+    }
+}
+
+test_private_subordinate_deny if {
+    not allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u-mgr", "subUids": ["u1"]},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "u1", "visibility": "private"},
+        "action": "expand",
+    }
+}
+
+test_internal_team_allow if {
+    allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u2", "teams": ["dept-a"]},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "dept-a", "visibility": "internal"},
+        "action": "expand",
+    }
+}
+
+test_internal_superior_allow if {
+    allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u-mgr", "subUids": ["u1"]},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "u1", "visibility": "internal"},
+        "action": "expand",
+    }
+}
+
+test_internal_outsider_deny if {
+    not allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 3, "uid": "u9", "teams": []},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "u8", "visibility": "internal"},
+        "action": "expand",
+    }
+}
+
+test_secret_low_clearance_owner_deny if {
+    not allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 1, "uid": "u1"},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "u1", "visibility": "secret"},
+        "action": "expand",
+    }
+}
+
 # ── 节点类型 ──────────────────────────────────────────
 test_device_denied_for_normal if {
     not allow with input as {

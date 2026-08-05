@@ -1,0 +1,122 @@
+/** user-app 样式 —— 主题化（token 来自壳层），全部 kg- 前缀。 */
+
+.kg-user {
+  height: 100%;
+  overflow-y: auto;
+  background: rgb(var(--background));
+  color: rgb(var(--foreground));
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+.kg-user * {
+  box-sizing: border-box;
+}
+.kg-user-head {
+  padding: 26px 32px 22px;
+  border-bottom: 1px solid rgb(var(--border) / 0.6);
+  background: linear-gradient(
+    180deg,
+    rgb(var(--canvas-bg)),
+    rgb(var(--background))
+  );
+}
+.kg-user-head h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+}
+.kg-user-head p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgb(var(--muted-foreground));
+}
+.kg-user-body {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 24px 56px;
+}
+.kg-user-error {
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgb(var(--danger) / 0.4);
+  background: rgb(var(--danger) / 0.1);
+  color: rgb(var(--danger));
+  font-size: 13px;
+}
+.kg-user-loading {
+  padding: 40px;
+  text-align: center;
+  color: rgb(var(--muted));
+}
+.kg-user-card {
+  border-radius: 14px;
+  border: 1px solid rgb(var(--border) / 0.7);
+  background: rgb(var(--surface));
+  overflow: hidden;
+}
+.kg-user-id {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid rgb(var(--border) / 0.6);
+}
+.kg-user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 800;
+  color: rgb(var(--primary-foreground));
+  background: rgb(var(--primary));
+}
+.kg-user-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+.kg-user-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: rgb(var(--muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.kg-user-grid {
+  padding: 6px 22px 22px;
+}
+.kg-user-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgb(var(--border) / 0.4);
+}
+.kg-user-row:last-child {
+  border-bottom: none;
+}
+.kg-user-label {
+  font-size: 13px;
+  color: rgb(var(--muted-foreground));
+}
+.kg-user-value {
+  font-size: 13px;
+  color: rgb(var(--foreground));
+  text-align: right;
+  word-break: break-all;
+}
+
+.kg-user::-webkit-scrollbar {
+  width: 10px;
+}
+.kg-user::-webkit-scrollbar-thumb {
+  background: rgb(var(--muted) / 0.28);
+  border-radius: 999px;
+  border: 2px solid rgb(var(--background));
+}

@@ -23,7 +23,7 @@ class IngestNode(BaseModel):
 
 
 class IngestLink(BaseModel):
-    """关系写入：source/target + linkType + 属性 + 强制标签。"""
+    """关系写入：source/target + linkType + 公共属性(rank/time) + 属性 + 强制标签。"""
 
     id: str
     source: str
@@ -31,6 +31,8 @@ class IngestLink(BaseModel):
     linkType: str
     label: str = ""
     time: str = ""
+    rank: int = 0
+    props: Dict[str, Any] = Field(default_factory=dict)
     # 强制标签（T3.1.2）
     tenantId: str
     classification: int

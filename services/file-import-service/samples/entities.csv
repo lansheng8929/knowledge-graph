@@ -1,0 +1,5 @@
+id,nodeType,label,gender
+p1,person,张三,男
+p2,person,李四,女
+ph1,phone,13800000001,
+ph2,phone,13800000002,

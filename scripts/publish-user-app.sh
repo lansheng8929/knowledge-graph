@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# 构建 user-app 子应用独立产物，并按版本发布到 shell 的静态目录（模拟 CDN / 独立部署）。
+#
+# 用法:
+#   bash scripts/publish-user-app.sh              # 版本取 apps/user-app/package.json
+#   bash scripts/publish-user-app.sh 0.1.0        # 指定版本
+#
+# 产出: apps/shell/public/subapps/user-app@<version>.js
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+APP_DIR="$ROOT/apps/user-app"
+DIST="$APP_DIR/dist-single-spa"
+SUBAPPS="$ROOT/apps/shell/public/subapps"
+
+VERSION="${1:-}"
+if [ -z "$VERSION" ]; then
+  VERSION="$(node -p "require('$APP_DIR/package.json').version" 2>/dev/null || true)"
+fi
+if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
+  VERSION="0.1.0"
+  echo "[publish] package.json 无 version，默认使用 $VERSION"
+fi
+
+mkdir -p "$SUBAPPS"
+echo "[publish] build user-app (single-spa bundle, v$VERSION)..."
+(cd "$APP_DIR" && APP_VERSION="$VERSION" bun run build:single-spa)
+
+echo "[publish] inline css into bundle..."
+node -e "
+const fs = require('fs');
+const dir = process.argv[1];
+const jsPath = dir + '/user-app.js';
+const cssPath = dir + '/user-app.css';
+let js = fs.readFileSync(jsPath, 'utf8');
+if (fs.existsSync(cssPath)) {
+  const css = fs.readFileSync(cssPath, 'utf8');
+  const style = 'const __kgUserStyle=document.createElement(\"style\");__kgUserStyle.textContent=' + JSON.stringify(css) + ';document.head.appendChild(__kgUserStyle);\n';
+  js = style + js;
+  fs.unlinkSync(cssPath);
+  console.log('[inline-css] user-app.css 已内联');
+}
+fs.writeFileSync(jsPath, js);
+" "$DIST"
+
+cp "$DIST/user-app.js" "$SUBAPPS/user-app@$VERSION.js"
+echo "[publish] published -> apps/shell/public/subapps/user-app@$VERSION.js"
+echo "[publish] 切换版本: 修改 apps/shell/public/importmap.json 里 user-app 的 URL"

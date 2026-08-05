@@ -6,6 +6,8 @@
  */
 
 import { navigateToUrl, registerApplication, start } from "single-spa"
+// 平台主题 token 单一来源（壳层加载，供所有子模块读取）
+import "./styles/tokens.css"
 
 // T2.3.4 前端单模块更新：
 //   - 开发(dev)：同仓 import 源码 → 改码即热更（不改构建）
@@ -18,12 +20,51 @@ const loadGraphApp = import.meta.env.DEV
   ? () => import("../../graph-app/src/single-spa")
   : () => import(/* @vite-ignore */ GRAPH_APP_ENTRY)
 
+// import-app（数据导入模块，T3.1 / import-module-plan）：
+// dev 同仓 import 源码；生产经 importmap 加载独立产物 import-app.js
+const IMPORT_APP_ENTRY = "import-app"
+const loadImportApp = import.meta.env.DEV
+  ? () => import("../../import-app/src/single-spa")
+  : () => import(/* @vite-ignore */ IMPORT_APP_ENTRY)
+
+// user-app（用户模块 /user/*：个人中心）
+const USER_APP_ENTRY = "user-app"
+const loadUserApp = import.meta.env.DEV
+  ? () => import("../../user-app/src/single-spa")
+  : () => import(/* @vite-ignore */ USER_APP_ENTRY)
+
 // ── token 生命周期（内存 + sessionStorage）────────────
 // 生产流程：无默认/演示账号、无 URL 覆盖；token 由登录界面换取后注入。
 // sessionStorage 仅会话内持久：刷新保持登录，关闭标签页即失效需重新登录。
 const TOKEN_KEY = "kg-token"
 let token = sessionStorage.getItem(TOKEN_KEY) ?? ""
 ;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = token || undefined
+
+// ── 当前用户芯片（导航右上角，点击进个人中心 /user）──────
+const userChip = document.getElementById("shell-user") as HTMLElement | null
+
+function decodeJwtPayload(t: string): Record<string, unknown> | null {
+  try {
+    const payload = t.split(".")[1] ?? ""
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+    return JSON.parse(json) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function refreshUserChip(): void {
+  if (!userChip) return
+  const tok = (window as { __KG_TOKEN__?: string }).__KG_TOKEN__
+  const payload = tok ? decodeJwtPayload(tok) : null
+  const name = String(payload?.sub ?? "") || String(payload?.uid ?? "")
+  if (name) {
+    userChip.textContent = name
+    userChip.hidden = false
+  } else {
+    userChip.hidden = true
+  }
+}
 
 // ─────────────────────────────────────────────────────
 // 配置：隐藏壳层导航的路由前缀。
@@ -53,17 +94,47 @@ registerApplication({
   }),
 })
 
+// 数据导入模块（/import/*）：保留壳层导航，便于在导入页与其它模块间往返
+registerApplication({
+  name: "import-app",
+  app: loadImportApp,
+  activeWhen: (location) => location.pathname.startsWith("/import"),
+  customProps: () => ({
+    auth: {
+      token: (window as { __KG_TOKEN__?: string }).__KG_TOKEN__ ?? "",
+      tenantId: "",
+    },
+  }),
+})
+
+// 用户模块（/user/*）：个人中心，显示当前用户信息
+registerApplication({
+  name: "user-app",
+  app: loadUserApp,
+  activeWhen: (location) => location.pathname.startsWith("/user"),
+  customProps: () => ({
+    auth: {
+      token: (window as { __KG_TOKEN__?: string }).__KG_TOKEN__ ?? "",
+      tenantId: "",
+    },
+  }),
+})
+
 // 壳层路由高亮（简单实现，无路由库）
 const links = Array.from(
   document.querySelectorAll<HTMLAnchorElement>("a[data-route]"),
 )
 function refreshActive(): void {
-  links.forEach((a) =>
-    a.classList.toggle(
-      "active",
-      a.dataset.route ? location.pathname.startsWith(a.dataset.route) : false,
-    ),
-  )
+  links.forEach((a) => {
+    const route = a.dataset.route
+    if (!route) return
+    // 首页 "/" 用精确匹配（否则任何路径都以 / 开头，首页永远高亮）
+    const active =
+      route === "/"
+        ? location.pathname === "/"
+        : location.pathname.startsWith(route)
+    a.classList.toggle("active", active)
+  })
 }
 function onRouteChange(): void {
   refreshActive()
@@ -151,6 +222,7 @@ async function handleLogin(e: Event): Promise<void> {
     token = tok
     ;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = tok
     sessionStorage.setItem(TOKEN_KEY, tok)
+    refreshUserChip()
     hideLogin()
     startSpa()
     // 登录后落在首页（菜单栏可见），不直接进入图谱模块
@@ -165,6 +237,7 @@ async function handleLogin(e: Event): Promise<void> {
 
 logoutBtn.addEventListener("click", () => {
   clearAuth()
+  refreshUserChip()
   passwordInput.value = ""
   showLogin()
 })
@@ -179,3 +252,4 @@ if (hasValidToken(token)) {
   clearAuth()
   showLogin()
 }
+refreshUserChip()

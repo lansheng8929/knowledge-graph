@@ -11,7 +11,8 @@ import { ThemeProvider } from "./hooks/useTheme"
 import { setAuthToken } from "./api/client"
 // 子应用作为 single-spa 挂载时也必须加载主题 token 与工具类
 // （独立运行时由 main.tsx import，二者必须一致，否则面板背景/边框变量缺失）
-import "./styles/tokens.css"
+// 主题 token 单一来源（壳层 shell 持有，所有子模块读取）
+import "../../shell/src/styles/tokens.css"
 import "./styles/utilities.css"
 
 let root: Root | null = null

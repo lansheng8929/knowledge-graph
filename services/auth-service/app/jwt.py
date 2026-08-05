@@ -72,6 +72,9 @@ def issue(
         "clearance": int(user.get("clearance", 0)),
         "roles": list(user.get("roles", [])),
         "teams": list(user.get("teams", [])),
+        "orgPath": user.get("orgPath", ""),
+        "managerUid": user.get("managerUid", ""),
+        "subUids": list(user.get("subUids", [])),
         "iat": now,
         "exp": now + ttl_seconds,
     }

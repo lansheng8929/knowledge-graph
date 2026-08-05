@@ -140,7 +140,8 @@ edges:     id | source | target | linkType | label | time | <任意属性列...>
 - `edges.rank` 为**保留列**（通常自动生成 0,1,2,…；见 §3.1），如文件提供则优先采用。
 - `entities.time` 同理为实体更新时间（如需要）。
 
-- Excel / CSV：两个 sheet（或两个文件）
+- Excel：默认按 **sheet 顺序**匹配（第一个非空表 = entities，第二个 = edges）；可用 `config.sheetMapping` 指定（如 `{"entities": "人员表", "edges": "转账关系"}`）
+- CSV：`entities`/`edges` 两个文件
 - TXT：JSONL（每行一个对象）或 TSV
 - Word：两个表格（首行表头）
 
@@ -190,3 +191,48 @@ edges:     id | source | target | linkType | label | time | <任意属性列...>
 - 复用 `services/graph-ingestion/app/models.py`（IR 对齐）+ `app/tags.py`（打标校验）
 - 默认 `nodeType` 白名单取现有 7 种；导入后经 `graph-query-service` **立即可查、立即渲染**
 - `infra/docker-compose.dev.yml` 加 `kg-dev-import`；网关 `/api/v1/import/*` 路由过去
+
+---
+
+## 9. 暂缓 / 待办（已讨论、未实现）
+
+以下为讨论确定但**暂不实现**的设计，记档待后续排期：
+
+### 9.1 跨租户查看（暂缓）
+
+- 需求：某些租户可查看另一租户的部分数据。
+- 拟定方案：数据共享标记 `sharedTenants`（属主侧主动授权）：
+  - 资源加 `sharedTenants: ["t2", ...]`（默认空 = 不共享）
+  - 查询改写：`WHERE n.tenantId = $tenant OR $tenant IN n.sharedTenants`（密级/可见性约束不变）
+  - OPA：`tenant_ok` 增加 `subject.tenantId in resource.sharedTenants`
+  - 属主授权 + 审计 + 可撤销；跨租户只读
+- **状态：暂缓，不实现。**
+
+### 9.2 标签自动配置（部分实现：按登录用户权限）
+
+- 需求：租户/密级/属主/可见性不应由导入用户显式越权配置。
+- 已实现（2026-08-05，权限驱动的可配置选项）：
+  - 后端 `GET /api/v1/import/options`：按主体（`X-User-Context`，dev 直连时兜底验 `Authorization` JWT）返回
+    `defaults`（tenantId=用户租户、owner=用户名）+ `constraints`（classificationMax=clearance、
+    visibilityAllowed=按密级过滤、canSetTenant/canSetOwner=是否 admin）；
+  - 写路径防绕过：`preview` / `import files` 对打标做越权校验（非 admin 只能写自己租户/属主、
+    密级 ≤ clearance、可见性在允许集），越权 403；
+  - 前端 `import-app`：挂载时拉 options，默认值自动初始化归属；租户/属主按权限锁定（只读）、
+    可见性下拉只显示允许档、密级输入上限 = 用户密级。
+- 待做（剩余）：业务标签策略（管理员配置"导入通道"）、预览展示"将写入的标签"（只读）。
+
+### 9.3 仅本人 / 团队可见（已实现，并精细化分层）
+
+- 已实现（2026-08-05）：`l3_conditions`（Cypher 改写）+ `l3_visible`（内存投影）+ OPA `kg.rego` 统一按可见性分层：
+  - `public`：同租户全员可见
+  - `private`：仅属主本人（不再放行团队/下级）
+  - `internal`：属主范围 = 本人 / 属主所在团队 / 属主的下级（上级看下级）
+  - `secret`：属主范围 + 额外要求密级 ≥ 2
+  - 未打标放行；未知可见性档位安全默认拒绝
+- 测试：`test_pep.py`（分层用例）+ `kg_test.rego`（17/17）覆盖 private/internal/secret 的允许/拒绝路径。
+
+### 9.4 组织层级（上下级可见，已实现）
+
+- 需求：上级用户数据仅自己和下级可见、其它组织不可见（"其它组织不可见"已由租户隔离覆盖）。
+- 已实现（2026-08-05）：主体加组织层级（`orgPath` / `managerUid` / `subUids`），auth 登录计算下级集合；查询改写 + OPA 加层级过滤。
+- 延伸：通用业务能力组件（审批/任务/报表/审计）已基于组织层级落地，见 `docs/business-core-plan.md`。

@@ -1,5 +1,7 @@
 {
   "imports": {
-    "graph-app": "./subapps/graph-app@0.2.0.js"
+    "graph-app": "./subapps/graph-app@0.2.0.js",
+    "import-app": "./subapps/import-app@0.1.0.js",
+    "user-app": "./subapps/user-app@0.1.0.js"
   }
 }

@@ -18,6 +18,7 @@ DEFAULT_SUBJECT: Dict[str, Any] = {
     "uid": "anonymous",
     "roles": ["analyst"],
     "teams": [],
+    "subUids": [],
 }
 
 
@@ -34,31 +35,63 @@ def subject_from_request(request) -> Dict[str, Any]:
                     "uid": str(data.get("uid", "anonymous")),
                     "roles": list(data.get("roles", ["analyst"])),
                     "teams": list(data.get("teams", [])),
+                    "orgPath": str(data.get("orgPath", "")),
+                    "subUids": list(data.get("subUids", [])),
                 }
         except (json.JSONDecodeError, ValueError, TypeError):
             logger.warning("invalid X-User-Context header")
     return dict(DEFAULT_SUBJECT)
 
 
-def l3_conditions(subject: Dict[str, Any], alias: str = "n") -> Tuple[str, Dict[str, Any]]:
-    """L3 数据级过滤（宽松渐进）：未打标数据放行，打标数据严格按租户+密级过滤。"""
+def l3_conditions(
+    subject: Dict[str, Any], alias: str = "n"
+) -> Tuple[str, Dict[str, Any]]:
+    """L3 数据级过滤（宽松渐进）：未打标放行；打标严格按
+    租户 + 密级 + 可见性分层 + 组织层级。
+
+    可见性分层（2026-08-05 精细化）：
+      - public    同租户全员可见
+      - private   仅属主本人
+      - internal  属主范围：本人 / 属主所在团队 / 属主的下级
+      - secret    属主范围 + 额外要求密级 >= 2
+    """
     t = subject.get("tenantId", "default")
     c = int(subject.get("clearance", 0))
+    uid = subject.get("uid", "")
+    teams = list(subject.get("teams", []))
+    sub_uids = list(subject.get("subUids", []))
     where = (
         f"({alias}.tenantId IS NULL OR {alias}.tenantId = $subject_tenantId)"
         f" AND ({alias}.classification IS NULL OR {alias}.classification <= $subject_clearance)"
+        f" AND ("
+        f"   {alias}.visibility IS NULL"
+        f"   OR {alias}.visibility = 'public'"
+        f"   OR ({alias}.visibility = 'private' AND {alias}.owner = $subject_uid)"
+        f"   OR ({alias}.visibility = 'internal' AND ("
+        f"       {alias}.owner = $subject_uid"
+        f"       OR {alias}.owner IN $subject_teams"
+        f"       OR {alias}.owner IN $subject_subUids))"
+        f"   OR ({alias}.visibility = 'secret' AND $subject_clearance >= 2 AND ("
+        f"       {alias}.owner = $subject_uid"
+        f"       OR {alias}.owner IN $subject_teams"
+        f"       OR {alias}.owner IN $subject_subUids))"
+        f")"
     )
-    params = {"subject_tenantId": t, "subject_clearance": c}
+    params = {
+        "subject_tenantId": t,
+        "subject_clearance": c,
+        "subject_uid": uid,
+        "subject_teams": teams,
+        "subject_subUids": sub_uids,
+    }
     return where, params
 
 
-def l3_visible(
-    node_data: Dict[str, Any], subject: Optional[Dict[str, Any]]
-) -> bool:
+def l3_visible(node_data: Dict[str, Any], subject: Optional[Dict[str, Any]]) -> bool:
     """L3 投影过滤（返回后内存裁剪，双保险）：与 Cypher 宽松过滤同谓词。
 
-    未打标数据（tenantId/classification 为空）放行，打标数据严格按租户+密级，
-    防止跨租户/低密级侧信道。
+    未打标数据放行，打标严格按租户 + 密级 + 可见性分层 + 组织层级，
+    防止跨租户/低密级/越权侧信道。
     """
     if not subject:
         return True
@@ -67,6 +100,9 @@ def l3_visible(
         c = int(subject.get("clearance", 0))
     except (TypeError, ValueError):
         c = 0
+    uid = str(subject.get("uid", ""))
+    teams = {str(x) for x in subject.get("teams", [])}
+    sub_uids = {str(x) for x in subject.get("subUids", [])}
     node_tenant = node_data.get("tenantId")
     if node_tenant is not None and str(node_tenant) != str(t):
         return False
@@ -77,7 +113,25 @@ def l3_visible(
                 return False
         except (TypeError, ValueError):
             return False
-    return True
+    vis = node_data.get("visibility")
+    if vis is None:
+        return True
+    vs = str(vis)
+    if vs == "public":
+        return True
+    owner = str(node_data.get("owner", "")) if node_data.get("owner") else ""
+    if vs == "private":
+        return owner != "" and owner == uid
+    if vs in ("internal", "secret"):
+        if vs == "secret" and c < 2:
+            return False
+        if owner == "":
+            return False
+        if owner == uid or owner in teams or owner in sub_uids:
+            return True
+        return False
+    # 未知可见性档位：安全默认拒绝
+    return False
 
 
 _pep = None
