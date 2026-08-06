@@ -5,9 +5,9 @@ import type { LinkStyle } from "../../../theme"
 export const defaultLinkStyle: LinkStyle<DefaultGraphDataGenerics> = {
   regular: {
     color: "#9ca3af",
-    strokeWidth: 0.1,
+    strokeWidth: 1,
     opacity: 0.8,
-    arrowSize: 8,
+    arrowSize: 14,
   },
   hovered: {
     color: "#00ccff",

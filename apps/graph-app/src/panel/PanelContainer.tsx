@@ -28,6 +28,20 @@ interface PanelContainerProps extends UsePanelOptions {
   onClose?: () => void
 }
 
+/** 毛玻璃基础样式：半透明渐变 + 模糊 + 细边框 + 内高光。
+ * 放在调用方 style 之后以覆盖其实底背景，统一所有面板为毛玻璃质感。 */
+const panelGlassStyle: CSSProperties = {
+  background:
+    "linear-gradient(135deg, rgb(var(--surface) / 0.85), rgb(var(--background) / 0.75))",
+  backdropFilter: "blur(16px) saturate(160%)",
+  WebkitBackdropFilter: "blur(16px) saturate(160%)",
+  border: "1px solid rgb(var(--border) / 0.5)",
+  borderRadius: 12,
+  boxShadow:
+    "inset 0 1px 0 rgb(255 255 255 / 0.08), 0 12px 40px rgb(0 0 0 / 0.22)",
+  overflow: "hidden",
+}
+
 const gripStyle: CSSProperties = {
   cursor: "grab",
   padding: "4px",
@@ -156,6 +170,7 @@ export const PanelContainer = memo(function PanelContainer({
           top: 0,
           willChange: "transform",
           ...style,
+          ...panelGlassStyle,
           width: panelSize?.w,
           height: panelSize?.h,
           zIndex,
@@ -205,6 +220,7 @@ export const PanelContainer = memo(function PanelContainer({
         top: 0,
         transform: `translate(${position?.x ?? 100}px, ${position?.y ?? 100}px)`,
         ...style,
+        ...panelGlassStyle,
         width: panelSize?.w,
         height: panelSize?.h,
         zIndex,

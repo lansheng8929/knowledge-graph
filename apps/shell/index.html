@@ -210,11 +210,12 @@
         <div class="login-error" id="login-error" role="alert"></div>
       </form>
     </div>
-    <!-- T2.3.4 动态 importmap：由 importmap.json 决定加载哪个子应用版本。
+    <!-- T2.3.4 动态 importmap：由 importmap.json 决定子应用版本与共享依赖。
          更新/回滚子应用 = 只改 importmap.json（部署态文件），shell 零重建零部署。 -->
     <script>
-      // 在任何模块执行前同步拉取 importmap 并注入，保证 import("graph-app") 可解析。
-      // （子应用产物由 bash scripts/publish-graph-app.sh 发布到 ./subapps/）
+      // 在任何模块执行前同步拉取 importmap 并注入为原生 importmap，
+      // 保证 import("graph-app") 可解析（含共享依赖 ESM）。
+      // （子应用产物由 scripts/publish-graph-app.sh 发布到 ./subapps/）
       ;(function () {
         function applyImportMap(map) {
           var s = document.createElement("script")
@@ -230,7 +231,16 @@
         } catch (e) {
           console.warn("[shell] importmap 加载失败，使用静态兜底", e)
           applyImportMap({
-            imports: { "graph-app": "./subapps/graph-app@0.2.0.js" },
+            imports: {
+              react: "./shared/react@18.3.1.js",
+              "react/jsx-runtime": "./shared/react@18.3.1-jsx-runtime.js",
+              "react-dom": "./shared/react-dom@18.3.1.js",
+              "react-dom/client": "./shared/react-dom@18.3.1-client.js",
+              scheduler: "./shared/scheduler@0.23.2.js",
+              "graph-app": "./subapps/graph-app@0.4.0.js",
+              "import-app": "./subapps/import-app@0.2.0.js",
+              "user-app": "./subapps/user-app@0.2.0.js",
+            },
           })
         }
       })()

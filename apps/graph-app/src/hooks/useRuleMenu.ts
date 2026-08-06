@@ -49,6 +49,25 @@ export function useRuleMenu(
       }
       try {
         if (conditions) {
+          // 打印拓展规则，便于调试（ruleId / conditions 详情）
+          console.log(
+            `[Expand] node=${nodeId} ruleIds=${_ruleIds.join(",")} ruleId=${_ruleIds[0] ?? "__custom__"}`,
+          )
+          conditions.forEach((c: any, i: number) => {
+            const filters =
+              Array.isArray(c.filters) && c.filters.length
+                ? c.filters
+                    .map(
+                      (f: any) =>
+                        `${f.property} ${f.operator} ${JSON.stringify(f.value)}`,
+                    )
+                    .join("; ")
+                : ""
+            console.log(
+              `[Expand]   condition[${i}] ${c.direction ?? ""} ${c.relationType ?? ""} -> ${c.targetType ?? ""}` +
+                (filters ? ` | filters: ${filters}` : ""),
+            )
+          })
           await svc.expand(nodeId, JSON.stringify(conditions)).catch(onError)
         }
       } finally {

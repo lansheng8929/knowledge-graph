@@ -29,6 +29,22 @@ export default defineConfig({
       "@lansheng/knowledge-graph": path.resolve(__dirname, "../../graph/src"),
     },
   },
+  // React 全家桶显式预构建：@vitejs/plugin-react 在 dev 会把 JSX 转成
+  // `import { jsxDEV } from "react/jsx-dev-runtime"`（转换后生成的 import，vite 依赖
+  // 扫描发生在转换前扫不到它）→ 不 include 会 Failed to resolve（docker dev 容器
+  // 重建/清缓存后必现）。shader loader 与 graph-app 保持一致。
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom",
+      "react-dom/client",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ],
+    esbuildOptions: {
+      loader: { ".frag": "text", ".vert": "text" },
+    },
+  },
   plugins: [watchWorkspaceSources()],
   build: {
     rollupOptions: {

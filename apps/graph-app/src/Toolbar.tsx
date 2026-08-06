@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { usePanel, PanelLayer } from "./panel"
 import {
   Maximize2,
@@ -35,12 +36,15 @@ const toolbarStyle: React.CSSProperties = {
   gap: "8px",
   alignItems: "center",
   flexWrap: "wrap",
+  // 毛玻璃：更强的模糊/饱和 + 半透明渐变 + 细边框 + 内高光（inset）
   background:
-    "linear-gradient(135deg, rgb(var(--background) / 0.55), rgb(var(--background) / 0.3))",
-  backdropFilter: "blur(12px) saturate(160%)",
-  WebkitBackdropFilter: "blur(12px) saturate(160%)",
+    "linear-gradient(135deg, rgb(var(--background) / 0.62), rgb(var(--background) / 0.38))",
+  backdropFilter: "blur(16px) saturate(180%)",
+  WebkitBackdropFilter: "blur(16px) saturate(180%)",
   borderRadius: 12,
-  boxShadow: "0 8px 32px rgb(0 0 0 / 0.18)",
+  border: "1px solid rgb(var(--border) / 0.45)",
+  boxShadow:
+    "inset 0 1px 0 rgb(255 255 255 / 0.08), 0 8px 32px rgb(0 0 0 / 0.18)",
   color: "rgb(var(--foreground))",
 }
 
@@ -52,10 +56,60 @@ const btnStyle: React.CSSProperties = {
   fontSize: "13px",
   fontFamily: "monospace",
   background: "transparent",
-  border: "1px solid transparent",
-  borderRadius: 4,
+  // 毛玻璃细边框（默认半透明主题边框，hover/active 在 ToolbarButton 里覆盖）
+  border: "1px solid rgb(var(--border) / 0.35)",
+  borderRadius: 6,
   cursor: "pointer",
   color: "rgb(var(--foreground))",
+  transition:
+    "background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease",
+}
+
+/** 毛玻璃风格工具栏按钮：统一 hover / active / disabled 反馈（与主题 token 适配）。 */
+function ToolbarButton({
+  title,
+  onClick,
+  disabled = false,
+  active = false,
+  activeColor = "#e94560",
+  children,
+}: {
+  title: string
+  onClick?: () => void
+  disabled?: boolean
+  active?: boolean
+  activeColor?: string
+  children: React.ReactNode
+}) {
+  const [hover, setHover] = useState(false)
+  const style: React.CSSProperties = {
+    ...btnStyle,
+    opacity: disabled ? 0.45 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+    // active：功能色半透明底 + 实色边框；hover：前景色 9% 半透明 + 主题悬停色边框
+    background: active
+      ? `${activeColor}33`
+      : hover
+        ? "rgb(var(--foreground) / 0.09)"
+        : "transparent",
+    border: active
+      ? `1px solid ${activeColor}`
+      : hover
+        ? "1px solid rgb(var(--border-hover) / 0.7)"
+        : "1px solid rgb(var(--border) / 0.35)",
+  }
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      style={style}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {children}
+    </button>
+  )
 }
 
 interface ToolbarProps {
@@ -123,208 +177,158 @@ export default function Toolbar({
   const { theme, toggle } = useTheme()
   return (
     <div style={{ ...toolbarStyle, zIndex }}>
-      <button onClick={onBack} style={btnStyle} title="返回">
+      <ToolbarButton title="返回" onClick={onBack}>
         <ArrowBigLeft size={14} />
-      </button>
+      </ToolbarButton>
 
-      <button
-        onClick={onUndo}
-        style={btnStyle}
-        title="回退"
-        disabled={!canUndo}
-      >
+      <ToolbarButton title="回退" onClick={onUndo} disabled={!canUndo}>
         <Undo2 size={14} />
-      </button>
-      <button
-        onClick={onRedo}
-        style={btnStyle}
-        title="恢复"
-        disabled={!canRedo}
-      >
+      </ToolbarButton>
+      <ToolbarButton title="恢复" onClick={onRedo} disabled={!canRedo}>
         <Redo2 size={14} />
-      </button>
-      <button onClick={onFitView} style={btnStyle} title="Fit View">
+      </ToolbarButton>
+      <ToolbarButton title="Fit View" onClick={onFitView}>
         <Maximize2 size={14} />
-      </button>
-      <button
-        onClick={onToggleSnapshotPanel}
-        style={{
-          ...btnStyle,
-          background: snapshotPanelOpen
-            ? "rgba(233,69,96,0.25)"
-            : "transparent",
-          border: snapshotPanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
-        }}
+      </ToolbarButton>
+      <ToolbarButton
         title="快照管理"
+        onClick={onToggleSnapshotPanel}
+        active={snapshotPanelOpen}
+        activeColor="#e94560"
       >
         <Camera size={14} />
-      </button>
+      </ToolbarButton>
 
-      <button
-        onClick={onToggleLegend}
-        style={{
-          ...btnStyle,
-          background: legendPanelOpen ? "rgba(233,69,96,0.25)" : "transparent",
-          border: legendPanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
-        }}
+      <ToolbarButton
         title="图例"
+        onClick={onToggleLegend}
+        active={legendPanelOpen}
+        activeColor="#e94560"
       >
         <BookOpen size={14} />
-      </button>
-      <button
-        onClick={onToggleMiniMap}
-        style={{
-          ...btnStyle,
-          background: miniMapOpen ? "rgba(233,69,96,0.25)" : "transparent",
-          border: miniMapOpen ? "1px solid #e94560" : "1px solid #0f3460",
-        }}
+      </ToolbarButton>
+      <ToolbarButton
         title="小地图"
+        onClick={onToggleMiniMap}
+        active={miniMapOpen}
+        activeColor="#e94560"
       >
         <Map size={14} />
-      </button>
+      </ToolbarButton>
 
-      <span style={{ fontSize: "11px", color: "#999", margin: "0 2px" }}>
+      <span
+        style={{
+          fontSize: "11px",
+          color: "rgb(var(--muted))",
+          margin: "0 2px",
+        }}
+      >
         |
       </span>
 
-      <button
-        onClick={onToggleTimePanel}
-        style={{
-          ...btnStyle,
-          background: timePanelOpen ? "rgba(233,69,96,0.25)" : "transparent",
-          border: timePanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
-        }}
+      <ToolbarButton
         title="时间线回放"
+        onClick={onToggleTimePanel}
+        active={timePanelOpen}
+        activeColor="#e94560"
       >
         <Clock size={14} />
-      </button>
-      <button
-        onClick={onToggleFilterPanel}
-        style={{
-          ...btnStyle,
-          background: filterPanelOpen ? "rgba(233,69,96,0.25)" : "transparent",
-          border: filterPanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
-        }}
+      </ToolbarButton>
+      <ToolbarButton
         title="属性过滤"
+        onClick={onToggleFilterPanel}
+        active={filterPanelOpen}
+        activeColor="#e94560"
       >
         <Filter size={14} />
-      </button>
-      <button
-        onClick={onToggleTablePanel}
-        style={{
-          ...btnStyle,
-          background: tablePanelOpen ? "rgba(233,69,96,0.25)" : "transparent",
-          border: tablePanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
-        }}
+      </ToolbarButton>
+      <ToolbarButton
         title="表格视图"
+        onClick={onToggleTablePanel}
+        active={tablePanelOpen}
+        activeColor="#e94560"
       >
         <Table size={14} />
-      </button>
+      </ToolbarButton>
 
-      <span style={{ fontSize: "11px", color: "#999", margin: "0 2px" }}>
+      <span
+        style={{
+          fontSize: "11px",
+          color: "rgb(var(--muted))",
+          margin: "0 2px",
+        }}
+      >
         |
       </span>
 
-      <button
-        onClick={deactivateSelectionMode}
-        style={{
-          ...btnStyle,
-          background: !selectionMode ? "#0066ff50" : "transparent",
-          border: !selectionMode ? "1px solid #0066ff" : "1px solid #ccc",
-        }}
+      <ToolbarButton
         title="默认模式"
+        onClick={deactivateSelectionMode}
+        active={!selectionMode}
+        activeColor="#0066ff"
       >
         <MousePointer2 size={14} />
-      </button>
-      <button
-        onClick={activateRectMode}
-        style={{
-          ...btnStyle,
-          background:
-            selectedSelectionMode === "rect"
-              ? "rgba(230,126,0,0.15)"
-              : "transparent",
-          border:
-            selectedSelectionMode === "rect"
-              ? "1px solid #e67e00"
-              : "1px solid #ccc",
-        }}
+      </ToolbarButton>
+      <ToolbarButton
         title="矩形框选 (默认，按下 Shift 激活)"
+        onClick={activateRectMode}
+        active={selectedSelectionMode === "rect"}
+        activeColor="#e67e00"
       >
         <Square size={14} />
-      </button>
-      <button
-        onClick={activatePolygonMode}
-        style={{
-          ...btnStyle,
-          background:
-            selectedSelectionMode === "polygon"
-              ? "rgba(230,126,0,0.15)"
-              : "transparent",
-          border:
-            selectedSelectionMode === "polygon"
-              ? "1px solid #e67e00"
-              : "1px solid #ccc",
-        }}
+      </ToolbarButton>
+      <ToolbarButton
         title="多边形框选 (按下 Shift 激活)"
+        onClick={activatePolygonMode}
+        active={selectedSelectionMode === "polygon"}
+        activeColor="#e67e00"
       >
         <Pentagon size={14} />
-      </button>
+      </ToolbarButton>
 
       <div style={{ flex: 1 }} />
-      <button
+      <ToolbarButton
+        title="分析"
         onClick={onAnalyze}
         disabled={selectedNodeIds.size === 0}
-        style={{
-          ...btnStyle,
-          background: analysisPanelOpen
-            ? "rgba(233,69,96,0.25)"
-            : "transparent",
-          border: analysisPanelOpen ? "1px solid #e94560" : "1px solid #0f3460",
-        }}
-        title="分析"
+        active={analysisPanelOpen}
+        activeColor="#e94560"
       >
         <BarChart3 size={14} />
-      </button>
-      <button
+      </ToolbarButton>
+      <ToolbarButton
+        title="导出选中子图 JSON"
         onClick={onExportJSON}
         disabled={selectedNodeIds.size === 0}
-        style={btnStyle}
-        title="导出选中子图 JSON"
       >
         <Download size={13} />
         <span style={{ fontSize: "10px" }}>JSON</span>
-      </button>
-      <button
+      </ToolbarButton>
+      <ToolbarButton
+        title="导出选中节点 CSV"
         onClick={onExportCSV}
         disabled={selectedNodeIds.size === 0}
-        style={btnStyle}
-        title="导出选中节点 CSV"
       >
         <Download size={13} />
         <span style={{ fontSize: "10px" }}>CSV</span>
-      </button>
-      <button
-        onClick={onToggleTreeLayout}
-        style={{
-          ...btnStyle,
-          background: treeMode ? "rgba(230,126,0,0.15)" : "transparent",
-          border: treeMode ? "1px solid #e67e00" : "1px solid #ccc",
-        }}
+      </ToolbarButton>
+      <ToolbarButton
         title={treeMode ? "切回力导向布局" : "树形布局（以选中节点为根）"}
+        onClick={onToggleTreeLayout}
+        active={treeMode}
+        activeColor="#e67e00"
       >
         <GitBranch size={14} />
-      </button>
+      </ToolbarButton>
       <Search size={14} style={{ color: "rgb(var(--muted))" }} />
       <SearchBox onSelect={onSearchSelect} />
 
-      <button
-        onClick={toggle}
-        style={btnStyle}
+      <ToolbarButton
         title={theme === "dark" ? "切换到亮色主题" : "切换到暗色主题"}
+        onClick={toggle}
       >
         {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-      </button>
+      </ToolbarButton>
     </div>
   )
 }

@@ -158,6 +158,8 @@ export class InteractionManager {
     const dx = pos.x - this.lastMouseX
     const dy = pos.y - this.lastMouseY
 
+    console.log(dx, dy)
+
     if (this.isDragging && this.dragNodeId) {
       // 拖拽节点 — 在渲染器中实际移动节点
       this.callbacks.onNodeDrag?.(this.dragNodeId, dx, dy)

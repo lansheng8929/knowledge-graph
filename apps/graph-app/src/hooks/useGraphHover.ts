@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { GraphModel } from "@lansheng/knowledge-graph"
 import type {
   GraphNode,
@@ -10,6 +10,11 @@ export interface UseGraphHoverCallbacks {
   onNodeContextMenu?: (node: GraphNode, x: number, y: number) => void
 }
 
+/**
+ * 图交互状态（hover / 选中）与业务事件订阅。
+ * 通过 model.events.subscribe 注册 nodeHover / linkHover / nodeClick /
+ * selectionChange / plusToolClick / nodeRightClick，驱动 React 状态。
+ */
 export function useGraphHover(
   modelRef: React.RefObject<GraphModel | null>,
   callbacks: UseGraphHoverCallbacks = {},
@@ -18,10 +23,15 @@ export function useGraphHover(
   const [hoveredLink, setHoveredLink] = useState<GraphLink | null>(null)
   const [selectedNodeIds, setSelectedNodeIds] = useState<Set<string>>(new Set())
 
+  // callbacks 用 ref 缓存，避免重复订阅
+  const callbacksRef = useRef(callbacks)
+  callbacksRef.current = callbacks
+
   useEffect(() => {
     const model = modelRef.current
     if (!model) return
 
+    // hover 事件
     const unsub1 = model.events.subscribe("nodeHover", (node) => {
       setHoveredNode(node)
       if (node) setHoveredLink(null)
@@ -30,20 +40,21 @@ export function useGraphHover(
       setHoveredLink(link)
       if (link) setHoveredNode(null)
     })
+    // 业务事件
     const unsub3 = model.events.subscribe("plusToolClick", (node) => {
-      if (node) callbacks.onPlusToolClick?.(node)
+      if (node) callbacksRef.current.onPlusToolClick?.(node)
     })
     const unsub4 = model.events.subscribe("nodeRightClick", (data) => {
       if (data)
-        callbacks.onNodeContextMenu?.(
+        callbacksRef.current.onNodeContextMenu?.(
           data.node,
           data.screenPos.x,
           data.screenPos.y,
         )
     })
+    // 点击选中
     const unsub5 = model.events.subscribe("nodeClick", ({ node, ctrlKey }) => {
       if (!node) return
-      console.log("[nodeClick]", node.id)
       setSelectedNodeIds((prev) => {
         const next = new Set(prev)
         if (ctrlKey) {
@@ -56,8 +67,7 @@ export function useGraphHover(
         return next
       })
     })
-    // 订阅 selectionChange —— 框选等外部操作同步到 React state
-    // 通过引用比较避免循环：内容相同返回旧引用，Effect 不会重复执行
+    // 框选等外部操作同步到 React state（引用比较避免循环）
     const unsub6 = model.events.subscribe("selectionChange", ({ nodeIds }) => {
       setSelectedNodeIds((prev) => {
         const incoming = new Set(nodeIds)

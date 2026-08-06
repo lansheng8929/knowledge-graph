@@ -1,17 +1,18 @@
 /**
- * Single-SPA root-config（T2.3.1 / T2.3.2）。
+ * Single-SPA root-config（T2.3.1 / T2.3.2 + 原生 importmap 共享依赖）。
  *
- * 当前：本地同仓引用子应用生命周期（不发布包、不引入 SystemJS）；
- * 后续可演进为 import-map 动态下发（生产远程加载）。
+ * dev：同仓引用子应用源码（热更）；生产：原生 importmap 加载子应用 ESM 产物
+ * 与共享依赖 ESM（react/react-dom 单一实例）。
  */
 
 import { navigateToUrl, registerApplication, start } from "single-spa"
 // 平台主题 token 单一来源（壳层加载，供所有子模块读取）
 import "./styles/tokens.css"
 
-// T2.3.4 前端单模块更新：
+// T2.3.4 前端单模块更新 + 原生 importmap：
 //   - 开发(dev)：同仓 import 源码 → 改码即热更（不改构建）
-//   - 构建/生产：经原生 importmap 加载独立子应用产物（index.html 映射版本 URL）
+//   - 构建/生产：原生 importmap 加载子应用 ESM 产物 + 共享依赖 ESM
+//     （index.html 注入 importmap，映射版本 URL + 共享依赖）
 //     → 更新/回滚某子应用 = 只换产物 URL，其它模块零改动
 // 注意：生产分支用「变量」动态 import——vite dev 的 import-analysis 对字面量也会
 // 静态解析（曾报 Failed to resolve "graph-app"），变量形式则跳过解析、运行时才解析。

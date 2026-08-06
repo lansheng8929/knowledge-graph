@@ -21,6 +21,10 @@ if [ -z "$VERSION" ] || [ "$VERSION" = "undefined" ]; then
   echo "[publish] package.json 无 version，默认使用 $VERSION"
 fi
 
+# 共享依赖与子应用同步：发布前先检测并生成共享依赖（react/react-dom/scheduler ESM），
+# 保证 importmap 的共享条目与子应用版本一致（版本不漂移）
+(cd "$ROOT" && bun run shared:detect && bun run shared:build)
+
 mkdir -p "$SUBAPPS"
 echo "[publish] build user-app (single-spa bundle, v$VERSION)..."
 (cd "$APP_DIR" && APP_VERSION="$VERSION" bun run build:single-spa)

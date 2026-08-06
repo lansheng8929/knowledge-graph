@@ -12,6 +12,11 @@
     "graph:dev": "bun run --cwd apps/graph-app dev",
     "graph:build": "bun run --cwd apps/graph-app build",
     "graph:tsc": "bun run --cwd graph tsc",
+    "shared:detect": "bun scripts/detect-shared-deps.mjs",
+    "shared:build": "bun scripts/build-shared-deps.mjs",
     "check:contract": "bash scripts/check-api-contract.sh"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

@@ -92,7 +92,7 @@ def node_to_obj(
 def query_init(
     driver: Driver, ids: List[str], subject: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """根据 ids 加载初始节点；空数组返回空图。L3：按主体过滤不可见节点。"""
+    """根据 ids 加载初始节点及节点之间的边；空数组返回空图。L3：按主体过滤不可见节点。"""
     if not ids:
         return {"graphData": {"nodes": [], "links": []}}
 
@@ -112,7 +112,41 @@ def query_init(
                 if l3_visible(obj["data"], subject):
                     nodes.append(obj)
 
-    return {"graphData": {"nodes": nodes, "links": []}}
+        # 初始节点之间的边：深链/多节点加载时把已加载节点间的关联一并返回，
+        # 否则画布只有孤立节点、RuleMenu 的 loadedNeighbors（基于画布边）会误判"可拓"。
+        links: List[Dict[str, Any]] = []
+        if nodes:
+            id_list = [n["id"] for n in nodes]
+            link_result = session.run(
+                """
+                MATCH (a)-[r]->(b)
+                WHERE a.id IN $ids AND b.id IN $ids
+                RETURN a.id AS sid, b.id AS tid, type(r) AS relType, r AS rel
+                """,
+                ids=id_list,
+            )
+            for rec in link_result:
+                rel = dict(rec["rel"])
+                link_id = rel.pop("id")
+                link_label = rel.pop("label", "")
+                link_time = rel.pop("time", "")
+                rel_type = rec["relType"]
+                links.append(
+                    {
+                        "id": link_id,
+                        "source": rec["sid"],
+                        "target": rec["tid"],
+                        "data": {
+                            "linkType": rel_type,
+                            "label": link_label,
+                            "time": link_time,
+                            "intimacy": rel.get("intimacy", 0.5),
+                            "clusterId": rel.get("clusterId", ""),
+                        },
+                    }
+                )
+
+    return {"graphData": {"nodes": nodes, "links": links}}
 
 
 # ── search ────────────────────────────────────────────

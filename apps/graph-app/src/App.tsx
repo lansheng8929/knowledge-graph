@@ -114,13 +114,7 @@ export default function App() {
     },
   })
   const {
-    ctx: {
-      hoveredNode,
-      setHoveredNode,
-      hoveredLink,
-      setHoveredLink,
-      selectedNodeIds,
-    },
+    ctx: { hoveredNode, hoveredLink, selectedNodeIds },
   } = graphHover
 
   const ruleMenuHook = useRuleMenu(containerRef, expansionRef)
@@ -210,9 +204,7 @@ export default function App() {
     viewRef.current?.fitView(50)
   }, [])
 
-  const handleBack = useCallback(()=>{
-
-  },[])
+  const handleBack = useCallback(() => {}, [])
 
   // 导出选中子图（JSON 全量 / CSV 表格）
   const handleExportSelection = useCallback(
@@ -359,10 +351,6 @@ export default function App() {
             onMouseMove={(e) => {
               setMousePos({ x: e.clientX, y: e.clientY })
             }}
-            onMouseLeave={() => {
-              setHoveredNode(null)
-              setHoveredLink(null)
-            }}
           >
             {/* DOM tooltip - node */}
             {hoveredNode && (
@@ -438,9 +426,11 @@ export default function App() {
             {timePanelOpen && (
               <TimePanel onClose={() => setTimePanelOpen(false)} />
             )}
+
             {filterPanelOpen && (
               <FilterPanel onClose={() => setFilterPanelOpen(false)} />
             )}
+
             {tablePanelOpen && (
               <TablePanel
                 modelRef={modelRef}
@@ -448,6 +438,7 @@ export default function App() {
                 onClose={() => setTablePanelOpen(false)}
               />
             )}
+
             <SelectionBar
               modelRef={modelRef}
               viewRef={viewRef}

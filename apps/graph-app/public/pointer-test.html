@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pointer Event Test</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "SF Mono", Menlo, Consolas, monospace; }
+  #test {
+    position: fixed;
+    inset: 0;
+    background: #f5f6f8;
+    cursor: crosshair;
+    transition: background 0.15s;
+  }
+  #test.in { background: #e8f4ff; }
+  #test.pressed { background: #ffe8c8; }
+  .panel {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    background: rgba(15, 23, 42, 0.92);
+    color: #e2e8f0;
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.7;
+    z-index: 10;
+    min-width: 340px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    user-select: none;
+  }
+  .panel h1 { margin: 0 0 6px; font-size: 15px; color: #fff; }
+  .panel .hint { color: #94a3b8; font-size: 12px; margin-bottom: 8px; }
+  .row { display: flex; justify-content: space-between; gap: 20px; }
+  .row .k { color: #94a3b8; }
+  .row .v { font-weight: 600; }
+  .v.green { color: #4ade80; }
+  .v.red { color: #f87171; }
+  .v.yellow { color: #facc15; }
+  .v.cyan { color: #22d3ee; }
+  #last { color: #c4b5fd; min-height: 18px; margin-top: 6px; word-break: break-all; }
+</style>
+</head>
+<body>
+<div id="test"></div>
+<div class="panel">
+  <h1>Pointer Event Test</h1>
+  <div class="hint">移动鼠标到灰色区域，观察下方计数是否增长。<br>mousemove / pointermove 任一增长即说明事件到达页面。</div>
+  <div class="row"><span class="k">mousemove</span><span class="v cyan" id="mousemove">0</span></div>
+  <div class="row"><span class="k">pointermove</span><span class="v cyan" id="pointermove">0</span></div>
+  <div class="row"><span class="k">pointerdown</span><span class="v green" id="pointerdown">0</span></div>
+  <div class="row"><span class="k">pointerup</span><span class="v green" id="pointerup">0</span></div>
+  <div class="row"><span class="k">pointerenter</span><span class="v yellow" id="enter">0</span></div>
+  <div class="row"><span class="k">pointerleave</span><span class="v red" id="leave">0</span></div>
+  <div id="last">—</div>
+</div>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); }
+  var mc = 0, pc = 0, pd = 0, pu = 0, en = 0, lv = 0;
+  var test = $('test');
+
+  test.addEventListener('mousemove', function (e) {
+    mc++;
+    $('mousemove').textContent = mc;
+    $('last').textContent = 'mousemove @ ' + e.clientX + ', ' + e.clientY;
+  });
+  test.addEventListener('pointermove', function (e) {
+    pc++;
+    $('pointermove').textContent = pc;
+    $('last').textContent = 'pointermove @ ' + e.clientX + ', ' + e.clientY;
+  });
+  test.addEventListener('pointerdown', function () { pd++; $('pointerdown').textContent = pd; test.classList.add('pressed'); });
+  test.addEventListener('pointerup', function () { pu++; $('pointerup').textContent = pu; test.classList.remove('pressed'); });
+  test.addEventListener('pointerenter', function () { en++; $('enter').textContent = en; test.classList.add('in'); });
+  test.addEventListener('pointerleave', function () { lv++; $('leave').textContent = lv; test.classList.remove('in', 'pressed'); });
+
+  var env = document.createElement('div');
+  env.style.cssText = 'margin-top:8px;color:#94a3b8;font-size:12px;border-top:1px solid #334155;padding-top:6px;';
+  env.textContent = (window.PointerEvent ? 'PointerEvent: 支持' : 'PointerEvent: 不支持（仅看 mousemove）')
+    + ' · dpr=' + (window.devicePixelRatio || 1)
+    + ' · UA: ' + navigator.userAgent.split(' Electron/')[0].slice(0, 40);
+  document.querySelector('.panel').appendChild(env);
+</script>
+</body>
+</html>

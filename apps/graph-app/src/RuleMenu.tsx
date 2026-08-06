@@ -82,7 +82,6 @@ const OPERATORS: Record<string, { label: string; types: string[] }> = {
   gte: { label: "≥", types: ["number"] },
   lt: { label: "<", types: ["number"] },
   lte: { label: "≤", types: ["number"] },
-  between: { label: "介于", types: ["number"] },
 }
 
 interface RuleMenuProps {
@@ -591,34 +590,14 @@ export function RuleMenu({
                           ))}
                         </select>
 
-                        {f.operator === "between" ? (
-                          <span
-                            style={{
-                              display: "flex",
-                              gap: 2,
-                              alignItems: "center",
-                            }}
-                          >
-                            <input
-                              placeholder="min"
-                              value={f.value}
-                              onChange={(e) =>
-                                updateFilter(ci, fi, { value: e.target.value })
-                              }
-                              style={{ ...inputStyle, width: 50 }}
-                            />
-                            <span style={{ color: "#667" }}>~</span>
-                          </span>
-                        ) : (
-                          <input
-                            placeholder="值"
-                            value={f.value}
-                            onChange={(e) =>
-                              updateFilter(ci, fi, { value: e.target.value })
-                            }
-                            style={{ ...inputStyle, width: 60 }}
-                          />
-                        )}
+                        <input
+                          placeholder="值"
+                          value={f.value}
+                          onChange={(e) =>
+                            updateFilter(ci, fi, { value: e.target.value })
+                          }
+                          style={{ ...inputStyle, width: 60 }}
+                        />
                       </>
                     )}
 

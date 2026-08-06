@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { BarChart3, ScanSearch, X } from "lucide-react"
 import type { GraphModel } from "@lansheng/knowledge-graph"
 import type { MyGraphView } from "./graph-types"
@@ -39,6 +40,8 @@ export default function SelectionBar({
   onAnalyze?: () => void
 }) {
   const { selectedNodeIds } = useAppCtx()
+  // 毛玻璃按钮 hover 状态（hooks 需在条件 return 前无条件调用）
+  const [hoverBtn, setHoverBtn] = useState<string | null>(null)
 
   if (selectedNodeIds.size === 0) return null
 
@@ -74,6 +77,21 @@ export default function SelectionBar({
     model.stateManager.setSelectedNodes([])
   }
 
+  // 毛玻璃 hover：与工具栏按钮一致的反馈（前景色 9% + 主题悬停色边框）
+  const hoverProps = (key: string) => ({
+    onMouseEnter: () => setHoverBtn(key),
+    onMouseLeave: () => setHoverBtn(null),
+  })
+  const btnStyle = (key: string): React.CSSProperties => ({
+    ...barBtn,
+    background:
+      hoverBtn === key ? "rgb(var(--foreground) / 0.09)" : barBtn.background,
+    border:
+      hoverBtn === key
+        ? "1px solid rgb(var(--border-hover) / 0.7)"
+        : barBtn.border,
+  })
+
   return (
     <div
       style={{
@@ -85,30 +103,58 @@ export default function SelectionBar({
         alignItems: "center",
         gap: 8,
         padding: "8px 14px",
-        background: "rgb(var(--background))",
-        border: "1px solid rgb(var(--border))",
+        // 毛玻璃：半透明渐变 + 模糊 + 细边框 + 内高光
+        background:
+          "linear-gradient(135deg, rgb(var(--surface) / 0.82), rgb(var(--background) / 0.72))",
+        backdropFilter: "blur(16px) saturate(160%)",
+        WebkitBackdropFilter: "blur(16px) saturate(160%)",
+        border: "1px solid rgb(var(--border) / 0.5)",
         borderRadius: 999,
         color: "rgb(var(--foreground))",
         fontFamily: "monospace",
         fontSize: 12,
-        boxShadow: "var(--shadow)",
+        boxShadow:
+          "inset 0 1px 0 rgb(255 255 255 / 0.08), 0 12px 40px rgb(0 0 0 / 0.22)",
         zIndex: 500,
       }}
     >
       <span>已选 {selectedNodeIds.size} 个节点</span>
       <span
-        style={{ width: 1, height: 16, background: "rgb(var(--background))" }}
+        style={{
+          width: 1,
+          height: 16,
+          background: "rgb(var(--border) / 0.6)",
+        }}
       />
-      <button onClick={onAnalyze} style={barBtn} title="分析选中（通话圈等）">
+      <button
+        onClick={onAnalyze}
+        style={btnStyle("analyze")}
+        {...hoverProps("analyze")}
+        title="分析选中（通话圈等）"
+      >
         <BarChart3 size={13} /> 分析
       </button>
-      <button onClick={fitSelected} style={barBtn} title="聚焦选中节点">
+      <button
+        onClick={fitSelected}
+        style={btnStyle("focus")}
+        {...hoverProps("focus")}
+        title="聚焦选中节点"
+      >
         <ScanSearch size={13} /> 聚焦
       </button>
       <span
-        style={{ width: 1, height: 16, background: "rgb(var(--background))" }}
+        style={{
+          width: 1,
+          height: 16,
+          background: "rgb(var(--border) / 0.6)",
+        }}
       />
-      <button onClick={clear} style={barBtn} title="关闭（清空选择）">
+      <button
+        onClick={clear}
+        style={btnStyle("clear")}
+        {...hoverProps("clear")}
+        title="关闭（清空选择）"
+      >
         <X size={13} />
       </button>
     </div>

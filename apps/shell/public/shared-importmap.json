@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "react": "./shared/react@18.3.1.js",
+    "react/jsx-runtime": "./shared/react@18.3.1-jsx-runtime.js",
+    "react-dom": "./shared/react-dom@18.3.1.js",
+    "react-dom/client": "./shared/react-dom@18.3.1-client.js",
+    "scheduler": "./shared/scheduler@0.23.2.js"
+  }
+}
