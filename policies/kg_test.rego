@@ -30,8 +30,9 @@ test_clearance_ok if {
     }
 }
 
-test_clearance_deny if {
-    not allow with input as {
+# 密级不参与可见性：public 数据即使密级高于 clearance 也可见（脱敏归 L4）
+test_public_not_blocked_by_classification if {
+    allow with input as {
         "subject": {"tenantId": "t1", "clearance": 1},
         "resource": {"tenantId": "t1", "classification": 2, "visibility": "public"},
         "action": "expand",
@@ -56,10 +57,36 @@ test_owner_allow if {
     }
 }
 
-test_owner_team_allow if {
+# 下级可见：ownerUid ∈ 查看者 subUids → internal 可见
+test_internal_owneruid_subordinate_allow if {
     allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u-mgr", "subUids": ["u1"]},
+        "resource": {"tenantId": "t1", "classification": 1, "ownerUid": "u1", "visibility": "internal"},
+        "action": "expand",
+    }
+}
+
+# 团队不再纳入属主范围（内部=自己及下级）
+test_owner_team_not_in_scope_deny if {
+    not allow with input as {
         "subject": {"tenantId": "t1", "clearance": 2, "uid": "u2", "teams": ["dept-a"]},
-        "resource": {"tenantId": "t1", "classification": 1, "owner": "dept-a", "visibility": "secret"},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "dept-a", "visibility": "internal"},
+        "action": "expand",
+    }
+}
+
+test_owner_username_internal_allow if {
+    allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u1", "username": "alice", "teams": []},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "alice", "visibility": "internal"},
+        "action": "expand",
+    }
+}
+
+test_owner_username_private_allow if {
+    allow with input as {
+        "subject": {"tenantId": "t1", "clearance": 2, "uid": "u1", "username": "alice", "teams": []},
+        "resource": {"tenantId": "t1", "classification": 1, "owner": "alice", "visibility": "private"},
         "action": "expand",
     }
 }
@@ -97,8 +124,9 @@ test_private_subordinate_deny if {
     }
 }
 
-test_internal_team_allow if {
-    allow with input as {
+# 团队同组不再可见 internal（内部=自己及下级）
+test_internal_team_member_deny if {
+    not allow with input as {
         "subject": {"tenantId": "t1", "clearance": 2, "uid": "u2", "teams": ["dept-a"]},
         "resource": {"tenantId": "t1", "classification": 1, "owner": "dept-a", "visibility": "internal"},
         "action": "expand",
@@ -121,8 +149,9 @@ test_internal_outsider_deny if {
     }
 }
 
-test_secret_low_clearance_owner_deny if {
-    not allow with input as {
+# secret 存量兼容按 internal：属主本人低 clearance 也可见（密级不挡可见）
+test_secret_low_clearance_owner_allow if {
+    allow with input as {
         "subject": {"tenantId": "t1", "clearance": 1, "uid": "u1"},
         "resource": {"tenantId": "t1", "classification": 1, "owner": "u1", "visibility": "secret"},
         "action": "expand",

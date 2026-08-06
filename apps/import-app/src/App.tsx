@@ -3,6 +3,7 @@ import {
   getImportOptions,
   getTemplates,
   getTask,
+  listTasks,
   preview,
   submitImport,
 } from "./api"
@@ -24,10 +25,15 @@ const STATUS_TEXT: Record<string, string> = {
   success: "成功",
   failed: "失败",
 }
+const STAGE_TEXT: Record<string, string> = {
+  parsing: "解析",
+  validating: "校验",
+  writing: "写入",
+  done: "完成",
+}
 const VISIBILITY_LABELS: Record<string, string> = {
   public: "公开",
   internal: "内部",
-  secret: "机密",
   private: "仅本人",
 }
 const CLASSIFICATION_OPTIONS = [
@@ -65,14 +71,35 @@ function itemSig(it: ImportItem): string {
   ].join("|")
 }
 
+/** 从 URL ?mode= 读取当前 tab（import | report），缺省 import。 */
+function viewFromUrl(): View {
+  const m = new URLSearchParams(window.location.search).get("mode")
+  return m === "report" ? "report" : "import"
+}
+
 export default function App() {
-  const [view, setView] = useState<View>("import")
+  const [view, setView] = useState<View>(viewFromUrl)
   const [items, setItems] = useState<ImportItem[]>([])
   const [taskIds, setTaskIds] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [options, setOptions] = useState<ImportOptions | null>(null)
   const [templates, setTemplates] = useState<ImportTemplate[]>([])
+
+  // 切 tab：同步 URL ?mode= 并压入历史，支持后退/前进
+  const goTab = (v: View): void => {
+    setView(v)
+    const url = new URL(window.location.href)
+    url.searchParams.set("mode", v)
+    window.history.pushState({}, "", url)
+  }
+
+  // 后退/前进 → 按 URL 恢复 tab
+  useEffect(() => {
+    const onPop = (): void => setView(viewFromUrl())
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
 
   // 拉取权限可配置项 + 解析模板列表
   useEffect(() => {
@@ -187,13 +214,6 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewKey])
 
-  const reset = (): void => {
-    setView("import")
-    setItems([])
-    setTaskIds([])
-    setError(null)
-  }
-
   // 每个文件一个任务：逐个提交
   const confirmAll = async (): Promise<void> => {
     if (items.length === 0) return
@@ -219,7 +239,7 @@ export default function App() {
     if (errs.length) setError(errs.join("；"))
     if (ids.length) {
       setTaskIds(ids)
-      setView("report")
+      goTab("report")
     }
   }
 
@@ -231,8 +251,18 @@ export default function App() {
           <p>添加多个文件，各自独立解析（每个文件一个任务），确认后一次导入</p>
         </div>
         <ol className="kg-import-steps">
-          <li className={view === "import" ? "on" : "done"}>选择与配置</li>
-          <li className={view === "report" ? "on" : ""}>结果</li>
+          <li
+            className={`kg-step-tab${view === "import" ? " on" : ""}`}
+            onClick={() => goTab("import")}
+          >
+            选择与配置
+          </li>
+          <li
+            className={`kg-step-tab${view === "report" ? " on" : ""}`}
+            onClick={() => goTab("report")}
+          >
+            结果
+          </li>
         </ol>
       </header>
 
@@ -255,9 +285,7 @@ export default function App() {
         />
       )}
 
-      {view === "report" && taskIds.length > 0 && (
-        <TasksView taskIds={taskIds} onDone={reset} />
-      )}
+      {view === "report" && <TasksView taskIds={taskIds} />}
     </div>
   )
 }
@@ -560,25 +588,39 @@ function EdgeTable(props: { edges: ParsedEdge[] }) {
   )
 }
 
-/* ── 结果报告（多任务）────────────────────────────── */
+/* ── 结果 tab：本次任务 + 历史任务 ─────────────────── */
 
-function TasksView(props: { taskIds: string[]; onDone: () => void }) {
-  const [tasks, setTasks] = useState<Record<string, ImportTask | null>>({})
+/** 跳转到图谱并定位到导入的实体（single-spa 路由切换，不整页刷新）。 */
+function openGraph(entityIds: string[]): void {
+  const ids = entityIds.filter(Boolean)
+  if (ids.length === 0) return
+  const url = `/graph?ids=${encodeURIComponent(ids.join(","))}`
+  window.history.pushState({}, "", url)
+  window.dispatchEvent(new PopStateEvent("popstate"))
+}
 
+function TasksView(props: { taskIds: string[] }) {
+  const [current, setCurrent] = useState<Record<string, ImportTask | null>>({})
+  const [history, setHistory] = useState<ImportTask[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<ImportTask | null>(null)
+
+  // 本次提交的任务轮询
   useEffect(() => {
+    if (props.taskIds.length === 0) return
     let alive = true
     const load = async (): Promise<void> => {
       const entries = await Promise.all(
         props.taskIds.map(async (id) => {
           try {
-            const t = await getTask(id)
-            return [id, t] as const
+            return [id, await getTask(id)] as const
           } catch {
             return [id, null] as const
           }
         }),
       )
-      if (alive) setTasks(Object.fromEntries(entries))
+      if (alive) setCurrent(Object.fromEntries(entries))
     }
     load()
     const timer = setInterval(load, 1500)
@@ -588,44 +630,210 @@ function TasksView(props: { taskIds: string[]; onDone: () => void }) {
     }
   }, [props.taskIds])
 
-  const finished = props.taskIds.every((id) => {
-    const t = tasks[id]
+  // 历史任务列表（每 3s 刷新，反映进行中任务状态）
+  useEffect(() => {
+    let alive = true
+    const load = async (): Promise<void> => {
+      try {
+        const list = await listTasks()
+        if (alive) setHistory(list)
+      } catch {
+        /* 瞬时错误忽略 */
+      }
+    }
+    setHistoryLoading(true)
+    load().finally(() => {
+      if (alive) setHistoryLoading(false)
+    })
+    const timer = setInterval(load, 3000)
+    return () => {
+      alive = false
+      clearInterval(timer)
+    }
+  }, [props.taskIds])
+
+  // 任务详情
+  useEffect(() => {
+    if (!detailId) {
+      setDetail(null)
+      return
+    }
+    let alive = true
+    getTask(detailId)
+      .then((t) => {
+        if (alive) setDetail(t)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [detailId])
+
+  const currentFinished = props.taskIds.every((id) => {
+    const t = current[id]
     return !!t && (t.status === "success" || t.status === "failed")
   })
 
   return (
-    <div className="kg-import-body">
-      <div className="kg-import-card space-y-2">
-        <h2>导入结果（{props.taskIds.length} 个任务）</h2>
-        {props.taskIds.map((id) => {
-          const t = tasks[id]
-          return (
-            <div key={id} className="kg-task-row">
-              <span className={`kg-pill ${t?.status ?? "pending"}`}>
-                {t ? (STATUS_TEXT[t.status] ?? t.status) : "加载中"}
-              </span>
-              <span className="kg-task-file">{t?.filename ?? "…"}</span>
-              <span className="mono dim">{id.slice(0, 8)}</span>
-              <span className="dim">
-                已导入 {t?.imported ?? "—"} · 跳过 {t?.skipped ?? "—"} · 错误{" "}
-                {t?.error_count ?? "—"}
-              </span>
+    <div className="kg-import-body space-y-2">
+      {props.taskIds.length > 0 && (
+        <div className="kg-import-card space-y-2">
+          <h2>本次导入（{props.taskIds.length} 个任务）</h2>
+          {props.taskIds.map((id) => {
+            const t = current[id]
+            return (
+              <div key={id} className="kg-task-row">
+                <span className={`kg-pill ${t?.status ?? "pending"}`}>
+                  {t ? (STATUS_TEXT[t.status] ?? t.status) : "加载中"}
+                </span>
+                <span className="kg-task-file">{t?.filename ?? "…"}</span>
+                <span className="mono dim">{id.slice(0, 8)}</span>
+                <span className="dim">
+                  已导入 {t?.imported ?? "—"} · 跳过 {t?.skipped ?? "—"} · 错误{" "}
+                  {t?.error_count ?? "—"}
+                </span>
+                {t && t.entity_ids?.length ? (
+                  <button
+                    className="kg-btn kg-btn-ghost kg-btn-sm"
+                    onClick={() => openGraph(t.entity_ids)}
+                  >
+                    查看
+                  </button>
+                ) : null}
+              </div>
+            )
+          })}
+          {!currentFinished && (
+            <div className="kg-preview-loading">
+              <div className="kg-spinner" />
+              <span>任务进行中…</span>
             </div>
-          )
-        })}
-        {!finished && (
-          <div className="kg-preview-loading">
-            <div className="kg-spinner" />
-            <span>任务进行中…</span>
+          )}
+        </div>
+      )}
+
+      {/* 历史任务 */}
+      <div className="kg-import-card space-y-2">
+        <div className="kg-result-head">
+          <h2>历史任务（{history.length}）</h2>
+          <button
+            className="kg-btn kg-btn-ghost kg-btn-sm"
+            onClick={() => {
+              setHistoryLoading(true)
+              listTasks()
+                .then(setHistory)
+                .finally(() => setHistoryLoading(false))
+            }}
+          >
+            刷新
+          </button>
+        </div>
+        {history.length === 0 ? (
+          <div className="kg-empty">
+            {historyLoading ? "加载中…" : "暂无历史任务"}
+          </div>
+        ) : (
+          <div className="kg-table-wrap">
+            <table className="kg-table">
+              <thead>
+                <tr>
+                  <th>状态</th>
+                  <th>文件</th>
+                  <th>创建人</th>
+                  <th>已导入</th>
+                  <th>跳过</th>
+                  <th>错误</th>
+                  <th>创建时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((t) => (
+                  <tr key={t.id} className="kg-task-row-tr">
+                    <td>
+                      <span className={`kg-pill ${t.status}`}>
+                        {STATUS_TEXT[t.status] ?? t.status}
+                      </span>
+                    </td>
+                    <td className="kg-task-file">{t.filename || "—"}</td>
+                    <td>{t.owner || "—"}</td>
+                    <td>{t.imported}</td>
+                    <td>{t.skipped}</td>
+                    <td>{t.error_count}</td>
+                    <td className="dim">{t.created_at}</td>
+                    <td>
+                      <span className="kg-task-ops">
+                        <button
+                          className="kg-btn kg-btn-ghost kg-btn-sm"
+                          disabled={!t.entity_ids?.length}
+                          onClick={() => openGraph(t.entity_ids)}
+                        >
+                          查看
+                        </button>
+                        <button
+                          className="kg-btn kg-btn-ghost kg-btn-sm"
+                          onClick={() => setDetailId(t.id)}
+                        >
+                          详情
+                        </button>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {finished && (
-        <div className="kg-import-actions">
-          <button className="kg-btn kg-btn-primary" onClick={props.onDone}>
-            完成
-          </button>
+      {/* 任务详情 */}
+      {detail && (
+        <div className="kg-import-card space-y-2">
+          <div className="kg-result-head">
+            <h2>任务详情 · {detail.id}</h2>
+            <button
+              className="kg-btn kg-btn-ghost kg-btn-sm"
+              onClick={() => setDetailId(null)}
+            >
+              关闭
+            </button>
+          </div>
+          <div className="kg-task-row">
+            <span className={`kg-pill ${detail.status}`}>
+              {STATUS_TEXT[detail.status] ?? detail.status}
+            </span>
+            <span className="kg-task-file">{detail.filename || "—"}</span>
+            <span className="dim">
+              阶段：{STAGE_TEXT[detail.stage] ?? detail.stage}
+            </span>
+          </div>
+          <div className="kg-stat-row">
+            <Stat label="已导入" value={detail.imported} />
+            <Stat label="跳过" value={detail.skipped} tone="warn" />
+            <Stat
+              label="错误"
+              value={detail.error_count}
+              tone={detail.error_count ? "bad" : "ok"}
+            />
+          </div>
+          {detail.warnings.length > 0 && (
+            <div className="kg-msg kg-msg-warn">
+              <ul>
+                {detail.warnings.slice(0, 20).map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {detail.errors.length > 0 && (
+            <div className="kg-msg kg-msg-err">
+              <ul>
+                {detail.errors.slice(0, 20).map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

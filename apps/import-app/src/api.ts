@@ -79,6 +79,14 @@ export async function getTask(taskId: string): Promise<ImportTask> {
   return parseData<ImportTask>(res)
 }
 
+/** 历史任务列表（摘要，按创建时间倒序）。 */
+export async function listTasks(): Promise<ImportTask[]> {
+  const res = await fetch("/api/v1/import/tasks", {
+    headers: headers(),
+  })
+  return parseData<ImportTask[]>(res)
+}
+
 /** 按当前登录用户权限拉取可配置项（默认值 + 约束）。 */
 export async function getImportOptions(): Promise<ImportOptions> {
   const res = await fetch("/api/v1/import/options", {

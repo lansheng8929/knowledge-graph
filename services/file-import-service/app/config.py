@@ -18,6 +18,11 @@ class Settings:
     # 与 auth-service 的 AUTH_SECRET 保持一致
     auth_secret: str = os.getenv("AUTH_SECRET", "dev-secret-change-me")
 
+    # ── 任务存储（P2 落库：memory | postgres）─────────
+    # postgres：任务/历史持久化到 import_tasks 表（重启不丢、多 worker 一致）
+    task_store: str = os.getenv("TASK_STORE", "memory")
+    pg_dsn: str = os.getenv("PG_DSN", "postgresql://kg:kg@localhost:5432/kg")
+
     # ── 导入限制 ──────────────────────────────────────
     max_file_bytes: int = int(os.getenv("MAX_FILE_BYTES", str(50 * 1024 * 1024)))
     preview_limit: int = int(os.getenv("PREVIEW_LIMIT", "20"))

@@ -18,6 +18,8 @@ class IngestNode(BaseModel):
     classification: int
     owner: str
     visibility: str
+    # 属主 uid（“内部=自己及下级”可见性匹配用）
+    ownerUid: str = ""
 
     model_config = ConfigDict(extra="allow")
 
@@ -38,6 +40,8 @@ class IngestLink(BaseModel):
     classification: int
     owner: str
     visibility: str
+    # 属主 uid（“内部=自己及下级”可见性匹配用）
+    ownerUid: str = ""
 
     model_config = ConfigDict(extra="allow")
 

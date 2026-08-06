@@ -57,14 +57,13 @@ function getLoadedNeighbors(
   return loaded
 }
 
-// 从 URL 读取初始 ids
-const initialIds: string[] | undefined = (() => {
-  const params = new URLSearchParams(window.location.search)
-  const ids = params.get("ids")
-  return ids ? ids.split(",").filter(Boolean) : undefined
-})()
-
 export default function App() {
+  // 从 URL 读取初始 ids（每次挂载重读，支持从其它模块深链进入）
+  const [initialIds] = useState<string[] | undefined>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const ids = params.get("ids")
+    return ids ? ids.split(",").filter(Boolean) : undefined
+  })
   const graphApp = useGraphApp(initialIds)
   const {
     containerRef,
@@ -211,6 +210,10 @@ export default function App() {
     viewRef.current?.fitView(50)
   }, [])
 
+  const handleBack = useCallback(()=>{
+
+  },[])
+
   // 导出选中子图（JSON 全量 / CSV 表格）
   const handleExportSelection = useCallback(
     (fmt: "json" | "csv") => {
@@ -266,6 +269,7 @@ export default function App() {
         >
           <Toolbar
             historyManagerRef={historyManagerRef}
+            onBack={handleBack}
             onFitView={handleFitView}
             onToggleSnapshotPanel={handleToggleSnapshotPanel}
             onToggleLegend={handleToggleLegend}

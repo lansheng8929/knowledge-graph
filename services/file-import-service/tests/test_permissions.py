@@ -168,7 +168,7 @@ def test_admin_allowed_anything():
         "tenantId": "other-tenant",
         "classification": 3,
         "owner": "dept-a",
-        "visibility": "secret",
+        "visibility": "private",
     }
     errs = check_tags_permitted(dict(tags), ADMIN, authenticated=True)
     assert errs == []

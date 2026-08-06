@@ -18,6 +18,8 @@ class TagConfig(BaseModel):
     classification: int = 0
     owner: str = "system"
     visibility: str = "internal"
+    # 属主 uid：由服务端注入（不可伪造），供“内部=自己及下级”可见性匹配
+    ownerUid: str = ""
 
 
 class EdgeConfig(BaseModel):

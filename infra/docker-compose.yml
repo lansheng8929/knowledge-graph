@@ -128,8 +128,12 @@ services:
       # dev 直连/网关缺省时校验 Authorization JWT 的密钥（与 auth-service 一致）
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
       CORS_ALLOW_ORIGINS: ""
+      # 历史任务落库 Postgres
+      TASK_STORE: postgres
+      PG_DSN: postgresql://kg:kg@postgres:5432/kg
     depends_on:
       - graph-ingestion
+      - postgres
     restart: unless-stopped
 
   # ── 通用业务能力组件（审批/任务/报表/审计，业务无关）────

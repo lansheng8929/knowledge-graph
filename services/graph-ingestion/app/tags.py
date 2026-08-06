@@ -2,9 +2,10 @@
 
 标签（ABAC 资源属性）：
   - tenantId:       租户标识（多租户隔离）
-  - classification: 密级，int，0=公开 1=内部 2=秘密 3=机密（比较用 >=）
-  - owner:          属主（部门/账号）
-  - visibility:     可见性，public | internal | secret
+  - classification: 密级，int，0=公开 1=内部 2=秘密 3=机密（只驱动 L4 脱敏）
+  - owner:          属主（用户名）
+  - ownerUid:       属主 uid（“内部=自己及下级”可见性匹配）
+  - visibility:     可见性，public | internal | private（只决定可见）
 
 强制打标：ingest 时必须提供；缺标/非法 → TagValidationError（拒绝入库）。
 """
@@ -19,7 +20,7 @@ DEFAULT_TAGS = {
     "visibility": "internal",
 }
 
-VALID_VISIBILITY = {"public", "internal", "secret", "private"}
+VALID_VISIBILITY = {"public", "internal", "private"}
 MIN_CLASSIFICATION = 0
 MAX_CLASSIFICATION = 3
 

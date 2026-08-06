@@ -18,6 +18,7 @@ import {
   Table,
   Download,
   GitBranch,
+  ArrowBigLeft,
 } from "lucide-react"
 import SearchBox from "./SearchBox"
 import type { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
@@ -26,16 +27,20 @@ import { useTheme } from "./hooks/useTheme"
 
 const toolbarStyle: React.CSSProperties = {
   position: "absolute",
-  top: 0,
-  left: 0,
-  width: "100%",
+  top: 8,
+  left: 8,
+  right: 8,
   padding: "5px",
   display: "flex",
   gap: "8px",
   alignItems: "center",
-  borderBottom: "1px solid rgb(var(--border-strong))",
   flexWrap: "wrap",
-  background: "rgb(var(--background))",
+  background:
+    "linear-gradient(135deg, rgb(var(--background) / 0.55), rgb(var(--background) / 0.3))",
+  backdropFilter: "blur(12px) saturate(160%)",
+  WebkitBackdropFilter: "blur(12px) saturate(160%)",
+  borderRadius: 12,
+  boxShadow: "0 8px 32px rgb(0 0 0 / 0.18)",
   color: "rgb(var(--foreground))",
 }
 
@@ -55,6 +60,7 @@ const btnStyle: React.CSSProperties = {
 
 interface ToolbarProps {
   historyManagerRef: React.RefObject<HistoryManager | null>
+  onBack: () => void
   onFitView: () => void
   onToggleSnapshotPanel: () => void
   onToggleLegend: () => void
@@ -77,6 +83,7 @@ interface ToolbarProps {
 
 export default function Toolbar({
   historyManagerRef,
+  onBack,
   onFitView,
   onToggleSnapshotPanel,
   onToggleLegend,
@@ -116,6 +123,10 @@ export default function Toolbar({
   const { theme, toggle } = useTheme()
   return (
     <div style={{ ...toolbarStyle, zIndex }}>
+      <button onClick={onBack} style={btnStyle} title="返回">
+        <ArrowBigLeft size={14} />
+      </button>
+
       <button
         onClick={onUndo}
         style={btnStyle}

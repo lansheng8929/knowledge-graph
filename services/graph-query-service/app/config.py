@@ -51,6 +51,8 @@ class Settings:
         "yes",
     )
     opa_url: str = os.getenv("OPA_URL", "http://localhost:8181")
+    # dev 直连 JWT 兜底（与 auth-service 同密钥；无 X-User-Context 时从 Bearer 还原主体）
+    auth_secret: str = os.getenv("AUTH_SECRET", "dev-secret-change-me")
 
     # ── 审计 sink（T4.8 生产化）：log（默认）| file | postgres ──
     audit_sink: str = os.getenv("AUDIT_SINK", "log")

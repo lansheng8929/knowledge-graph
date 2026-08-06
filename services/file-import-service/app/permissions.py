@@ -23,15 +23,15 @@ logger = logging.getLogger(__name__)
 
 # 与 validator 对齐
 MAX_CLASSIFICATION = 3
-VALID_VISIBILITY = {"public", "internal", "secret", "private"}
-# 各可见性所需的最低密级（敏感档 "secret" 需 ≥2）
+VALID_VISIBILITY = {"public", "internal", "private"}
+# 可见性只决定可见（2026-08-06 统一：public/internal/private，无 secret 档；
+# 密级只驱动脱敏）
 VISIBILITY_MIN_CLEARANCE = {
     "public": 0,
     "internal": 0,
-    "secret": 2,
     "private": 0,
 }
-VISIBILITY_ORDER = ["public", "internal", "secret", "private"]
+VISIBILITY_ORDER = ["public", "internal", "private"]
 
 # 无鉴权直连时的默认主体（不限制任何选项）
 DEFAULT_SUBJECT: Dict[str, Any] = {

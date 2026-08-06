@@ -44,6 +44,7 @@ def _node_tags(n: m.IngestNode) -> dict:
         "classification": n.classification,
         "owner": n.owner,
         "visibility": n.visibility,
+        "ownerUid": n.ownerUid,
     }
 
 
@@ -53,6 +54,7 @@ def _link_tags(l: m.IngestLink) -> dict:
         "classification": l.classification,
         "owner": l.owner,
         "visibility": l.visibility,
+        "ownerUid": l.ownerUid,
     }
 
 
@@ -105,6 +107,7 @@ def create_app() -> FastAPI:
                     "classification": n.classification,
                     "owner": n.owner,
                     "visibility": n.visibility,
+                    "ownerUid": n.ownerUid,
                     **n.props,
                 }
                 session.run(
@@ -140,6 +143,7 @@ def create_app() -> FastAPI:
                     "classification": l.classification,
                     "owner": l.owner,
                     "visibility": l.visibility,
+                    "ownerUid": l.ownerUid,
                     # T3.1：边自有属性（rank/业务属性等）一并入库，供查询/渲染
                     **l.props,
                 }

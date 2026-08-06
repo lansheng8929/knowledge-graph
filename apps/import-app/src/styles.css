@@ -226,6 +226,29 @@
   font-weight: 600;
   color: rgb(var(--foreground));
 }
+.kg-step-tab {
+  cursor: pointer;
+  user-select: none;
+}
+.kg-step-tab:hover {
+  opacity: 0.85;
+}
+.kg-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.kg-task-row-tr {
+  cursor: pointer;
+}
+.kg-task-row-tr:hover td {
+  background: rgb(var(--hover) / 0.4);
+}
+.kg-task-ops {
+  display: inline-flex;
+  gap: 6px;
+}
 
 /* 配置表单 */
 .kg-config-title {

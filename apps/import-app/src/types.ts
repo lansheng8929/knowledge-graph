@@ -62,6 +62,12 @@ export interface ImportTask {
   errors: string[]
   created_at: string
   finished_at: string
+  /** 该任务实际导入的实体 id（跳转图谱定位展示用） */
+  entity_ids: string[]
+  /** 创建人用户名 */
+  owner: string
+  /** 创建人 uid */
+  owner_uid: string
 }
 
 export type View = "import" | "report"

@@ -220,6 +220,32 @@ def test_cjk_identifier_allowed_by_validator():
     assert not res.errors
 
 
+# ── 历史任务列表 ─────────────────────────────────────
+
+
+def test_task_store_list_ordering():
+    from app.tasks import TaskStore
+
+    s = TaskStore()
+    a = s.create("a.csv")
+    b = s.create("b.csv")
+    lst = s.list()
+    assert lst[0].id == b.id  # 新的在前
+    assert [t.filename for t in lst] == ["b.csv", "a.csv"]
+    # 摘要不含 errors/warnings
+    assert "errors" not in lst[0].summary_dict()
+
+
+def test_tasks_list_endpoint():
+    r = client.get("/api/v1/import/tasks", headers={"X-User-Context": ADMIN})
+    assert r.status_code == 200
+    data = r.json()["data"]
+    assert isinstance(data, list)
+    for item in data:
+        assert "errors" not in item  # 列表为轻量摘要
+        assert {"id", "status", "filename"}.issubset(item)
+
+
 # ── 选表不做位置兜底（2026-08-05）─────────────────────
 
 

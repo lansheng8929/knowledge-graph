@@ -4,6 +4,7 @@
   POST /api/v1/import/files      multipart 上传(单个 file + config + template_id) → 一个后台导入任务（一个文件一个任务）
   POST /api/v1/import/preview    单个 file 解析 + 校验不写库，返回预览（可选 template_id 走模板）
   GET  /api/v1/import/tasks/{id} 任务状态 / 进度 / 报告
+  GET  /api/v1/import/tasks      历史任务列表（摘要，按创建时间倒序）
   GET  /api/v1/import/formats    支持的格式 + 表头约定
   GET  /api/v1/import/options    按当前登录用户权限返回可配置项（默认值 + 约束）
   GET  /api/v1/import/templates  解析模板列表（内置种子）
@@ -36,12 +37,12 @@ from .permissions import (
     import_options,
     subject_from_request,
 )
-from .tasks import TaskStore
+from .tasks import create_task_store, task_visible_to
 from .templates.engine import get_template, list_templates, parse_with_template
 from .validator import validate
 from .writer import IngestionClient
 
-store = TaskStore()
+store = create_task_store(settings.task_store, settings.pg_dsn)
 
 
 @asynccontextmanager
@@ -198,11 +199,14 @@ def create_app() -> FastAPI:
                     "permission denied: " + "; ".join(tag_errors),
                 )
                 return
+            # 属主 uid 由服务端注入（不可由客户端伪造），供“内部=自己及下级”可见性匹配
+            tag_data["ownerUid"] = str(subject.get("uid", ""))
             cfg.tags = m.TagConfig(**tag_data)
             tables, twarn = _parse_uploaded(entities, edges, cfg, template_id)
             graph = map_tables(tables, cfg)
             graph.warnings = twarn + graph.warnings
             result = validate(graph, cfg)
+            store.set_entity_ids(task_id, [e.id for e in result.entities])
             if result.errors:
                 store.finish(task_id, 0, result.skipped, result.warnings, result.errors)
                 return
@@ -237,7 +241,12 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="require a file")
         subject_raw = request.headers.get("X-User-Context", "")
         subject, authenticated = subject_from_request(request)
-        task = store.create(filename=ent[0])
+        task = store.create(
+            filename=ent[0],
+            owner=str(subject.get("username", "")),
+            owner_uid=str(subject.get("uid", "")),
+            tenant_id=str(subject.get("tenantId", "default")),
+        )
         background.add_task(
             _run_import,
             task.id,
@@ -272,13 +281,26 @@ def create_app() -> FastAPI:
 
     # ── 任务状态 ──────────────────────────────────────
 
-    def get_task(task_id: str) -> dict:
+    def get_task(task_id: str, request: Request) -> dict:
         task = store.get(task_id)
         if task is None:
+            raise HTTPException(status_code=404, detail=f"task not found: {task_id}")
+        subject, authenticated = subject_from_request(request)
+        # 已鉴权时只允许看属主范围（自己及以下）的任务
+        if authenticated and not task_visible_to(task, subject):
             raise HTTPException(status_code=404, detail=f"task not found: {task_id}")
         return {"success": True, "data": task.to_dict()}
 
     app.add_api_route("/api/v1/import/tasks/{task_id}", get_task, methods=["GET"])
+
+    # ── 历史任务列表（结果 tab 查看历史；按属主范围过滤）──
+
+    def list_tasks(request: Request) -> dict:
+        subject, authenticated = subject_from_request(request)
+        tasks = store.list(limit=50, subject=subject, authenticated=authenticated)
+        return {"success": True, "data": [t.summary_dict() for t in tasks]}
+
+    app.add_api_route("/api/v1/import/tasks", list_tasks, methods=["GET"])
 
     # ── 格式说明 ──────────────────────────────────────
 
