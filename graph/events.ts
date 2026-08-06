@@ -20,30 +20,6 @@ export interface GraphEventMap<
     screenPos: { x: number; y: number }
     event: MouseEvent
   }
-  nodeContextStart: {
-    node: GraphNode<G["NO"], G["NT"], G["NS"]>
-    /** 节点中心屏幕坐标（canvas 本地） */
-    screenPos: { x: number; y: number }
-    /** 节点屏幕半径（= 碰撞半径 × 缩放，单位像素） */
-    radius: number
-    /** 当前缩放比例（每 1 图谱单位对应的屏幕像素） */
-    zoomScale: number
-    event: MouseEvent
-  }
-  nodeContextMove: {
-    node: GraphNode<G["NO"], G["NT"], G["NS"]>
-    /** 当前指针位置（canvas 本地） */
-    position: { x: number; y: number }
-    event: MouseEvent
-  }
-  nodeContextEnd: {
-    node: GraphNode<G["NO"], G["NT"], G["NS"]>
-    /** 结束位置（canvas 本地） */
-    position: { x: number; y: number }
-    /** 是否被中断（丢失指针/失焦/取消） */
-    canceled: boolean
-    event: MouseEvent
-  }
   linkHover: {
     link: GraphLink<G> | null
     previousLink: GraphLink<G> | null
