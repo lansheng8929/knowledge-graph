@@ -22,6 +22,7 @@ export function LinkTooltip(_props: LinkTooltipProps) {
   const linkType = (linkData as any).linkType ?? ""
   const label = (linkData as any).label ?? ""
   const time = (linkData as any).time ?? ""
+  const intimacy = (linkData as any).intimacy
   const sourceId =
     typeof link.source === "object" ? link.source.id : link.source
   const targetId =
@@ -88,6 +89,18 @@ export function LinkTooltip(_props: LinkTooltipProps) {
           <div style={{ fontSize: "12px", lineHeight: 1.8, color: "#333" }}>
             <span style={{ color: "#8899aa" }}>时间: </span>
             <span style={{ fontWeight: "bold" }}>{time}</span>
+          </div>
+        )}
+
+        {/* 亲密度 */}
+        {intimacy !== undefined && intimacy !== null && (
+          <div style={{ fontSize: "12px", lineHeight: 1.8, color: "#333" }}>
+            <span style={{ color: "#8899aa" }}>亲密度: </span>
+            <span style={{ fontWeight: "bold" }}>
+              {typeof intimacy === "number"
+                ? `${(intimacy * 100).toFixed(0)}%`
+                : intimacy}
+            </span>
           </div>
         )}
 

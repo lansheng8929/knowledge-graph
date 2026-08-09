@@ -78,6 +78,7 @@ export class WebGLRenderer<
   private height: number
   private _destroyed = false
   private _rafId = 0
+  private _fitAnimId = 0
   // 首次尺寸就绪时是否已自动 fitView（修复 macOS 挂载初期 height=0 导致节点小/左上角）
   private _autoFitDone = false
 
@@ -312,7 +313,33 @@ export class WebGLRenderer<
 
   // ========== Camera ==========
 
-  fitView(padding = 0): void {
+  /** 平滑过渡 transform（easeOutCubic），供 fitView 过渡动画使用。 */
+  private animateTransform(
+    from: { x: number; y: number; k: number },
+    to: { x: number; y: number; k: number },
+    duration = 320,
+    onDone?: () => void,
+  ): void {
+    if (this._fitAnimId) cancelAnimationFrame(this._fitAnimId)
+    const t = this.interaction.transform
+    const start = performance.now()
+    const ease = (p: number) => 1 - Math.pow(1 - p, 3)
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / duration)
+      const e = ease(p)
+      t.k = from.k + (to.k - from.k) * e
+      t.x = from.x + (to.x - from.x) * e
+      t.y = from.y + (to.y - from.y) * e
+      if (p < 1) this._fitAnimId = requestAnimationFrame(step)
+      else {
+        this._fitAnimId = 0
+        onDone?.()
+      }
+    }
+    this._fitAnimId = requestAnimationFrame(step)
+  }
+
+  fitView(padding = 0, animate = true): void {
     // 尺寸为 0 时（如 single-spa 挂载初期容器高度未就绪）跳过，避免 k=0 / NaN 变换
     if (this.nodes.length === 0 || this.width <= 0 || this.height <= 0) return
     let minX = Infinity,
@@ -335,11 +362,31 @@ export class WebGLRenderer<
     const t = this.interaction.transform
     // 世界平移语义（配合 shader `(world + u_translation) * u_scale`）：
     // world=中心 → 映射到画布中心；四周留 padding 像素
-    t.k = k
-    t.x = this.width / (2 * k) - (minX + maxX) / 2
-    t.y = this.height / (2 * k) - (minY + maxY) / 2
-    this.camera.reset()
-    this.onZoom?.(t)
+    const tx = this.width / (2 * k) - (minX + maxX) / 2
+    const ty = this.height / (2 * k) - (minY + maxY) / 2
+    const done = () => {
+      this.camera.reset()
+      this.onZoom?.(t)
+    }
+    // 目标与当前几乎一致 → 直接落位；否则平滑过渡
+    if (
+      !animate ||
+      (Math.abs(t.k - k) < 1e-4 &&
+        Math.abs(t.x - tx) < 1e-4 &&
+        Math.abs(t.y - ty) < 1e-4)
+    ) {
+      t.k = k
+      t.x = tx
+      t.y = ty
+      done()
+      return
+    }
+    this.animateTransform(
+      { k: t.k, x: t.x, y: t.y },
+      { k, x: tx, y: ty },
+      320,
+      done,
+    )
   }
 
   focusNode(nodeId: string): void {

@@ -534,8 +534,10 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
   private onPhysicsTick(simNodes: SimNode[]): void {
     const posMap = new Map<string, { x: number; y: number }>()
+    const simById = new Map<string, SimNode>()
     for (const sn of simNodes) {
       posMap.set(sn.id, { x: sn.x ?? 0, y: sn.y ?? 0 })
+      simById.set(sn.id, sn)
 
       // Sync back to model nodes
       const gn = this.nodeMap.get(sn.id)
@@ -549,31 +551,19 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
     this.renderer.updateNodePositions(posMap)
 
-    // Update link positions
-    const renderNodes = this.renderer.nodes
+    // 更新边端点：用 simById O(1) 查找（RenderLink 自带 sourceId/targetId），
+    // 避免此前每 tick 对 graphData 做 find → O(N×M) 卡顿（1000 节点/2000 边≈800万次/tick）
     const renderLinks = this.renderer.links
     for (const rl of renderLinks) {
-      const srcNode = renderNodes.find((n) => n.id === rl.id)
-      // Actually need to find by source/target. We store link data differently.
-      // Let's access the internal link data through the model.
-    }
-
-    // Simplified: update link endpoints from model
-    const { graphData } = this.model.getGraphModelData()
-    for (const rl of renderLinks) {
-      const link = graphData.links.find((l) => l.id === rl.id)
-      if (!link) continue
-      const sid = typeof link.source === "object" ? link.source.id : link.source
-      const tid = typeof link.target === "object" ? link.target.id : link.target
-      const sn = graphData.nodes.find((n) => n.id === sid)
-      const tn = graphData.nodes.find((n) => n.id === tid)
-      if (sn) {
-        rl.sourceX = sn.x ?? 0
-        rl.sourceY = sn.y ?? 0
+      const s = rl.sourceId ? simById.get(rl.sourceId) : undefined
+      const t = rl.targetId ? simById.get(rl.targetId) : undefined
+      if (s) {
+        rl.sourceX = s.x ?? 0
+        rl.sourceY = s.y ?? 0
       }
-      if (tn) {
-        rl.targetX = tn.x ?? 0
-        rl.targetY = tn.y ?? 0
+      if (t) {
+        rl.targetX = t.x ?? 0
+        rl.targetY = t.y ?? 0
       }
     }
   }
@@ -649,15 +639,13 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   }
 
   /**
-   * 一次性算法排布并 fitView（不等待物理引擎冷却）。
-   * 供 init 使用：数据载入后直接按算法铺开节点并收进视野。
+   * 进入图后排布并 fitView。
+   * 不再用 settle 同步 300 tick 立即冻结：改为 start() 启动异步冷却模拟，
+   * 让节点有动画地自然稳定（alpha 衰减到 alphaMin 后才停）。
+   * tree-layout 的 start() 仍是同步铺开（无动画），行为不变。
    */
-  settleLayout(iterations?: number): void {
-    if (this.layout.settle) {
-      this.layout.settle(iterations ?? 300)
-    } else {
-      this.layout.start()
-    }
+  settleLayout(_iterations?: number): void {
+    this.layout.start()
     // 容器尺寸可能尚未就绪（single-spa 挂载初期 height=0），下一帧再 fitView
     requestAnimationFrame(() => this.renderer.fitView(40))
   }

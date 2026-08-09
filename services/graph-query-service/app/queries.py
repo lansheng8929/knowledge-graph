@@ -436,3 +436,202 @@ def query_analyze(driver: Driver, req: m.AnalysisRequest) -> Dict[str, Any]:
         "items": results,
         "graphData": {"nodes": result_nodes, "links": result_links},
     }
+
+
+# ── 流式（Streaming，NDJSON 逐行：meta/node/link/done）─────────
+# 前端 ReadableStream 逐行解析 → 边收边增量渲染（方案 A）。
+# 每行 JSON：{"type": "meta", "total": N} / {"type": "node", "data": {...}}
+#           / {"type": "link", "data": {...}} / {"type": "done", "summary": {...}}
+
+
+def _stream_link(
+    sid: str, tid: str, rel_type: str, rel: Dict[str, Any]
+) -> Dict[str, Any]:
+    """把边关系组装成流式 link chunk 的 data 字段（init/expand 共用）。"""
+    link_id = rel.pop("id")
+    link_label = rel.pop("label", "")
+    link_time = rel.pop("time", "")
+    return {
+        "id": link_id,
+        "source": sid,
+        "target": tid,
+        "data": {
+            "linkType": rel_type,
+            "label": link_label,
+            "time": link_time,
+            "intimacy": rel.get("intimacy", 0.5),
+            "clusterId": rel.get("clusterId", ""),
+        },
+    }
+
+
+def query_init_stream(
+    driver: Driver, ids: List[str], subject: Optional[Dict[str, Any]] = None
+):
+    """流式 init：先 meta(total)；节点与边并行双游标交错 yield（同步出），最后 done。
+
+    - 节点一次性 `n.id IN $ids` 查询（替代逐 id 循环，大幅提速）；
+    - 边查询只依赖 ids（不依赖节点结果），与节点并行推进——边不再被排到最后。
+    """
+    total = len(ids)
+    yield {"type": "meta", "total": total}
+    if not ids:
+        yield {"type": "done", "summary": {"nodeCount": 0, "linkCount": 0}}
+        return
+
+    where, params = l3_conditions(subject or {}, "n")
+    node_count = 0
+    link_count = 0
+
+    def _next(it):
+        try:
+            return next(it)
+        except StopIteration:
+            return None
+
+    with driver.session() as node_session, driver.session() as link_session:
+        node_result = node_session.run(
+            f"MATCH (n) WHERE n.id IN $ids AND {where} RETURN n, labels(n) AS labels",
+            ids=ids,
+            **params,
+        )
+        link_result = link_session.run(
+            """
+            MATCH (a)-[r]->(b)
+            WHERE a.id IN $ids AND b.id IN $ids
+            RETURN a.id AS sid, b.id AS tid, type(r) AS relType, r AS rel
+            """,
+            ids=ids,
+        )
+        node_iter = iter(node_result)
+        link_iter = iter(link_result)
+
+        while True:
+            record = _next(node_iter)
+            if record is None:
+                # 节点已排空：继续排空剩余边
+                while True:
+                    rec = _next(link_iter)
+                    if rec is None:
+                        break
+                    link_count += 1
+                    yield {
+                        "type": "link",
+                        "data": _stream_link(
+                            rec["sid"], rec["tid"], rec["relType"], dict(rec["rel"])
+                        ),
+                    }
+                break
+            obj = node_to_obj(driver, record, subject)
+            if l3_visible(obj["data"], subject):
+                node_count += 1
+                # node 必须带外层 {id, data}，前端按 GraphNode 使用
+                yield {"type": "node", "data": obj}
+            # 每推一个节点，同步推一条边（节点/边交错到达）
+            rec = _next(link_iter)
+            if rec is not None:
+                link_count += 1
+                yield {
+                    "type": "link",
+                    "data": _stream_link(
+                        rec["sid"], rec["tid"], rec["relType"], dict(rec["rel"])
+                    ),
+                }
+
+        yield {
+            "type": "done",
+            "summary": {"nodeCount": node_count, "linkCount": link_count},
+        }
+
+
+def query_expand_stream(
+    driver: Driver,
+    req: m.ExpandRequest,
+    subject: Optional[Dict[str, Any]] = None,
+):
+    """流式 expand：先 yield meta(total)，再逐条 yield link/node，最后 done。"""
+    conds = parse_conditions(req.conditions)
+    normalized = normalize_conditions(conds)
+
+    if not normalized:
+        raise ValueError("No valid conditions")
+
+    query_parts: List[str] = []
+    all_params: Dict[str, Any] = {
+        "sourceId": req.sourceNodeId,
+        "existLinkIds": req.existingLinkIds,
+        "existNodeIds": req.existingNodeIds,
+    }
+
+    for ci, cond in enumerate(normalized):
+        match_clause = _build_match_clause(cond)
+        where_str = _build_where_clause(cond, all_params, ci, subject)
+        query_parts.append(
+            f"MATCH {match_clause}\nWHERE {where_str}\n"
+            f"RETURN r, startNode(r) AS relSource, endNode(r) AS relTarget, "
+            f"type(r) AS relType, "
+            f"labels(startNode(r)) AS sourceLabels, labels(endNode(r)) AS targetLabels"
+        )
+
+    combined_query = "\nUNION ALL\n".join(query_parts)
+
+    with driver.session() as session:
+        result = session.run(combined_query, all_params)
+        rows = list(result)
+        total = len(rows)
+        yield {"type": "meta", "total": total}
+
+        seen_node_ids: set = set(req.existingNodeIds)
+        link_count = 0
+        node_count = 0
+
+        for record in rows:
+            rel = dict(record["r"])
+            rel_type = record["relType"]
+            source_labels = record.get("sourceLabels", [])
+            target_labels = record.get("targetLabels", [])
+
+            source_node = dict(record["relSource"])
+            target_node = dict(record["relTarget"])
+            source_id = source_node.pop("id")
+            target_id = target_node.pop("id")
+
+            link_count += 1
+            yield {"type": "link", "data": _stream_link(source_id, target_id, rel_type, rel)}
+
+            node_label_map = {source_id: source_labels, target_id: target_labels}
+            for nid, ndata in [(source_id, source_node), (target_id, target_node)]:
+                if nid in seen_node_ids:
+                    continue
+                seen_node_ids.add(nid)
+                lbls = node_label_map.get(nid, [])
+                node_type = lbls[0] if lbls else "default"
+                masked = mask_sensitive(node_type, dict(ndata), subject)
+                extra_keys = [k for k in masked if k not in ("nodeType", "label", "icon")]
+                extra = {k: masked[k] for k in extra_keys}
+                node_neighbors = get_neighbor_summary(driver, nid)
+                candidate = {
+                    "id": nid,
+                    "data": {
+                        "nodeType": node_type,
+                        "label": masked.get("label", ""),
+                        "icon": masked.get("icon", ""),
+                        "count": 0,
+                        "total": 0,
+                        "neighbors": node_neighbors,
+                        **extra,
+                    },
+                }
+                if l3_visible(candidate["data"], subject):
+                    node_count += 1
+                    # node 必须带外层 {id, data}，前端按 GraphNode 使用
+                    yield {"type": "node", "data": candidate}
+
+        yield {
+            "type": "done",
+            "summary": {
+                "nodeCount": node_count,
+                "linkCount": link_count,
+                "total": total,
+            },
+        }

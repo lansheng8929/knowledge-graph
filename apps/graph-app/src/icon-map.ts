@@ -27,10 +27,15 @@ export function applyIcons(data: any): any {
   if (!Array.isArray(nodes)) return data
 
   for (const n of nodes) {
-    const key = n?.data?.icon
-    if (typeof key === "string" && ICON_MAP[key]) {
-      n.data.icon = ICON_MAP[key]
-    }
+    applyIcon(n)
   }
   return data
+}
+
+/** 为单个节点补齐 icon（流式逐条到达时用）。 */
+export function applyIcon(node: any): void {
+  const key = node?.data?.icon
+  if (typeof key === "string" && ICON_MAP[key] && node?.data != null) {
+    node.data.icon = ICON_MAP[key]
+  }
 }

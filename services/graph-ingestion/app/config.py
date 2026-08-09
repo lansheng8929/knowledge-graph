@@ -17,6 +17,10 @@ class Settings:
     neo4j_password: str = os.getenv("NEO4J_PASSWORD", "password123")
     max_pool_size: int = int(os.getenv("NEO4J_MAX_POOL_SIZE", "50"))
 
+    # ── 亲密度计算（v2 多维引擎，只读/可更新接口）────────
+    # 算法配置 JSON（见 docs/intimacy-pipeline-plan.md §9.4）；空 → 默认配置
+    intimacy_config_json: str = os.getenv("INTIMACY_CONFIG", "")
+
     # ── HTTP / CORS ────────────────────────────────────
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8003"))

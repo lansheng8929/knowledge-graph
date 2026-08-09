@@ -53,7 +53,7 @@ export interface PreviewData {
 export interface ImportTask {
   id: string
   filename: string
-  status: "pending" | "running" | "success" | "failed"
+  status: "pending" | "queued" | "running" | "success" | "failed"
   stage: string
   imported: number
   skipped: number

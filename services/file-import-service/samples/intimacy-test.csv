@@ -1,0 +1,5 @@
+id,source,target,linkType,label,amount
+e1,p1,p2,TRANSFER,转账1,90000
+e2,p1,p2,TRANSFER,转账2,10000
+e3,p1,p2,CALL,通话1,0
+e4,p3,p4,CALL,通话2,0

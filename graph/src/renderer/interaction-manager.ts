@@ -229,9 +229,10 @@ export class InteractionManager {
   private onWheel(e: WheelEvent): void {
     e.preventDefault()
     const pos = this.getPos(e)
-    const ratio = e.deltaY > 0 ? 0.9 : 1.1
+    // 减慢缩放：每格 5%（原 10%）；最小缩放 0.03（可缩得很远看全局；放大上限 10）
+    const ratio = e.deltaY > 0 ? 0.95 : 1.05
     const t = this.transform
-    const newK = Math.max(0.1, Math.min(10, t.k * ratio))
+    const newK = Math.max(0.03, Math.min(10, t.k * ratio))
 
     // 以鼠标所在世界坐标为中心缩放
     const worldX = (pos.x - t.x * t.k) / t.k

@@ -20,6 +20,7 @@ import {
   Download,
   GitBranch,
   ArrowBigLeft,
+  Magnet,
 } from "lucide-react"
 import SearchBox from "./SearchBox"
 import type { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
@@ -126,9 +127,11 @@ interface ToolbarProps {
   timePanelOpen: boolean
   filterPanelOpen: boolean
   tablePanelOpen: boolean
+  physicsPanelOpen: boolean
   onToggleTimePanel: () => void
   onToggleFilterPanel: () => void
   onToggleTablePanel: () => void
+  onTogglePhysicsPanel: () => void
   onExportJSON: () => void
   onExportCSV: () => void
   treeMode: boolean
@@ -149,9 +152,11 @@ export default function Toolbar({
   timePanelOpen,
   filterPanelOpen,
   tablePanelOpen,
+  physicsPanelOpen,
   onToggleTimePanel,
   onToggleFilterPanel,
   onToggleTablePanel,
+  onTogglePhysicsPanel,
   onExportJSON,
   onExportCSV,
   treeMode,
@@ -249,6 +254,14 @@ export default function Toolbar({
         activeColor="#e94560"
       >
         <Table size={14} />
+      </ToolbarButton>
+      <ToolbarButton
+        title="引力调节（亲密度→吸引力）"
+        onClick={onTogglePhysicsPanel}
+        active={physicsPanelOpen}
+        activeColor="#e94560"
+      >
+        <Magnet size={14} />
       </ToolbarButton>
 
       <span

@@ -37,7 +37,8 @@ export class Camera {
 
   /** Zoom toward a screen point */
   zoomTo(ratio: number, screenX: number, screenY: number): void {
-    const newK = Math.max(0.1, Math.min(10, this._state.k * ratio))
+    // 最小缩放 0.03（可缩得很远看全局；放大上限 10）
+    const newK = Math.max(0.03, Math.min(10, this._state.k * ratio))
     // Adjust translation so the screen point stays fixed
     const worldX = (screenX - this._state.x * this._state.k) / this._state.k
     const worldY = (screenY - this._state.y * this._state.k) / this._state.k
@@ -51,7 +52,7 @@ export class Camera {
     if (screenX !== undefined && screenY !== undefined) {
       this.zoomTo(k / this._state.k, screenX, screenY)
     } else {
-      this._state.k = Math.max(0.1, Math.min(10, k))
+      this._state.k = Math.max(0.03, Math.min(10, k))
     }
   }
 

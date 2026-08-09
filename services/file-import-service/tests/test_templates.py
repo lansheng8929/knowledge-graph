@@ -224,9 +224,9 @@ def test_cjk_identifier_allowed_by_validator():
 
 
 def test_task_store_list_ordering():
-    from app.tasks import TaskStore
+    from app.tasks import MemoryTaskStore
 
-    s = TaskStore()
+    s = MemoryTaskStore()
     a = s.create("a.csv")
     b = s.create("b.csv")
     lst = s.list()
@@ -281,3 +281,56 @@ def test_template_partial_match_surfaces_warning():
     # 实体规则未匹配 → 不位置兜底建实体
     assert body["entityCount"] == 0
     assert any("未匹配到实体表" in w for w in body["warnings"])
+
+
+# ── 历史任务可见性（组织管辖：上级看下级，跨租户亦然）───
+
+
+def test_task_visible_to_self_or_subordinate_across_tenant():
+    from app.tasks import ImportTask, task_visible_to
+
+    admin = {
+        "username": "admin",
+        "uid": "u-admin",
+        "tenantId": "default",
+        "roles": ["admin", "analyst", "privileged"],
+        # 组织树推导：含跨租户下级（u-other 属 other-tenant）
+        "subUids": ["u-analyst", "u-viewer", "u-other"],
+    }
+    # 下级（同租户）可见
+    t_sub = ImportTask(
+        id="t1", owner="analyst", owner_uid="u-analyst", tenant_id="default"
+    )
+    assert task_visible_to(t_sub, admin) is True
+    # 跨租户下级可见（组织管辖不受租户门限制）
+    t_cross_sub = ImportTask(
+        id="t2", owner="other", owner_uid="u-other", tenant_id="other-tenant"
+    )
+    assert task_visible_to(t_cross_sub, admin) is True
+    # 自己（即使属主被迁移到其它租户）可见
+    t_self = ImportTask(
+        id="t3", owner="admin", owner_uid="u-admin", tenant_id="other-tenant"
+    )
+    assert task_visible_to(t_self, admin) is True
+    # 非属主（既非自己、也非下级）不可见
+    t_stranger = ImportTask(
+        id="t4", owner="stranger", owner_uid="u-stranger", tenant_id="default"
+    )
+    assert task_visible_to(t_stranger, admin) is False
+
+
+def test_task_visible_to_non_subordinate_denied_even_same_tenant():
+    from app.tasks import ImportTask, task_visible_to
+
+    analyst = {
+        "username": "analyst",
+        "uid": "u-analyst",
+        "tenantId": "default",
+        "roles": ["analyst"],
+        "subUids": [],
+    }
+    t_other_same_tenant = ImportTask(
+        id="t1", owner="viewer", owner_uid="u-viewer", tenant_id="default"
+    )
+    # 同租户但非自己/下级 → 不可见
+    assert task_visible_to(t_other_same_tenant, analyst) is False

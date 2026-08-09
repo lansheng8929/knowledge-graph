@@ -27,6 +27,7 @@ import { graphApi } from "./api/client"
 import TimePanel from "./TimePanel"
 import FilterPanel from "./FilterPanel"
 import TablePanel from "./TablePanel"
+import PhysicsPanel from "./PhysicsPanel"
 
 // 计算节点各方向已加载的邻居数量（纯函数）
 function getLoadedNeighbors(
@@ -91,6 +92,11 @@ export default function App() {
       handleToggleSnapshotPanel,
       handleUndo,
       handleRedo,
+      // 亲密度→吸引力调节
+      physicsPanelOpen,
+      setPhysicsPanelOpen,
+      intimacyForceFns,
+      loadProgress,
     },
   } = graphApp
 
@@ -228,7 +234,10 @@ export default function App() {
     const view = viewRef.current
     if (!view) return
     if (treeMode) {
-      view.setLayout(new ForceSimulation(forceConfig))
+      // 重建力导向时带上当前亲密度→引力系数，切回后仍保持调节效果
+      view.setLayout(
+        new ForceSimulation({ ...forceConfig, ...intimacyForceFns }),
+      )
       setTreeMode(false)
     } else {
       const rootId =
@@ -236,7 +245,7 @@ export default function App() {
       view.setLayout(new TreeLayout({ rootId, levelGap: 170, siblingGap: 64 }))
       setTreeMode(true)
     }
-  }, [treeMode, selectedNodeIds])
+  }, [treeMode, selectedNodeIds, intimacyForceFns])
 
   const appCtx = {
     ...graphApp.ctx,
@@ -273,9 +282,11 @@ export default function App() {
             timePanelOpen={timePanelOpen}
             filterPanelOpen={filterPanelOpen}
             tablePanelOpen={tablePanelOpen}
+            physicsPanelOpen={physicsPanelOpen}
             onToggleTimePanel={() => setTimePanelOpen((v) => !v)}
             onToggleFilterPanel={() => setFilterPanelOpen((v) => !v)}
             onToggleTablePanel={() => setTablePanelOpen((v) => !v)}
+            onTogglePhysicsPanel={() => setPhysicsPanelOpen((v) => !v)}
             onExportJSON={() => handleExportSelection("json")}
             onExportCSV={() => handleExportSelection("csv")}
             treeMode={treeMode}
@@ -303,6 +314,19 @@ export default function App() {
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: "32px", marginBottom: "12px" }}>⟳</div>
                 <div>Loading graph data...</div>
+                {loadProgress && (
+                  <div
+                    style={{
+                      fontSize: "13px",
+                      marginTop: "8px",
+                      color: "rgb(var(--muted))",
+                    }}
+                  >
+                    {loadProgress.total != null
+                      ? `已加载 ${loadProgress.nodes}/${loadProgress.total} 节点 · ${loadProgress.links} 边`
+                      : `已加载 ${loadProgress.nodes} 节点 · ${loadProgress.links} 边`}
+                  </div>
+                )}
                 <div
                   style={{
                     fontSize: "12px",
@@ -439,6 +463,11 @@ export default function App() {
               />
             )}
 
+            {/* ─── 引力面板（亲密度→吸引力调节） ─── */}
+            {physicsPanelOpen && (
+              <PhysicsPanel onClose={() => setPhysicsPanelOpen(false)} />
+            )}
+
             <SelectionBar
               modelRef={modelRef}
               viewRef={viewRef}
@@ -490,6 +519,45 @@ export default function App() {
                   ⟳
                 </span>
                 <span>正在拓出...</span>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              </div>
+            )}
+
+            {/* ─── 流式加载进度（独立浮层，不挡画布可看见） ─── */}
+            {loadProgress && (
+              <div
+                style={{
+                  position: "fixed",
+                  bottom: 40,
+                  right: 20,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "rgb(var(--tooltip-bg) / 0.95)",
+                  border: "1px solid #7c3aed",
+                  borderRadius: 8,
+                  padding: "6px 12px",
+                  boxShadow: "var(--shadow)",
+                  zIndex: 9998,
+                  fontFamily: "monospace",
+                  fontSize: "12px",
+                  color: "rgb(var(--foreground))",
+                  pointerEvents: "none",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "14px",
+                    animation: "spin 1s linear infinite",
+                  }}
+                >
+                  ⟳
+                </span>
+                <span>
+                  {loadProgress.total != null
+                    ? `加载中 ${loadProgress.nodes}/${loadProgress.total} 节点 · ${loadProgress.links} 边`
+                    : `加载中 ${loadProgress.nodes} 节点 · ${loadProgress.links} 边`}
+                </span>
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               </div>
             )}

@@ -76,6 +76,33 @@ class IngestionClient:
             subject,
         )
 
+    def compute_intimacy(self, links: List[ParsedEdge]) -> Tuple[Dict, Dict]:
+        """调用 graph-ingestion 亲密度计算（只读，不写库；v2 配置驱动）。
+
+        把边的 props/time 一并传入，供 businessMetric/timeDecay 维度取值。
+
+        Returns:
+            (intimacies: {edge_id: 0~1}, stats: {edge_id: {...}})
+        """
+        edges = [
+            {
+                "id": l.id,
+                "source": l.source,
+                "target": l.target,
+                "linkType": l.linkType,
+                "props": l.props,
+                "time": l.time,
+            }
+            for l in links
+        ]
+        with httpx.Client(base_url=self.base_url, timeout=self.timeout) as client:
+            resp = client.post(
+                "/api/v1/ingest/compute-intimacy", json={"edges": edges}
+            )
+            resp.raise_for_status()
+        data = resp.json()["data"]
+        return data.get("intimacies", {}), data.get("stats", {})
+
     def _ingest(
         self,
         path: str,

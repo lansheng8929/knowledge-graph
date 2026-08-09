@@ -27,6 +27,8 @@ import { MetadataManager } from "@lansheng/knowledge-graph/meta-manager"
 import { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
 import type {
   GraphViewModel,
+  GraphNode,
+  GraphLink,
   DefaultGraphDataGenerics,
 } from "@lansheng/knowledge-graph/client/type"
 import {
@@ -36,22 +38,37 @@ import {
 } from "../expansion-service"
 import { useTheme } from "./useTheme"
 import { getPalette, type Theme } from "../theme"
-import { applyIcons } from "../icon-map"
+import { applyIcons, applyIcon } from "../icon-map"
 import { graphApi } from "../api/client"
 
 interface InitResponse {
   graphData: GraphViewModel<DefaultGraphDataGenerics>["graphData"]
 }
 
-async function fetchInitData(ids: string[]): Promise<InitResponse> {
-  const data = await graphApi.init(ids)
-  applyIcons(data.graphData)
-  return data as unknown as InitResponse
+// ── 亲密度→吸引力（边拉扯力）影响系数 ─────────────
+// linkDistanceFn：亲密越高 rest distance 越小（拉得越紧）
+// linkStrengthFn：亲密越高弹簧强度越大
+// influence 放大两个系数：越大，亲密对吸引力影响越强。
+const INTIMACY_INFLUENCE_DEFAULT = 1.2
+
+interface IntimacyLink {
+  intimacy?: number
 }
 
-const expansionFetcher: ExpansionFetcher = async (request) => {
-  const data = await graphApi.expand(request)
-  return applyIcons(data) as unknown as ExpansionResponse
+function buildIntimacyFns(influence: number) {
+  return {
+    linkDistanceFn: (link: IntimacyLink) => {
+      const i = link.intimacy
+      if (i === undefined) return undefined
+      // 影响系数越大，亲密边 rest distance 越小（下限 18px 防重叠）
+      return Math.max(18, 100 * (1.5 - i * (0.7 * influence)))
+    },
+    linkStrengthFn: (link: IntimacyLink) => {
+      const i = link.intimacy
+      if (i === undefined) return undefined
+      return 0.2 * (0.3 + i * (0.9 * influence))
+    },
+  }
 }
 
 export function useGraphApp(ids?: string[]) {
@@ -79,6 +96,194 @@ export function useGraphApp(ids?: string[]) {
     labels: string[]
   } | null>(null)
 
+  // ── 亲密度→吸引力影响系数（引力面板调节）────────
+  const [intimacyInfluence, setIntimacyInfluence] = useState(
+    INTIMACY_INFLUENCE_DEFAULT,
+  )
+  const [physicsPanelOpen, setPhysicsPanelOpen] = useState(false)
+  // init 流式加载进度（loading overlay 显示）
+  const [loadProgress, setLoadProgress] = useState<{
+    nodes: number
+    links: number
+    total?: number
+  } | null>(null)
+
+  // ── 流式图数据加载（方案 A：边查边收边渲染）──────
+
+  /** 流式 init：逐节点/边到达时增量 merge 进 model，最后返回完整数据。
+   *  边可能先于其端点节点到达（节点/边并行交错）——未就绪的边暂存 pending，
+   *  待端点节点到齐后再合并，避免 d3 forceLink 找不到节点抛错导致模拟中断。 */
+  const streamInitData = useCallback(
+    async (
+      ids: string[],
+      onProgress?: (p: {
+        nodes: number
+        links: number
+        total?: number
+      }) => void,
+    ) => {
+      const model = modelRef.current
+      const nodes: GraphNode[] = []
+      const links: GraphLink[] = []
+      const nodeIds = new Set<string>()
+      const pendingLinks: GraphLink[] = []
+      const BATCH = 300
+      let batchNodes: GraphNode[] = []
+      let batchLinks: GraphLink[] = []
+      let acc = 0
+      let total: number | undefined
+      const report = () =>
+        onProgress?.({ nodes: nodes.length, links: links.length, total })
+
+      const linkEnds = (l: GraphLink): [string, string] => {
+        const s = typeof l.source === "object" ? (l.source as any).id : l.source
+        const t = typeof l.target === "object" ? (l.target as any).id : l.target
+        return [String(s), String(t)]
+      }
+      const linkReady = (l: GraphLink): boolean => {
+        const [s, t] = linkEnds(l)
+        return nodeIds.has(s) && nodeIds.has(t)
+      }
+      // 把端点已到齐的暂存边移入当前批次
+      const drainPending = () => {
+        let i = pendingLinks.length
+        while (i--) {
+          const l = pendingLinks[i]
+          if (linkReady(l)) {
+            pendingLinks.splice(i, 1)
+            links.push(l)
+            batchLinks.push(l)
+          }
+        }
+      }
+
+      const flush = () => {
+        drainPending()
+        if (!batchNodes.length && !batchLinks.length) return
+        const cur = model.getGraphModelData().graphData
+        model.updateGraphData({
+          graphData: {
+            nodes: [...cur.nodes, ...batchNodes],
+            links: [...cur.links, ...batchLinks],
+          },
+        })
+        batchNodes = []
+        batchLinks = []
+      }
+
+      await graphApi.initStream(ids, (chunk) => {
+        if (chunk.type === "meta") {
+          total = chunk.total
+        } else if (chunk.type === "node") {
+          const n = chunk.data as unknown as GraphNode
+          applyIcon(n)
+          nodes.push(n)
+          nodeIds.add(n.id)
+          batchNodes.push(n)
+          drainPending()
+          viewRef.current?.fitView(50)
+        } else if (chunk.type === "link") {
+          const l = chunk.data as unknown as GraphLink
+          if (linkReady(l)) {
+            links.push(l)
+            batchLinks.push(l)
+          } else {
+            pendingLinks.push(l)
+          }
+          viewRef.current?.fitView(50)
+        }
+        if (++acc >= BATCH) {
+          acc = 0
+          flush()
+          report()
+        }
+      })
+      flush()
+      report()
+      return { graphData: { nodes, links } } as InitResponse
+    },
+    [],
+  )
+
+  /** 流式 expand：边收边 merge 进 model，最后返回完整拓出结果（供历史记录）。
+   *  同样延迟处理端点未到齐的边，避免 forceLink 找不到节点抛错。 */
+  const expansionFetcher: ExpansionFetcher = useCallback(async (request) => {
+    const model = modelRef.current
+    const view = viewRef.current
+    const nodes: ExpansionResponse["nodes"] = []
+    const links: ExpansionResponse["links"] = []
+    // 画布已有节点 + 本次流式收集的新节点（只增不减）
+    const knownIds = new Set<string>(
+      model.getGraphModelData().graphData.nodes.map((n) => n.id),
+    )
+    const pendingLinks: ExpansionResponse["links"] = []
+    const BATCH = 50
+    let batchNodes: ExpansionResponse["nodes"] = []
+    let batchLinks: ExpansionResponse["links"] = []
+    let acc = 0
+
+    const linkReady = (l: ExpansionResponse["links"][number]): boolean => {
+      const s = typeof l.source === "object" ? (l.source as any).id : l.source
+      const t = typeof l.target === "object" ? (l.target as any).id : l.target
+      return knownIds.has(String(s)) && knownIds.has(String(t))
+    }
+    const drainPending = () => {
+      let i = pendingLinks.length
+      while (i--) {
+        const l = pendingLinks[i]
+        if (linkReady(l)) {
+          pendingLinks.splice(i, 1)
+          links.push(l)
+          batchLinks.push(l)
+        }
+      }
+    }
+    const flush = () => {
+      drainPending()
+      if (!batchNodes.length && !batchLinks.length) return
+      const cur = model.getGraphModelData().graphData
+      const existNodeIds = new Set(cur.nodes.map((n) => n.id))
+      const existLinkIds = new Set(cur.links.map((l) => l.id))
+      const newNodes = batchNodes.filter((n) => !existNodeIds.has(n.id))
+      const newLinks = batchLinks.filter((l) => !existLinkIds.has(l.id))
+      if (newNodes.length || newLinks.length) {
+        model.updateGraphData({
+          graphData: {
+            nodes: [...cur.nodes, ...newNodes],
+            links: [...cur.links, ...newLinks],
+          },
+        })
+      }
+      batchNodes = []
+      batchLinks = []
+    }
+    await graphApi.expandStream(request, (chunk) => {
+      if (chunk.type === "node") {
+        const n = chunk.data as unknown as ExpansionResponse["nodes"][number]
+        applyIcon(n)
+        nodes.push(n)
+        knownIds.add(n.id)
+        batchNodes.push(n)
+        drainPending()
+      } else if (chunk.type === "link") {
+        const l = chunk.data as unknown as ExpansionResponse["links"][number]
+        if (linkReady(l)) {
+          links.push(l)
+          batchLinks.push(l)
+        } else {
+          pendingLinks.push(l)
+        }
+      }
+      if (++acc >= BATCH) {
+        acc = 0
+        flush()
+      }
+    })
+    flush()
+    view?.reheat(0.5)
+    return { nodes, links, total: nodes.length }
+  }, [])
+
   // ─── 初始化 GraphView / ExpansionService ──────
   useEffect(() => {
     if (!containerRef.current) return
@@ -97,17 +302,8 @@ export function useGraphApp(ids?: string[]) {
         linkStrength: 0.2,
         centerStrength: 0.1,
         velocityDecay: 0.4,
-        // 亲密度→物理拉扯力（在调用方外部定义）：亲密越高距离越近、强度越大
-        linkDistanceFn: (link) => {
-          const i = link.intimacy
-          if (i === undefined) return undefined
-          return 100 * (1.5 - i * 0.7)
-        },
-        linkStrengthFn: (link) => {
-          const i = link.intimacy
-          if (i === undefined) return undefined
-          return 0.2 * (0.3 + i * 0.9)
-        },
+        // 亲密度→物理拉扯力（影响系数默认 1.2，比原 0.7/0.9 更强，可经引力面板调节）
+        ...buildIntimacyFns(INTIMACY_INFLUENCE_DEFAULT),
       },
       theme: {
         node: {
@@ -188,10 +384,13 @@ export function useGraphApp(ids?: string[]) {
     const model = modelRef.current
     ;(async () => {
       try {
-        const initData = await fetchInitData(ids ?? [])
-        model.updateGraphData({ graphData: initData.graphData })
+        // 流式 init：边收边增量渲染（数据已写入 model），全部到达后一次性布局
+        setLoadProgress({ nodes: 0, links: 0 })
+        const initData = await streamInitData(ids ?? [], (p) =>
+          setLoadProgress(p),
+        )
+        setLoadProgress(null)
         // init：一次性算法排布并 fitView，不再等待物理引擎冷却
-        viewRef.current?.settleLayout()
         historyManagerRef.current.pushState({
           type: "init",
           description: "初始图谱",
@@ -204,7 +403,7 @@ export function useGraphApp(ids?: string[]) {
         setInitError(err instanceof Error ? err.message : String(err))
       }
     })()
-  }, [ids])
+  }, [ids, streamInitData])
 
   // ─── 快照操作 ─────────────────────────────────
   const handleTakeSnapshot = useCallback(() => {
@@ -274,6 +473,13 @@ export function useGraphApp(ids?: string[]) {
     setSnapshotPanelOpen((v) => !v)
   }, [])
 
+  /** 调节亲密度→吸引力影响系数并重排（引力面板滑块） */
+  const applyIntimacyInfluence = useCallback((influence: number) => {
+    setIntimacyInfluence(influence)
+    viewRef.current?.updatePhysics(buildIntimacyFns(influence))
+    viewRef.current?.reheat(0.5)
+  }, [])
+
   const restoreFromHistory = useCallback(
     (action: ReturnType<HistoryManager["goBackSkipType"]>) => {
       const model = modelRef.current
@@ -325,6 +531,9 @@ export function useGraphApp(ids?: string[]) {
     restoreFromHistory(state)
   }, [restoreFromHistory])
 
+  // 当前影响系数对应的亲密度力函数（树形切换重建力导向时复用）
+  const intimacyForceFns = buildIntimacyFns(intimacyInfluence)
+
   return {
     containerRef,
     modelRef,
@@ -352,6 +561,14 @@ export function useGraphApp(ids?: string[]) {
       handleToggleSnapshotPanel,
       handleUndo,
       handleRedo,
+      // 亲密度→吸引力调节
+      physicsPanelOpen,
+      setPhysicsPanelOpen,
+      intimacyInfluence,
+      applyIntimacyInfluence,
+      intimacyForceFns,
+      // init 流式进度
+      loadProgress,
     },
   }
 }

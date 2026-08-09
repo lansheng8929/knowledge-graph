@@ -13,19 +13,14 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from typing import Optional, Tuple
 
-from fastapi import (
-    BackgroundTasks,
-    FastAPI,
-    File,
-    Form,
-    HTTPException,
-    Request,
-    UploadFile,
-)
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models as m
@@ -37,6 +32,8 @@ from .permissions import (
     import_options,
     subject_from_request,
 )
+from .pipeline import PipelineAbort, SubtaskSpec, register_subtask, run_pipeline
+from .queue import TaskQueue, create_task_queue
 from .tasks import create_task_store, task_visible_to
 from .templates.engine import get_template, list_templates, parse_with_template
 from .validator import validate
@@ -44,13 +41,54 @@ from .writer import IngestionClient
 
 store = create_task_store(settings.task_store, settings.pg_dsn)
 
+# 默认主任务流水线：A 解析实体/边 → B 全库计算亲密度（未来可调步骤/入参/顺序）
+DEFAULT_STEPS = ["parse", "compute_intimacy"]
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    yield
+_TEMP_PREFIX = "kg-import-"
+
+
+def _temp_dir(task_id: str) -> str:
+    return os.path.join(tempfile.gettempdir(), f"{_TEMP_PREFIX}{task_id}")
+
+
+def _save_temp(task_id: str, name: str, raw: bytes) -> str:
+    """上传内容落临时文件（跨 worker/进程持久化，路径随任务 payload 存储）。"""
+    d = _temp_dir(task_id)
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, name)
+    with open(path, "wb") as f:
+        f.write(raw)
+    return path
+
+
+def _load_upload(spec: Optional[dict]) -> Optional[Tuple[str, bytes]]:
+    """从 payload 的 {name,path} 恢复上传文件 (name, bytes)。"""
+    if not spec:
+        return None
+    with open(spec["path"], "rb") as f:
+        raw = f.read()
+    return (spec.get("name", ""), raw)
+
+
+def _cleanup_temp(task_id: str) -> None:
+    shutil.rmtree(_temp_dir(task_id), ignore_errors=True)
 
 
 def create_app() -> FastAPI:
+    # 全局串行队列（lifespan 启动 worker；上传请求经 enqueue 入队）
+    queue: Optional[TaskQueue] = None
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        nonlocal queue
+        queue = create_task_queue(settings.task_store, settings.pg_dsn, run_main_task)
+        # try/finally：即使运行期抛异常，退出时也保证 stop worker、释放锁
+        try:
+            queue.start()
+            yield
+        finally:
+            queue.stop()
+
     app = FastAPI(
         title="Knowledge Graph File Import Service",
         version=settings.service_version,
@@ -176,62 +214,130 @@ def create_app() -> FastAPI:
 
     app.add_api_route("/api/v1/import/preview", preview, methods=["POST"])
 
-    # ── 导入（后台任务）───────────────────────────────
+    # ── 导入（主任务 + 子任务流水线）───────────────────
 
-    def _run_import(
-        task_id: str,
-        entities: Optional[Tuple[str, bytes]],
-        edges: Optional[Tuple[str, bytes]],
-        config_str: Optional[str],
-        template_id: Optional[str],
-        subject_raw: str,
-        subject: dict,
-        authenticated: bool,
-    ) -> None:
+    # 子任务 A：解析实体和边（文件 → ParsedGraph，不写库）
+    def subtask_parse(ctx, p):
+        store = ctx["store"]
+        task_id = ctx["task_id"]
         store.set_stage(task_id, "parsing")
+        cfg = m.parse_config(p.get("config_str"))
+        subject = p.get("subject") or {}
+        authenticated = bool(p.get("authenticated", False))
+        tag_data = cfg.tags.model_dump()
+        tag_errors = check_tags_permitted(tag_data, subject, authenticated)
+        if tag_errors:
+            raise PipelineAbort("permission denied: " + "; ".join(tag_errors))
+        # 属主 uid 由服务端注入（不可由客户端伪造），供“内部=自己及下级”可见性匹配
+        tag_data["ownerUid"] = str(subject.get("uid", ""))
+        cfg.tags = m.TagConfig(**tag_data)
+        entities = _load_upload(p.get("entities"))
+        edges = _load_upload(p.get("edges"))
+        tables, twarn = _parse_uploaded(entities, edges, cfg, p.get("template_id"))
+        graph = map_tables(tables, cfg)
+        graph.warnings = twarn + graph.warnings
+        result = validate(graph, cfg)
+        store.set_entity_ids(task_id, [e.id for e in result.entities])
+        if result.errors:
+            raise PipelineAbort(
+                message="; ".join(result.errors[:5]),
+                errors=result.errors,
+                skipped=result.skipped,
+                warnings=result.warnings,
+            )
+        # A 完成：实体+边作为入参直接传给下一个子任务（B）
+        return {"graph": result, "cfg": cfg}
+
+    # 子任务 B：把实体和边在全库计算亲密度，并写库
+    def subtask_compute_intimacy(ctx, p):
+        store = ctx["store"]
+        task_id = ctx["task_id"]
+        store.set_stage(task_id, "writing")
+        graph = p["graph"]
+        cfg = p["cfg"]
+        tags = cfg.tags.model_dump()
+        subject_raw = p.get("subject_raw", "")
+        base = settings.intimacy_base_url or settings.ingestion_base_url
+        client = IngestionClient(base)
+        # B 核心：在全库计算亲密度（graph-ingestion 只读接口，v2 配置驱动），结果随边写入 props
+        if settings.intimacy_mode != "off" and graph.edges:
+            intimacies, _stats = client.compute_intimacy(graph.edges)
+            for e in graph.edges:
+                if e.id in intimacies:
+                    e.props["intimacy"] = intimacies[e.id]
+        imp_n, skip_n, err_n = client.ingest_nodes(
+            graph.entities, tags, chunk=settings.write_chunk, subject=subject_raw
+        )
+        imp_l, skip_l, err_l = client.ingest_links(
+            graph.edges, tags, chunk=settings.write_chunk, subject=subject_raw
+        )
+        return {
+            "imported": imp_n + imp_l,
+            # skipped 需包含 A 阶段 validate 跳过的行（如悬空边）+ 写库跳过的
+            "skipped": graph.skipped + skip_n + skip_l,
+            "errors": err_n + err_l,
+        }
+
+    # 注册子任务（未来新增子任务/调整顺序只需改注册表与 DEFAULT_STEPS）
+    register_subtask(
+        SubtaskSpec(
+            name="parse",
+            description="解析实体和边（文件 → ParsedGraph）",
+            inputs=[
+                "entities",
+                "edges",
+                "config_str",
+                "template_id",
+                "subject_raw",
+                "subject",
+                "authenticated",
+            ],
+            fn=subtask_parse,
+        )
+    )
+    register_subtask(
+        SubtaskSpec(
+            name="compute_intimacy",
+            description="在全库计算亲密度并写库",
+            inputs=["graph", "cfg", "subject_raw"],
+            fn=subtask_compute_intimacy,
+        )
+    )
+
+    # 主任务执行器：从队列取出后，串行执行主任务的子任务流水线
+    def run_main_task(task_id: str) -> None:
+        task = store.get(task_id)
+        if task is None:
+            return
+        ctx = {"store": store, "settings": settings, "task_id": task_id}
+        payload = dict(task.payload)
+        steps = list(task.steps) or list(DEFAULT_STEPS)
+
+        def on_step(name: str, status: str, detail: str = "") -> None:
+            if status == "running":
+                store.set_current_step(task_id, name)
+            else:
+                store.update_subtask(task_id, name, status, detail)
+
         try:
-            cfg = m.parse_config(config_str)
-            tag_data = cfg.tags.model_dump()
-            tag_errors = check_tags_permitted(tag_data, subject, authenticated)
-            if tag_errors:
-                store.fail(
-                    task_id,
-                    "permission denied: " + "; ".join(tag_errors),
-                )
-                return
-            # 属主 uid 由服务端注入（不可由客户端伪造），供“内部=自己及下级”可见性匹配
-            tag_data["ownerUid"] = str(subject.get("uid", ""))
-            cfg.tags = m.TagConfig(**tag_data)
-            tables, twarn = _parse_uploaded(entities, edges, cfg, template_id)
-            graph = map_tables(tables, cfg)
-            graph.warnings = twarn + graph.warnings
-            result = validate(graph, cfg)
-            store.set_entity_ids(task_id, [e.id for e in result.entities])
-            if result.errors:
-                store.finish(task_id, 0, result.skipped, result.warnings, result.errors)
-                return
-            store.set_stage(task_id, "writing")
-            client = IngestionClient(settings.ingestion_base_url)
-            tags = cfg.tags.model_dump()
-            imp_n, skip_n, err_n = client.ingest_nodes(
-                result.entities, tags, chunk=settings.write_chunk, subject=subject_raw
-            )
-            imp_l, skip_l, err_l = client.ingest_links(
-                result.edges, tags, chunk=settings.write_chunk, subject=subject_raw
-            )
+            final = run_pipeline(steps, ctx, payload, on_step=on_step)
             store.finish(
                 task_id,
-                imp_n + imp_l,
-                result.skipped + skip_n + skip_l,
-                result.warnings,
-                result.errors + err_n + err_l,
+                final.get("imported", 0),
+                final.get("skipped", 0),
+                final.get("warnings", []),
+                final.get("errors", []),
             )
+        except PipelineAbort as e:
+            # 业务性中止（权限/校验失败）：按失败但可展示的报告 finish
+            store.finish(task_id, 0, e.skipped, e.warnings, e.errors)
         except Exception as e:  # noqa: BLE001
             store.fail(task_id, str(e))
+        finally:
+            _cleanup_temp(task_id)
 
     async def import_files(
         request: Request,
-        background: BackgroundTasks,
         file: Optional[UploadFile] = File(None),
         config: Optional[str] = Form(None),
         template_id: Optional[str] = Form(None),
@@ -241,23 +347,26 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="require a file")
         subject_raw = request.headers.get("X-User-Context", "")
         subject, authenticated = subject_from_request(request)
+        # 创建主任务（含子任务流水线步骤）→ 入全局串行队列
         task = store.create(
             filename=ent[0],
             owner=str(subject.get("username", "")),
             owner_uid=str(subject.get("uid", "")),
             tenant_id=str(subject.get("tenantId", "default")),
+            steps=list(DEFAULT_STEPS),
         )
-        background.add_task(
-            _run_import,
-            task.id,
-            ent,
-            None,
-            config,
-            template_id,
-            subject_raw,
-            subject,
-            authenticated,
-        )
+        ent_path = _save_temp(task.id, "entities", ent[1])
+        payload = {
+            "entities": {"name": ent[0], "path": ent_path},
+            "edges": None,
+            "config_str": config,
+            "template_id": template_id,
+            "subject_raw": subject_raw,
+            "subject": dict(subject),
+            "authenticated": authenticated,
+        }
+        store.set_payload(task.id, payload)
+        queue.enqueue(task)
         return {"success": True, "data": {"taskId": task.id}}
 
     app.add_api_route("/api/v1/import/files", import_files, methods=["POST"])

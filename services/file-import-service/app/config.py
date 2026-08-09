@@ -14,6 +14,14 @@ class Settings:
     # ── graph-ingestion 写入口（唯一写通道）────────────
     ingestion_base_url: str = os.getenv("INGESTION_BASE_URL", "http://localhost:8003")
 
+    # ── 亲密度计算（B 子任务，复用 graph-ingestion 只读接口）──
+    # off=跳过计算（写库不带 intimacy，读取端兜底 0.5）| count | weighted
+    intimacy_mode: str = os.getenv("INTIMACY_MODE", "count")
+    # 亲密度计算服务地址；缺省复用 ingestion_base_url（同属 graph-ingestion）
+    intimacy_base_url: str = os.getenv("INTIMACY_BASE_URL", "")
+    # 计算/写库批量大小
+    intimacy_chunk: int = int(os.getenv("INTIMACY_CHUNK", "500"))
+
     # ── 主体鉴权（dev 直连兜底：无网关 X-User-Context 时校验 JWT）──
     # 与 auth-service 的 AUTH_SECRET 保持一致
     auth_secret: str = os.getenv("AUTH_SECRET", "dev-secret-change-me")

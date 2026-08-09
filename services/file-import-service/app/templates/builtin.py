@@ -75,5 +75,9 @@ BUILTIN_TEMPLATES = [
         "description": "按标准表头 id|nodeType|label / source|target|linkType 直配，兼容已有格式",
         "format": "excel",
         "default": False,
+        "config": {
+            "dangling": "auto-create",
+            "danglingNodeType": "person",
+        },
     },
 ]

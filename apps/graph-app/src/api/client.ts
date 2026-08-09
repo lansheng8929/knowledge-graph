@@ -55,9 +55,77 @@ async function request<T>(
   return json.data
 }
 
+/** 流式分块（NDJSON 行）：meta/node/link/done。 */
+export interface StreamChunk {
+  type: "meta" | "node" | "link" | "done"
+  data?: Record<string, unknown>
+  total?: number
+  summary?: { nodeCount: number; linkCount: number; total?: number }
+}
+
+/**
+ * 流式 NDJSON 请求：ReadableStream 逐行解析，每行回调 onChunk。
+ * 用于 init/expand 边查边发、前端边收边增量渲染。
+ */
+async function streamRequest(
+  path: string,
+  body: unknown,
+  onChunk: (chunk: StreamChunk) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  }
+  if (authToken) headers["Authorization"] = `Bearer ${authToken}`
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+    signal,
+  })
+  if (!res.ok) {
+    const errBody = await res.text()
+    throw new Error(`API ${path} failed (${res.status}): ${errBody}`)
+  }
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let buf = ""
+  let linesSinceYield = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let nl: number
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim()
+      buf = buf.slice(nl + 1)
+      if (!line) continue
+      try {
+        onChunk(JSON.parse(line) as StreamChunk)
+      } catch {
+        /* 跳过坏行 */
+      }
+      // 周期性让出事件循环（宏任务）：同步逐行解析会阻塞 d3 物理模拟的 timer，
+      // 导致流式期间节点静止堆中心；让出后物理引擎每批行都能推进几帧，节点边收边被推动散开。
+      if (++linesSinceYield >= 100) {
+        linesSinceYield = 0
+        await new Promise((r) => setTimeout(r))
+      }
+    }
+  }
+}
+
 export const graphApi = {
   init(ids: string[]): Promise<InitData> {
     return request<InitData>("/graph/init", { ids })
+  },
+  /** 流式 init：边查边发，onChunk 收到 meta/node/link/done */
+  initStream(
+    ids: string[],
+    onChunk: (c: StreamChunk) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return streamRequest("/graph/init/stream", { ids }, onChunk, signal)
   },
   search(
     query: string,
@@ -68,6 +136,14 @@ export const graphApi = {
   },
   expand(body: ApiExpandRequest): Promise<ApiPageResult> {
     return request<ApiPageResult>("/graph/expand", body)
+  },
+  /** 流式 expand：先 meta(total) 后逐条 node/link，最后 done */
+  expandStream(
+    body: ApiExpandRequest,
+    onChunk: (c: StreamChunk) => void,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return streamRequest("/graph/expand/stream", body, onChunk, signal)
   },
   analyze(
     body: Record<string, unknown>,

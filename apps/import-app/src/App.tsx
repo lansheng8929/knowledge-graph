@@ -21,6 +21,7 @@ import type {
 // 后端返回的英文状态 → 前端中文显示
 const STATUS_TEXT: Record<string, string> = {
   pending: "排队中",
+  queued: "排队中",
   running: "进行中",
   success: "成功",
   failed: "失败",
@@ -692,7 +693,7 @@ function TasksView(props: { taskIds: string[] }) {
                   已导入 {t?.imported ?? "—"} · 跳过 {t?.skipped ?? "—"} · 错误{" "}
                   {t?.error_count ?? "—"}
                 </span>
-                {t && t.entity_ids?.length ? (
+                {t && t.status === "success" && t.entity_ids?.length ? (
                   <button
                     className="kg-btn kg-btn-ghost kg-btn-sm"
                     onClick={() => openGraph(t.entity_ids)}
@@ -765,7 +766,9 @@ function TasksView(props: { taskIds: string[] }) {
                       <span className="kg-task-ops">
                         <button
                           className="kg-btn kg-btn-ghost kg-btn-sm"
-                          disabled={!t.entity_ids?.length}
+                          disabled={
+                            t.status !== "success" || !t.entity_ids?.length
+                          }
                           onClick={() => openGraph(t.entity_ids)}
                         >
                           查看

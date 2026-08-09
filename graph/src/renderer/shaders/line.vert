@@ -38,7 +38,8 @@ void main() {
   vec2 dir = tlen > 0.001f ? tangent / tlen : normalize(p2 - p0);
   vec2 norm = vec2(-dir.y, dir.x);
 
-  float halfW = a_width * u_scale * 0.5f + 0.4f;
+  // 最小屏幕宽度降到 0.2（原 0.4）：缩小视图时线更细，不显粗
+  float halfW = a_width * u_scale * 0.5f + 0.2f;
   pos += norm * side * halfW;
 
   vec2 clipSpace = (pos / u_resolution) * 2.0f - 1.0f;

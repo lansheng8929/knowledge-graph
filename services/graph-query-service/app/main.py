@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from neo4j import GraphDatabase
 from neo4j import exceptions as neo4j_exc
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -241,6 +241,57 @@ def create_app() -> FastAPI:
                 methods=["POST"],
                 response_model=resp_model,
             )
+
+    # ── 流式端点（NDJSON，方案 A：边查边发）────────────
+    # 每行 JSON：meta/node/link/done。前端 ReadableStream 逐行解析 → 边收边增量渲染。
+
+    def _ndjson(gen):
+        for row in gen:
+            yield json.dumps(row, ensure_ascii=False) + "\n"
+
+    def init_graph_stream(req: m.InitRequest, request: Request) -> StreamingResponse:
+        driver = request.app.state.driver
+        subject = subject_from_request(request)
+        _l2_check(subject, "init")
+        return StreamingResponse(
+            _ndjson(q.query_init_stream(driver, req.ids, subject)),
+            media_type="application/x-ndjson",
+        )
+
+    def expand_graph_stream(req: m.ExpandRequest, request: Request) -> StreamingResponse:
+        driver = request.app.state.driver
+        subject = subject_from_request(request)
+        _l2_check(subject, "expand")
+        # T2.1.4：规则白名单校验（同非流式）
+        if _rule_client is not None and req.ruleId and req.ruleId != "__custom__":
+            try:
+                vr = _rule_client.validate(req.ruleId, req.conditions)
+                if not vr.valid:
+                    detail = "; ".join(vr.errors) or "conditions rejected by rule"
+                    raise HTTPException(status_code=400, detail=detail)
+            except RuleServiceUnavailable as e:
+                print(f"[rule-client] rule service unavailable, fallback to local: {e}")
+
+        def gen():
+            try:
+                for row in q.query_expand_stream(driver, req, subject):
+                    yield json.dumps(row, ensure_ascii=False) + "\n"
+            finally:
+                audit(
+                    subject=subject.get("uid", "unknown"),
+                    resource=req.ruleId or "__custom__",
+                    action="expand",
+                    decision="allow",
+                    reason="stream",
+                )
+
+        return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+    app.add_api_route("/api/v1/graph/init/stream", init_graph_stream, methods=["POST"])
+    app.add_api_route("/api/v1/graph/expand/stream", expand_graph_stream, methods=["POST"])
+    if settings.enable_legacy_routes:
+        app.add_api_route("/api/graph/init/stream", init_graph_stream, methods=["POST"])
+        app.add_api_route("/api/graph/expand/stream", expand_graph_stream, methods=["POST"])
 
     return app
 

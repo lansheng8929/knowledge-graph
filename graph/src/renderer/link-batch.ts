@@ -53,6 +53,10 @@ export class LinkBatchRenderer {
   private uArrowPickTranslation: WebGLUniformLocation | null = null
   private uArrowPickScale: WebGLUniformLocation | null = null
 
+  // 动态 instanced buffer 缓存（按 attrib loc 复用，避免每帧 createBuffer 泄漏 + GC 卡顿）
+  private _dynBufs = new Map<number, WebGLBuffer>()
+  private _dynBufSizes = new Map<number, number>()
+
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl
     this.lineProgram = this.compile(LINE_VS, LINE_FS)
@@ -301,7 +305,7 @@ export class LinkBatchRenderer {
       arrowSizeData[i] = l.arrowSize ?? Math.max(6, l.width * 16 + 4)
     }
 
-    // ── 逐条绘制线段（三角带） ──
+    // ── 批量绘制线段（一次 instanced draw；避免逐条 2000+ draw call 拖低帧率） ──
     gl.useProgram(this.lineProgram)
     gl.uniform2f(this.uLineResolution, width, height)
     gl.uniform2f(this.uLineTranslation, tx, ty)
@@ -309,18 +313,16 @@ export class LinkBatchRenderer {
     gl.uniform1f(this.uLineZOffset, zOffset)
     gl.bindVertexArray(this.lineVao)
 
-    for (let i = 0; i < N; i++) {
-      this.instancedSingle(1, srcData[i * 2], srcData[i * 2 + 1])
-      this.instancedSingle(2, midData[i * 2], midData[i * 2 + 1])
-      this.instancedSingle(3, tgtData[i * 2], tgtData[i * 2 + 1])
-      this.instancedSingle4(4, colorData, i * 4)
-      this.instancedSingle1(5, widthData[i])
-
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, this._lineVerts, 1)
-    }
+    this.instancedAttrib(1, srcData, 2)
+    this.instancedAttrib(2, midData, 2)
+    this.instancedAttrib(3, tgtData, 2)
+    this.instancedAttrib(4, colorData, 4)
+    this.instancedAttrib(5, widthData, 1)
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, this._lineVerts, N)
     for (let loc = 1; loc <= 5; loc++) gl.vertexAttribDivisor(loc, 0)
+    gl.bindVertexArray(null)
 
-    // ── 逐条绘制箭头（关闭混合，避免半透明叠加） ──
+    // ── 批量绘制箭头（关闭混合，避免半透明叠加） ──
     if (showArrows) {
       gl.useProgram(this.arrowProgram)
       gl.uniform2f(this.uArrowResolution, width, height)
@@ -330,17 +332,15 @@ export class LinkBatchRenderer {
 
       gl.disable(gl.BLEND)
 
-      for (let i = 0; i < N; i++) {
-        this.instancedSingle(1, arrowTipData[i * 2], arrowTipData[i * 2 + 1])
-        this.instancedSingle(2, arrowDirData[i * 2], arrowDirData[i * 2 + 1])
-        this.instancedSingle4(3, colorData, i * 4)
-        this.instancedSingle1(4, arrowSizeData[i])
-
-        gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 1)
-      }
+      this.instancedAttrib(1, arrowTipData, 2)
+      this.instancedAttrib(2, arrowDirData, 2)
+      this.instancedAttrib(3, colorData, 4)
+      this.instancedAttrib(4, arrowSizeData, 1)
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, N)
       for (let loc = 1; loc <= 4; loc++) gl.vertexAttribDivisor(loc, 0)
 
       gl.enable(gl.BLEND)
+      gl.bindVertexArray(null)
     }
 
     gl.bindVertexArray(null)
@@ -464,9 +464,7 @@ export class LinkBatchRenderer {
     comps: number,
   ): void {
     const gl = this.gl
-    const buf = gl.createBuffer()!
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    this.uploadDynamic(loc, data)
     gl.enableVertexAttribArray(loc)
     gl.vertexAttribPointer(loc, comps, gl.FLOAT, false, 0, 0)
     gl.vertexAttribDivisor(loc, 1)
@@ -494,12 +492,33 @@ export class LinkBatchRenderer {
     comps: number,
   ): void {
     const gl = this.gl
-    const buf = gl.createBuffer()!
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    this.uploadDynamic(loc, data)
     gl.enableVertexAttribArray(loc)
     gl.vertexAttribPointer(loc, comps, gl.FLOAT, false, 0, 0)
     gl.vertexAttribDivisor(loc, 1)
+  }
+
+  /** 复用动态 buffer：首次 createBuffer，之后 bufferSubData（尺寸不够才重建） */
+  private uploadDynamic(loc: number, data: Float32Array): void {
+    const gl = this.gl
+    const bytes = data.byteLength
+    let buf = this._dynBufs.get(loc) ?? null
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+    if (buf === null) {
+      buf = gl.createBuffer()!
+      this._dynBufs.set(loc, buf)
+      this._dynBufSizes.set(loc, bytes)
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+      return
+    }
+    const prev = this._dynBufSizes.get(loc) ?? 0
+    if (bytes > prev) {
+      this._dynBufSizes.set(loc, bytes)
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    } else {
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data)
+    }
   }
 
   destroy(): void {

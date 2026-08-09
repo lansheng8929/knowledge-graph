@@ -34,6 +34,10 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
   // Shared quad geometry (unit square centered at origin)
   private quadVao: WebGLVertexArrayObject | null = null
 
+  // 动态 instanced buffer 缓存（复用，避免每帧 createBuffer 泄漏 + GC 卡顿）
+  private _dynBufs = new Map<number, WebGLBuffer>()
+  private _dynBufSizes = new Map<number, number>()
+
   // Uniform locations (render)
   private uResolution: WebGLUniformLocation | null = null
   private uTranslation: WebGLUniformLocation | null = null
@@ -287,12 +291,33 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
     components: number,
   ): void {
     const gl = this.gl
-    const buf = gl.createBuffer()!
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    this.uploadDynamic(loc, data)
     gl.enableVertexAttribArray(loc)
     gl.vertexAttribPointer(loc, components, gl.FLOAT, false, 0, 0)
     gl.vertexAttribDivisor(loc, 1)
+  }
+
+  /** 复用动态 buffer：首次 createBuffer，之后 bufferSubData（尺寸不够才重建） */
+  private uploadDynamic(loc: number, data: Float32Array): void {
+    const gl = this.gl
+    const bytes = data.byteLength
+    let buf = this._dynBufs.get(loc) ?? null
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+    if (buf === null) {
+      buf = gl.createBuffer()!
+      this._dynBufs.set(loc, buf)
+      this._dynBufSizes.set(loc, bytes)
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+      return
+    }
+    const prev = this._dynBufSizes.get(loc) ?? 0
+    if (bytes > prev) {
+      this._dynBufSizes.set(loc, bytes)
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    } else {
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, data)
+    }
   }
 
   destroy(): void {
