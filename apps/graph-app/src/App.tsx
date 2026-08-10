@@ -210,7 +210,9 @@ export default function App() {
     viewRef.current?.fitView(50)
   }, [])
 
-  const handleBack = useCallback(() => {}, [])
+  const handleBack = useCallback(() => {
+    window.history.back()
+  }, [])
 
   // 导出选中子图（JSON 全量 / CSV 表格）
   const handleExportSelection = useCallback(
