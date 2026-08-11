@@ -542,6 +542,8 @@ export class ConnGraphView<
     }
 
     this.model.events.publish("nodeHover", node)
+    // 画布冷却时手动触发一次重绘，让悬浮样式即时显示
+    this.requestRedraw()
   }
 
   /**
@@ -554,6 +556,8 @@ export class ConnGraphView<
     if (!node) return
     this.actions.selectNode(String(node.id))
     this.model.events.publish("nodeClick", node)
+    // 画布冷却时手动触发一次重绘，让选中样式即时显示
+    this.requestRedraw()
   }
 
   /**
@@ -646,6 +650,8 @@ export class ConnGraphView<
     }
 
     this.model.events.publish("linkHover", { link, previousLink })
+    // 画布冷却时手动触发一次重绘，让连线悬浮样式即时显示
+    this.requestRedraw()
   }
 
   private handleRenderFramePost({
@@ -674,6 +680,20 @@ export class ConnGraphView<
       globalScale,
       cache: this.model.getGraphModelData(),
     })
+  }
+
+  /**
+   * 请求一次重绘（仅下一帧）。
+   *
+   * 保留 autoPauseRedraw=true（引擎停止后自动暂停重绘）以优化性能时，
+   * 状态变更（选中/悬浮/高亮等）不会自动反映到画布。这里通过重新设置一个
+   * 会触发 notifyRedraw 的属性（nodeCanvasObject），令 force-graph 的
+   * needsRedraw=true 并在下一帧重绘一次——与拖动画布触发重绘是同一机制，
+   * 但不会重新启动物理布局（节点不移动），也不会产生持续的性能开销。
+   */
+  private requestRedraw() {
+    if (!this.forceGraph) return
+    this.forceGraph.nodeCanvasObject(this.renderNode)
   }
 
   private handleCanvasZoom(transform: { k: number; x: number; y: number }) {
