@@ -1,15 +1,6 @@
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  person: "人员",
-  phone: "手机号",
-  address: "地址",
-  account: "账户",
-  company: "公司",
-  ip: "IP地址",
-  device: "设备",
-}
+import { nodeTypeLabel } from "./i18n"
 
 interface NodeTooltipProps {
   loadedNeighbors: Record<string, { out: number; in: number }>
@@ -65,7 +56,7 @@ export function NodeTooltip({ loadedNeighbors }: NodeTooltipProps) {
           marginBottom: 6,
         }}
       >
-        {NODE_TYPE_LABELS[node.data?.nodeType ?? ""] ?? node.data?.nodeType}
+        {nodeTypeLabel(node.data?.nodeType)}
         {" · "}
         {neighborCount} 类关联 · 共 {totalConnected} 条
       </div>
@@ -90,7 +81,7 @@ export function NodeTooltip({ loadedNeighbors }: NodeTooltipProps) {
               <span
                 style={{ color: "rgb(var(--foreground))", fontWeight: "bold" }}
               >
-                {NODE_TYPE_LABELS[type] ?? type}
+                {nodeTypeLabel(type)}
               </span>
               <span
                 style={{

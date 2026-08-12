@@ -1,19 +1,7 @@
 import { PanelContainer, PanelLayer } from "./panel"
 import { useTheme } from "./hooks/useTheme"
 import { getPalette } from "./theme"
-
-// ─── 中文标签映射 ─────────────────────────────────
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  person: "人员",
-  phone: "手机号",
-  address: "地址",
-  account: "账户",
-  company: "公司",
-  ip: "IP地址",
-  device: "设备",
-  default: "默认",
-}
+import { nodeTypeLabel } from "./i18n"
 
 interface LegendPanelProps {
   onClose: () => void
@@ -83,7 +71,7 @@ export default function LegendPanel({ onClose }: LegendPanelProps) {
                 flexShrink: 0,
               }}
             />
-            <span>{NODE_TYPE_LABELS[type] ?? type}</span>
+            <span>{nodeTypeLabel(type)}</span>
           </div>
         ))}
       </div>

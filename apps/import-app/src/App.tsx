@@ -17,32 +17,13 @@ import type {
   PreviewData,
   View,
 } from "./types"
-
-// 后端返回的英文状态 → 前端中文显示
-const STATUS_TEXT: Record<string, string> = {
-  pending: "排队中",
-  queued: "排队中",
-  running: "进行中",
-  success: "成功",
-  failed: "失败",
-}
-const STAGE_TEXT: Record<string, string> = {
-  parsing: "解析",
-  validating: "校验",
-  writing: "写入",
-  done: "完成",
-}
-const VISIBILITY_LABELS: Record<string, string> = {
-  public: "公开",
-  internal: "内部",
-  private: "仅本人",
-}
-const CLASSIFICATION_OPTIONS = [
-  { value: 0, label: "公开" },
-  { value: 1, label: "内部" },
-  { value: 2, label: "秘密" },
-  { value: 3, label: "机密" },
-]
+import {
+  statusText,
+  stageText,
+  visibilityLabel,
+  VISIBILITY_LABELS,
+  CLASSIFICATION_OPTIONS,
+} from "./i18n"
 
 /** 待上传的单个文件及其独立配置与预览状态。 */
 interface ImportItem {
@@ -444,7 +425,7 @@ function FileBox(props: {
           >
             {allowedVis.map((v) => (
               <option key={v} value={v}>
-                {VISIBILITY_LABELS[v] ?? v}
+                {visibilityLabel(v)}
               </option>
             ))}
           </select>
@@ -685,7 +666,7 @@ function TasksView(props: { taskIds: string[] }) {
             return (
               <div key={id} className="kg-task-row">
                 <span className={`kg-pill ${t?.status ?? "pending"}`}>
-                  {t ? (STATUS_TEXT[t.status] ?? t.status) : "加载中"}
+                  {t ? statusText(t.status) : "加载中"}
                 </span>
                 <span className="kg-task-file">{t?.filename ?? "…"}</span>
                 <span className="mono dim">{id.slice(0, 8)}</span>
@@ -753,7 +734,7 @@ function TasksView(props: { taskIds: string[] }) {
                   <tr key={t.id} className="kg-task-row-tr">
                     <td>
                       <span className={`kg-pill ${t.status}`}>
-                        {STATUS_TEXT[t.status] ?? t.status}
+                        {statusText(t.status)}
                       </span>
                     </td>
                     <td className="kg-task-file">{t.filename || "—"}</td>
@@ -803,12 +784,10 @@ function TasksView(props: { taskIds: string[] }) {
           </div>
           <div className="kg-task-row">
             <span className={`kg-pill ${detail.status}`}>
-              {STATUS_TEXT[detail.status] ?? detail.status}
+              {statusText(detail.status)}
             </span>
             <span className="kg-task-file">{detail.filename || "—"}</span>
-            <span className="dim">
-              阶段：{STAGE_TEXT[detail.stage] ?? detail.stage}
-            </span>
+            <span className="dim">阶段：{stageText(detail.stage)}</span>
           </div>
           <div className="kg-stat-row">
             <Stat label="已导入" value={detail.imported} />

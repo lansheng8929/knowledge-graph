@@ -1,16 +1,7 @@
 import { SlidersHorizontal, RotateCcw } from "lucide-react"
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  person: "人员",
-  phone: "手机",
-  address: "地址",
-  account: "账户",
-  company: "公司",
-  ip: "IP",
-  device: "设备",
-}
+import { nodeTypeLabel } from "./i18n"
 
 const panelStyle: React.CSSProperties = {
   background: "rgb(var(--background))",
@@ -111,7 +102,7 @@ export default function FilterPanel({ onClose }: { onClose: () => void }) {
                   onChange={(e) => toggleNodeType(t, e.target.checked)}
                   style={{ margin: 0 }}
                 />
-                {NODE_TYPE_LABELS[t] ?? t}
+                {nodeTypeLabel(t)}
                 <span style={{ color: "rgb(var(--muted))" }}>{count}</span>
               </label>
             )

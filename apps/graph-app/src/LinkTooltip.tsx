@@ -1,16 +1,6 @@
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
-
-const RELATION_LABELS: Record<string, string> = {
-  OWNS: "名下",
-  RESIDES_AT: "居住",
-  WORKS_AT: "工作",
-  HAS_ACCOUNT: "开户",
-  LOGIN_IP: "登录",
-  USE_DEVICE: "使用",
-  CALLED: "通话",
-  TRANSACTED: "转账",
-}
+import { relationLabel } from "./i18n"
 
 interface LinkTooltipProps {}
 
@@ -56,7 +46,7 @@ export function LinkTooltip(_props: LinkTooltipProps) {
           fontSize: "14px",
         }}
       >
-        {RELATION_LABELS[linkType] ?? linkType}
+        {relationLabel(linkType)}
       </div>
 
       {/* 边 ID */}

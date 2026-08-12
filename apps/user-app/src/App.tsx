@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react"
 import { fetchUserInfo } from "./api"
 import type { UserInfo } from "./types"
-
-const CLEARANCE_TEXT: Record<number, string> = {
-  0: "公开",
-  1: "内部",
-  2: "秘密",
-  3: "机密",
-}
+import { clearanceText } from "./i18n"
 
 export default function App() {
   const [user, setUser] = useState<UserInfo | null>(null)
@@ -49,10 +43,7 @@ export default function App() {
               <Row label="用户名" value={user.username} />
               <Row label="用户 ID" value={user.uid} />
               <Row label="租户" value={user.tenantId} />
-              <Row
-                label="密级"
-                value={CLEARANCE_TEXT[user.clearance] ?? String(user.clearance)}
-              />
+              <Row label="密级" value={clearanceText(user.clearance)} />
               <Row label="角色" value={user.roles.join(" / ") || "—"} />
               <Row label="团队" value={user.teams.join(" / ") || "—"} />
               <Row label="组织路径" value={user.orgPath || "—"} />

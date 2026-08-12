@@ -10,6 +10,7 @@
 import { useState, useMemo } from "react"
 import { PanelContainer, PanelLayer } from "./panel"
 import type { GraphNode } from "@lansheng/knowledge-graph/client/type"
+import { nodeTypeLabel, relationLabel, propertyLabel } from "./i18n"
 
 // ─── 属性过滤器类型 ──────────────────────────────────
 
@@ -24,36 +25,6 @@ interface RuleCondition {
   relationType: string
   direction: string
   filters: PropertyFilter[]
-}
-
-// ─── 中文映射 ────────────────────────────────────────
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  person: "人员",
-  phone: "手机号",
-  address: "地址",
-  account: "账户",
-  company: "公司",
-  ip: "IP地址",
-  device: "设备",
-}
-
-const RELATION_LABELS: Record<string, string> = {
-  OWNS: "名下",
-  RESIDES_AT: "居住",
-  WORKS_AT: "工作",
-  HAS_ACCOUNT: "开户",
-  LOGIN_IP: "登录",
-  USE_DEVICE: "使用",
-  CALLED: "通话",
-  TRANSACTED: "转账",
-}
-
-const PROPERTY_LABELS: Record<string, string> = {
-  label: "名称/标识",
-  gender: "性别",
-  age: "年龄",
-  caseWeight: "案件权重",
 }
 
 // ─── 每种节点类型的可过滤属性 ────────────────────────
@@ -442,7 +413,7 @@ export function RuleMenu({
                   <option value="">关系</option>
                   {getAvailableRelations(cond.targetType).map((rel) => (
                     <option key={rel} value={rel}>
-                      {RELATION_LABELS[rel] ?? rel}
+                      {relationLabel(rel)}
                     </option>
                   ))}
                 </select>
@@ -476,7 +447,7 @@ export function RuleMenu({
                     const remain = total - (loaded.out + loaded.in)
                     return (
                       <option key={t} value={t}>
-                        {NODE_TYPE_LABELS[t] ?? t} ({remain})
+                        {nodeTypeLabel(t)} ({remain})
                       </option>
                     )
                   })}
@@ -569,7 +540,7 @@ export function RuleMenu({
                       <option value="">属性</option>
                       {props.map((p) => (
                         <option key={p.name} value={p.name}>
-                          {PROPERTY_LABELS[p.name] ?? p.name}
+                          {propertyLabel(p.name)}
                         </option>
                       ))}
                     </select>

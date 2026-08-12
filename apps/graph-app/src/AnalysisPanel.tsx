@@ -5,6 +5,7 @@ import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
 import { useRequest } from "./hooks/useRequest"
 import { graphApi } from "./api/client"
+import { relationLabel } from "./i18n"
 
 // ─── 分析类型配置 ─────────────────────────────────
 
@@ -22,17 +23,6 @@ interface AnalysisTypeConfig {
   params: AnalysisParam[]
   resultLabel: (item: any) => string
   resultDetail: (item: any) => string
-}
-
-const RELATION_LABELS: Record<string, string> = {
-  OWNS: "名下",
-  RESIDES_AT: "居住",
-  WORKS_AT: "工作",
-  HAS_ACCOUNT: "开户",
-  LOGIN_IP: "登录",
-  USE_DEVICE: "使用",
-  CALLED: "通话",
-  TRANSACTED: "转账",
 }
 
 const TIME_WINDOW_OPTIONS = [
@@ -57,7 +47,7 @@ const ANALYSIS_TYPES: AnalysisTypeConfig[] = [
     ],
     resultLabel: (item) => item.label ?? item.id,
     resultDetail: (item) =>
-      `${RELATION_LABELS[item.relation] ?? item.relation} · ${item.count ?? 0} 次${item.time ? ` · ${item.time}` : ""}`,
+      `${relationLabel(item.relation)} · ${item.count ?? 0} 次${item.time ? ` · ${item.time}` : ""}`,
   },
 ]
 
