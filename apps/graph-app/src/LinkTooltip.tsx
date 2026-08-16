@@ -1,16 +1,7 @@
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
-
-const RELATION_LABELS: Record<string, string> = {
-  OWNS: "名下",
-  RESIDES_AT: "居住",
-  WORKS_AT: "工作",
-  HAS_ACCOUNT: "开户",
-  LOGIN_IP: "登录",
-  USE_DEVICE: "使用",
-  CALLED: "通话",
-  TRANSACTED: "转账",
-}
+import { RELATION_LABELS } from "./labels"
+import { linkEndpoints } from "./link-utils"
 
 interface LinkTooltipProps {}
 
@@ -23,10 +14,7 @@ export function LinkTooltip(_props: LinkTooltipProps) {
   const label = (linkData as any).label ?? ""
   const time = (linkData as any).time ?? ""
   const intimacy = (linkData as any).intimacy
-  const sourceId =
-    typeof link.source === "object" ? link.source.id : link.source
-  const targetId =
-    typeof link.target === "object" ? link.target.id : link.target
+  const [sourceId, targetId] = linkEndpoints(link)
 
   return (
     <PanelContainer

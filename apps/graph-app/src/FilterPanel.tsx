@@ -1,16 +1,7 @@
 import { SlidersHorizontal, RotateCcw } from "lucide-react"
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  person: "人员",
-  phone: "手机",
-  address: "地址",
-  account: "账户",
-  company: "公司",
-  ip: "IP",
-  device: "设备",
-}
+import { NODE_TYPE_LABELS } from "./labels"
 
 const panelStyle: React.CSSProperties = {
   background: "rgb(var(--background))",

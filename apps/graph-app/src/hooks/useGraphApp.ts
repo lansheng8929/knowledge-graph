@@ -39,36 +39,16 @@ import {
 import { useTheme } from "./useTheme"
 import { getPalette, type Theme } from "../theme"
 import { applyIcons, applyIcon } from "../icon-map"
+import { linkEndpoints } from "../link-utils"
 import { graphApi } from "../api/client"
+import {
+  BASE_FORCE_CONFIG,
+  INTIMACY_INFLUENCE_DEFAULT,
+  buildIntimacyFns,
+} from "../physics-config"
 
 interface InitResponse {
   graphData: GraphViewModel<DefaultGraphDataGenerics>["graphData"]
-}
-
-// ── 亲密度→吸引力（边拉扯力）影响系数 ─────────────
-// linkDistanceFn：亲密越高 rest distance 越小（拉得越紧）
-// linkStrengthFn：亲密越高弹簧强度越大
-// influence 放大两个系数：越大，亲密对吸引力影响越强。
-const INTIMACY_INFLUENCE_DEFAULT = 1.2
-
-interface IntimacyLink {
-  intimacy?: number
-}
-
-function buildIntimacyFns(influence: number) {
-  return {
-    linkDistanceFn: (link: IntimacyLink) => {
-      const i = link.intimacy
-      if (i === undefined) return undefined
-      // 影响系数越大，亲密边 rest distance 越小（下限 18px 防重叠）
-      return Math.max(18, 100 * (1.5 - i * (0.7 * influence)))
-    },
-    linkStrengthFn: (link: IntimacyLink) => {
-      const i = link.intimacy
-      if (i === undefined) return undefined
-      return 0.2 * (0.3 + i * (0.9 * influence))
-    },
-  }
 }
 
 export function useGraphApp(ids?: string[]) {
@@ -135,13 +115,8 @@ export function useGraphApp(ids?: string[]) {
       const report = () =>
         onProgress?.({ nodes: nodes.length, links: links.length, total })
 
-      const linkEnds = (l: GraphLink): [string, string] => {
-        const s = typeof l.source === "object" ? (l.source as any).id : l.source
-        const t = typeof l.target === "object" ? (l.target as any).id : l.target
-        return [String(s), String(t)]
-      }
       const linkReady = (l: GraphLink): boolean => {
-        const [s, t] = linkEnds(l)
+        const [s, t] = linkEndpoints(l)
         return nodeIds.has(s) && nodeIds.has(t)
       }
       // 把端点已到齐的暂存边移入当前批次
@@ -223,9 +198,8 @@ export function useGraphApp(ids?: string[]) {
     let acc = 0
 
     const linkReady = (l: ExpansionResponse["links"][number]): boolean => {
-      const s = typeof l.source === "object" ? (l.source as any).id : l.source
-      const t = typeof l.target === "object" ? (l.target as any).id : l.target
-      return knownIds.has(String(s)) && knownIds.has(String(t))
+      const [s, t] = linkEndpoints(l)
+      return knownIds.has(s) && knownIds.has(t)
     }
     const drainPending = () => {
       let i = pendingLinks.length
@@ -297,12 +271,8 @@ export function useGraphApp(ids?: string[]) {
       runtimeTheme: theme,
       backgroundColor: getPalette(theme).canvas,
       forceConfig: {
-        repulsion: -200,
-        linkDistance: 100,
-        linkStrength: 0.2,
-        centerStrength: 0.1,
-        velocityDecay: 0.4,
-        // 亲密度→物理拉扯力（影响系数默认 1.2，比原 0.7/0.9 更强，可经引力面板调节）
+        ...BASE_FORCE_CONFIG,
+        // 亲密度→物理拉扯力（影响系数默认 1.2，可经引力面板调节）
         ...buildIntimacyFns(INTIMACY_INFLUENCE_DEFAULT),
       },
       theme: {

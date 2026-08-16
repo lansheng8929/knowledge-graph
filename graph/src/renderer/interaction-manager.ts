@@ -54,8 +54,6 @@ export class InteractionManager {
     return { x: this.lastClientX, y: this.lastClientY }
   }
   private isPanning = false
-  /** 垂直缩放容忍度（px），在此范围内不触发平移/缩放手感混淆 */
-  private panDeadZone = 3
 
   // 绑定的回调引用（用于 removeEventListener）
   private boundPointerDown: (e: PointerEvent) => void
@@ -158,8 +156,6 @@ export class InteractionManager {
     const dx = pos.x - this.lastMouseX
     const dy = pos.y - this.lastMouseY
 
-    console.log(dx, dy)
-
     if (this.isDragging && this.dragNodeId) {
       // 拖拽节点 — 在渲染器中实际移动节点
       this.callbacks.onNodeDrag?.(this.dragNodeId, dx, dy)
@@ -168,7 +164,6 @@ export class InteractionManager {
       const t = this.transform
       t.x += dx / t.k
       t.y += dy / t.k
-      // 将 dead zone 消耗完：如果移动量还小于 dead zone，忽略本次平移
       this.callbacks.onPan?.(t)
     } else {
       // 悬停检测

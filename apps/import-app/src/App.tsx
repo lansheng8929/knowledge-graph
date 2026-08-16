@@ -17,6 +17,7 @@ import type {
   PreviewData,
   View,
 } from "./types"
+import { CLEARANCE_OPTIONS } from "@lansheng/web-constants"
 
 // 后端返回的英文状态 → 前端中文显示
 const STATUS_TEXT: Record<string, string> = {
@@ -37,13 +38,6 @@ const VISIBILITY_LABELS: Record<string, string> = {
   internal: "内部",
   private: "仅本人",
 }
-const CLASSIFICATION_OPTIONS = [
-  { value: 0, label: "公开" },
-  { value: 1, label: "内部" },
-  { value: 2, label: "秘密" },
-  { value: 3, label: "机密" },
-]
-
 /** 待上传的单个文件及其独立配置与预览状态。 */
 interface ImportItem {
   id: string
@@ -427,7 +421,7 @@ function FileBox(props: {
               props.onChange({ classification: Number(e.target.value) })
             }
           >
-            {CLASSIFICATION_OPTIONS.filter(
+            {CLEARANCE_OPTIONS.filter(
               (o) => o.value <= classificationMax,
             ).map((o) => (
               <option key={o.value} value={o.value}>

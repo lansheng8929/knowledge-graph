@@ -4,6 +4,7 @@ import type { GraphModel } from "@lansheng/knowledge-graph"
 import type { MyGraphView } from "./graph-types"
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
+import { linkEndpoints } from "./link-utils"
 
 interface Row {
   id: string
@@ -61,8 +62,7 @@ export default function TablePanel({
     const gd = model.getGraphModelData().graphData
     const linkDeg = new Map<string, { count: number; intimacy: number }>()
     for (const l of gd.links) {
-      const s = String(typeof l.source === "object" ? l.source.id : l.source)
-      const t = String(typeof l.target === "object" ? l.target.id : l.target)
+      const [s, t] = linkEndpoints(l)
       const d = (l.data as any) ?? {}
       const int = typeof d.intimacy === "number" ? d.intimacy : 0
       for (const id of [s, t]) {

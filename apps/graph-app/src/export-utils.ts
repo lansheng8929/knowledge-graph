@@ -1,4 +1,5 @@
 import type { GraphModel } from "@lansheng/knowledge-graph"
+import { linkEndpoints } from "./link-utils"
 
 /** 触发浏览器下载 */
 export function download(
@@ -25,8 +26,7 @@ export function exportSelection(
   const nodes = gd.nodes.filter((n) => selectedIds.has(n.id))
   const idSet = new Set(nodes.map((n) => n.id))
   const links = gd.links.filter((l) => {
-    const s = String(typeof l.source === "object" ? l.source.id : l.source)
-    const t = String(typeof l.target === "object" ? l.target.id : l.target)
+    const [s, t] = linkEndpoints(l)
     return idSet.has(s) && idSet.has(t)
   })
 

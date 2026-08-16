@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from "react"
 import type { MyGraphView } from "./graph-types"
 import { getPalette, hexToRgba } from "./theme"
 import { useTheme } from "./hooks/useTheme"
+import { linkEndpoints } from "./link-utils"
 
 interface MiniMapProps {
   viewRef: React.RefObject<MyGraphView | null>
@@ -212,14 +213,7 @@ export default function MiniMap({ viewRef }: MiniMapProps) {
       ctx.strokeStyle = hexToRgba(p.link.default, 0.5)
       ctx.lineWidth = 0.5
       for (const link of graphData.links) {
-        const sid =
-          typeof link.source === "object"
-            ? String(link.source.id)
-            : String(link.source)
-        const tid =
-          typeof link.target === "object"
-            ? String(link.target.id)
-            : String(link.target)
+        const [sid, tid] = linkEndpoints(link)
         const sp = posMap.get(sid)
         const tp = posMap.get(tid)
         if (!sp || !tp) continue

@@ -4,12 +4,12 @@
 （tenantId=default, clearance=0, anonymous），保证现有无鉴权请求不被误拦截。
 """
 
-import json
 import logging
 from typing import Any, Dict, Optional, Tuple
 
+from service_common.subject import subject_from_request
+
 from .config import settings
-from .jwt import verify
 
 logger = logging.getLogger(__name__)
 
@@ -20,70 +20,19 @@ DEFAULT_SUBJECT: Dict[str, Any] = {
     "uid": "anonymous",
     "roles": ["analyst"],
     "teams": [],
+    "orgPath": "",
     "subUids": [],
 }
 
 
-def subject_from_header(raw: str) -> Dict[str, Any]:
-    """解析 X-User-Context（JSON）；缺失/非法 → 默认主体。"""
-    if not raw:
-        return dict(DEFAULT_SUBJECT)
-    try:
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            return {
-                "username": str(data.get("username", data.get("sub", ""))),
-                "tenantId": str(data.get("tenantId", "default")),
-                "clearance": int(data.get("clearance", 0)),
-                "uid": str(data.get("uid", "anonymous")),
-                "roles": list(data.get("roles", ["analyst"])),
-                "teams": list(data.get("teams", [])),
-                "orgPath": str(data.get("orgPath", "")),
-                "subUids": list(data.get("subUids", [])),
-            }
-    except (json.JSONDecodeError, ValueError, TypeError):
-        logger.warning("invalid X-User-Context header")
-    return dict(DEFAULT_SUBJECT)
-
-
-def _bearer_token(request) -> str:
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[len("Bearer ") :].strip()
-    return ""
-
-
-def _subject_from_jwt(token: str) -> Dict[str, Any]:
-    """dev 直连兜底：从 Authorization Bearer JWT 还原主体（签名校验）。"""
-    payload = verify(token, settings.auth_secret)
-    return {
-        "username": str(payload.get("sub", "")),
-        "tenantId": str(payload.get("tenantId", "default")),
-        "clearance": int(payload.get("clearance", 0)),
-        "uid": str(payload.get("uid", payload.get("sub", "anonymous"))),
-        "roles": [str(r) for r in payload.get("roles", [])],
-        "teams": [str(t) for t in payload.get("teams", [])],
-        "orgPath": str(payload.get("orgPath", "")),
-        "subUids": [str(u) for u in payload.get("subUids", [])],
-    }
-
-
 def subject_from_request(request) -> Dict[str, Any]:
-    """解析主体属性：
-    1. X-User-Context（网关注入，可信）；
-    2. Authorization Bearer JWT（dev 直连兜底，本地验签）；
-    3. 均缺失 → 默认主体（无鉴权直连）。
-    """
-    raw = request.headers.get("X-User-Context", "")
-    if raw:
-        return subject_from_header(raw)
-    token = _bearer_token(request)
-    if token:
-        try:
-            return _subject_from_jwt(token)
-        except (ValueError, KeyError, TypeError):
-            logger.warning("invalid Authorization JWT; treat as default subject")
-    return dict(DEFAULT_SUBJECT)
+    """解析主体属性（统一实现见 service_common.subject，单一来源）。"""
+    return subject_from_request(
+        request,
+        default=DEFAULT_SUBJECT,
+        secret=settings.auth_secret,
+        default_roles=["analyst"],
+    )[0]
 
 
 def l3_conditions(
@@ -154,7 +103,9 @@ def l3_visible(node_data: Dict[str, Any], subject: Optional[Dict[str, Any]]) -> 
     owner_uid = str(node_data.get("ownerUid", "")) if node_data.get("ownerUid") else ""
 
     def self_ok() -> bool:
-        return owner == uid or owner == username or owner_uid == uid
+        # owner 为空时恒 False：无属主数据不匹配任何人（空 owner == 空 username 的
+        # 误放行漏洞修复——private/internal 无属主数据不可见）
+        return bool(owner) and (owner == uid or owner == username or owner_uid == uid)
 
     if vs == "private":
         return self_ok()

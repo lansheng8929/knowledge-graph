@@ -12,12 +12,15 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Dict, List, Tuple
 
+from service_common.subject import (
+    subject_from_header as _subject_from_header,
+    subject_from_request as _subject_from_request,
+)
+
 from .config import settings
-from .jwt import verify
 
 logger = logging.getLogger(__name__)
 
@@ -49,68 +52,23 @@ DEFAULT_SUBJECT: Dict[str, Any] = {
 
 def subject_from_header(raw: str) -> Dict[str, Any]:
     """解析 X-User-Context（JSON）；缺失/非法 → 默认主体（不拦截）。"""
-    if not raw:
-        return dict(DEFAULT_SUBJECT)
-    try:
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            return {
-                "username": str(data.get("username", data.get("sub", ""))),
-                "uid": str(data.get("uid", data.get("sub", "anonymous"))),
-                "tenantId": str(data.get("tenantId", "default")),
-                "clearance": int(data.get("clearance", 0)),
-                "roles": [str(r) for r in data.get("roles", [])],
-                "teams": [str(t) for t in data.get("teams", [])],
-                "orgPath": str(data.get("orgPath", "")),
-                "managerUid": str(data.get("managerUid", "")),
-                "subUids": [str(u) for u in data.get("subUids", [])],
-            }
-    except (json.JSONDecodeError, ValueError, TypeError):
-        logger.warning("invalid X-User-Context header")
-    return dict(DEFAULT_SUBJECT)
-
-
-def _bearer_token(request) -> str:
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        return auth[len("Bearer ") :].strip()
-    return ""
-
-
-def _subject_from_jwt(token: str) -> Dict[str, Any]:
-    """dev 直连兜底：从 Authorization Bearer JWT 还原主体（签名校验）。"""
-    payload = verify(token, settings.auth_secret)
-    return {
-        "username": str(payload.get("sub", "")),
-        "uid": str(payload.get("uid", payload.get("sub", "anonymous"))),
-        "tenantId": str(payload.get("tenantId", "default")),
-        "clearance": int(payload.get("clearance", 0)),
-        "roles": [str(r) for r in payload.get("roles", [])],
-        "teams": [str(t) for t in payload.get("teams", [])],
-        "orgPath": str(payload.get("orgPath", "")),
-        "managerUid": str(payload.get("managerUid", "")),
-        "subUids": [str(u) for u in payload.get("subUids", [])],
-    }
+    return _subject_from_header(raw, DEFAULT_SUBJECT, default_roles=[])
 
 
 def subject_from_request(request) -> Tuple[Dict[str, Any], bool]:
-    """解析主体，返回 (subject, authenticated)。
+    """解析主体，返回 (subject, authenticated)（统一实现见 service_common.subject）。
 
     优先级：
       1. X-User-Context（网关 auth_request 注入，可信）→ authenticated=True
       2. Authorization Bearer JWT（dev 直连兜底，本地验签）→ authenticated=True
       3. 均缺失（无鉴权直连）→ 默认主体，authenticated=False（不限制）
     """
-    raw = request.headers.get("X-User-Context", "")
-    if raw:
-        return subject_from_header(raw), True
-    token = _bearer_token(request)
-    if token:
-        try:
-            return _subject_from_jwt(token), True
-        except (ValueError, KeyError, TypeError):
-            logger.warning("invalid Authorization JWT; treat as unauthenticated")
-    return dict(DEFAULT_SUBJECT), False
+    return _subject_from_request(
+        request,
+        default=DEFAULT_SUBJECT,
+        secret=settings.auth_secret,
+        default_roles=[],
+    )
 
 
 def _clearance(subject: Dict[str, Any]) -> int:

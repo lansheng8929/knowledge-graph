@@ -10,6 +10,7 @@
 import { useState, useMemo } from "react"
 import { PanelContainer, PanelLayer } from "./panel"
 import type { GraphNode } from "@lansheng/knowledge-graph/client/type"
+import { NODE_TYPE_LABELS, RELATION_LABELS } from "./labels"
 
 // ─── 属性过滤器类型 ──────────────────────────────────
 
@@ -19,35 +20,14 @@ interface PropertyFilter {
   value: string
 }
 
-interface RuleCondition {
+export interface RuleCondition {
   targetType: string
   relationType: string
   direction: string
   filters: PropertyFilter[]
 }
 
-// ─── 中文映射 ────────────────────────────────────────
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  person: "人员",
-  phone: "手机号",
-  address: "地址",
-  account: "账户",
-  company: "公司",
-  ip: "IP地址",
-  device: "设备",
-}
-
-const RELATION_LABELS: Record<string, string> = {
-  OWNS: "名下",
-  RESIDES_AT: "居住",
-  WORKS_AT: "工作",
-  HAS_ACCOUNT: "开户",
-  LOGIN_IP: "登录",
-  USE_DEVICE: "使用",
-  CALLED: "通话",
-  TRANSACTED: "转账",
-}
+// ─── 属性中文映射 ────────────────────────────────────
 
 const PROPERTY_LABELS: Record<string, string> = {
   label: "名称/标识",
@@ -89,11 +69,7 @@ interface RuleMenuProps {
   loadedNeighbors: Record<string, { out: number; in: number }>
   x: number
   y: number
-  onExpand: (
-    nodeId: string,
-    ruleIds: string[],
-    conditions?: RuleCondition[],
-  ) => void
+  onExpand: (nodeId: string, conditions?: RuleCondition[]) => void
   onClose: () => void
 }
 
@@ -679,7 +655,7 @@ export function RuleMenu({
           }}
           onClick={() => {
             if (!validate()) return
-            onExpand(node.id, ["__custom__"], conditions)
+            onExpand(node.id, conditions)
             onClose()
           }}
         >

@@ -51,8 +51,6 @@
 | rule store.py:30 等 6 处 create(self, data) | 业务对象用泛名 data | 改 rule: RuleCreate |
 | auth main.py:203-223 | userinfo 同一 token 验签两次、三套字段映射并存 | _subject_from_token 收 payload 而非 token |
 | import tasks.py:130/333 Memory/Postgres 双 store | create 构造逻辑整段复制 | 抽 _new_task(...) |
-| business-core 4 个模块 | _now() ×4、uuid.hex[:12] ×4 | 抽 clock.py（now_iso/new_id） |
-| business-core main.py:25 | store 模块级创建（其余服务都在 create_app 内）+ 空 lifespan 样板 | store 移入 create_app |
 | rule main.py:168-185 | 404 分支 ×4、validate 成功响应 ×4 | 抽 _rule_or_404/_ok_resp |
 | rule validator.py:45 _ok | 缩写掩盖语义 | 统一 _is_valid_identifier |
 | ingestion main.py:42-59 | _node_tags/_link_tags 逐字段重复 | 抽 _tags(...) |
@@ -113,13 +111,19 @@
 
 ## 六、优先修复路线（按收益/风险排序）
 
-**第一批：删死代码（低风险高收益，1 小时内）**
-- interaction-manager.ts:161 console.log；App.tsx 死 div；PanelContainer 注释导入；useRuleMenu 调试块；draw-ctx.ts；link-batch instancedSingle*；被注释的旧代码（utils.ts:27-42 等）；graph-types.d.ts 残留单行文件
+**第一批：删死代码（低风险高收益）✅ 已执行（2026-08-15）**
+- interaction-manager.ts:161 console.log；App.tsx 死 div；PanelContainer 注释导入；useRuleMenu 调试块（连带删 `_ruleIds` 未用参数、`any`→`unknown`、RuleCondition 类型化）；draw-ctx.ts；link-batch instancedSingle*；被注释的旧代码（utils.ts 两段）；graph-types.d.ts 残留单行文件
+- 验证：graph tsc 零新增错误（3 个为存量）、graph-app 构建通过
 
-**第二批：消重复（中风险中收益，治理核心）**
-- 后端：services/common/（subject 解析 ×5 → 1、jwt ×3 → 1、observability ×2 → 1、_now/new_id）
-- 前端：labels.ts（NODE_TYPE_LABELS ×5、RELATION_LABELS ×3、密级 ×2）、physics-config.ts（forceConfig ×2）、linkEndpoints() 工具（样板 ×7）、createMicroAppLifecycles（骨架 ×3）、authToken 统一
-- 引擎：computeLinkCurves + DynamicBufferPool + shader 样板工具
+**第二批：消重复（中风险中收益，治理核心）🔄 进行中（2026-08-15）**
+- ✅ 前端 labels.ts（NODE_TYPE_LABELS ×5、RELATION_LABELS ×3 合并为单一来源；顺带修复 FilterPanel 分叉值 "手机/IP" → "手机号/IP地址"）
+- ✅ 前端 linkEndpoints() 工具（7 个文件样板替换，连带删除 useGraphApp 内本地 linkEnds 封装）
+- ⬜ 前端 physics-config.ts（forceConfig ×2）、密级映射共享、createMicroAppLifecycles（骨架 ×3）、authToken 统一
+- ✅ 后端：新建 shared/service-common 共享包——jwt.py 统一（×3 → 薄壳 re-export，安全加固单点传导）、subject 解析统一（×5 → 参数化共享实现，服务差异由 default/default_roles/secret 表达）；dev/prod compose 的 auth/import build context 统一为仓库根（与 query/rule 一致），Dockerfile 安装 service-common
+- ✅ 存量测试修正（2026-08-15）：5 个失败测试全部处置——其中 1 个是**真实权限漏洞**（l3_visible 的 self_ok() 空 owner == 空 username 误放行，private/internal 无属主数据对所有登录用户可见，已修复）；另 4 个是测试过期（仍期待已废弃的 secret 档，断言已同步）
+- ⬜ 后端（剩余，低优先级）：observability ×2 → 1、_now/new_id 收敛
+- ⬜ 引擎：computeLinkCurves + DynamicBufferPool + shader 样板工具
+- ✅ 附带修复 3 个存量 tsc 错误（Style.light 字段缺失、node-batch showPlus 布尔→0/1）
 
 **第三批：恢复语义（长期）**
 - AppNodeData/AppLinkData 类型取代 50 处 as any；引擎补公开访问器（getCanvas/getTransform）消除穿透

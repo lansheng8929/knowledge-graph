@@ -179,7 +179,7 @@ export class NodeBatchRenderer implements NodeRenderPipeline {
       strokeWidth[i] = n.strokeWidth
       shapeType[i] = shapeToType(n.shape)
       shapeParam[i] = n.shapeParam ?? 0.25
-      showPlus[i] = n.showPlus ?? 0
+      showPlus[i] = n.showPlus ? 1 : 0
       plusOffsetX[i] = n.plusOffsetX ?? 0.5
       plusOffsetY[i] = n.plusOffsetY ?? -0.5
       plusScale[i] = n.plusScale ?? 0.35

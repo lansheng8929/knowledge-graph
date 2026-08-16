@@ -1,13 +1,7 @@
 import { useEffect, useState } from "react"
 import { fetchUserInfo } from "./api"
 import type { UserInfo } from "./types"
-
-const CLEARANCE_TEXT: Record<number, string> = {
-  0: "公开",
-  1: "内部",
-  2: "秘密",
-  3: "机密",
-}
+import { CLEARANCE_TEXT } from "@lansheng/web-constants"
 
 export default function App() {
   const [user, setUser] = useState<UserInfo | null>(null)

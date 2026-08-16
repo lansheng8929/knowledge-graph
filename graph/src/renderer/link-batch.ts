@@ -470,34 +470,6 @@ export class LinkBatchRenderer {
     gl.vertexAttribDivisor(loc, 1)
   }
 
-  private instancedSingle(loc: number, x: number, y: number): void {
-    this.instancedSingle1Arr(loc, new Float32Array([x, y]), 2)
-  }
-
-  private instancedSingle1(loc: number, v: number): void {
-    this.instancedSingle1Arr(loc, new Float32Array([v]), 1)
-  }
-
-  private instancedSingle4(
-    loc: number,
-    arr: Float32Array,
-    offset: number,
-  ): void {
-    this.instancedSingle1Arr(loc, arr.slice(offset, offset + 4), 4)
-  }
-
-  private instancedSingle1Arr(
-    loc: number,
-    data: Float32Array,
-    comps: number,
-  ): void {
-    const gl = this.gl
-    this.uploadDynamic(loc, data)
-    gl.enableVertexAttribArray(loc)
-    gl.vertexAttribPointer(loc, comps, gl.FLOAT, false, 0, 0)
-    gl.vertexAttribDivisor(loc, 1)
-  }
-
   /** 复用动态 buffer：首次 createBuffer，之后 bufferSubData（尺寸不够才重建） */
   private uploadDynamic(loc: number, data: Float32Array): void {
     const gl = this.gl

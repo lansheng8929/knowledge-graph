@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { useDebouncedCallback } from "./hooks/useDebounce"
 import { useRequest } from "./hooks/useRequest"
 import { graphApi } from "./api/client"
+import { NODE_TYPE_LABELS } from "./labels"
 
 interface SearchResult {
   id: string
@@ -41,16 +42,6 @@ const itemStyle: React.CSSProperties = {
   fontFamily: "monospace",
   color: "rgb(var(--foreground))",
   borderBottom: "1px solid rgb(var(--border))",
-}
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  person: "人员",
-  phone: "手机号",
-  address: "地址",
-  account: "账户",
-  company: "公司",
-  ip: "IP地址",
-  device: "设备",
 }
 
 interface SearchBoxProps {

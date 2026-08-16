@@ -235,4 +235,3 @@ edges:     id | source | target | linkType | label | time | <任意属性列...>
 
 - 需求：上级用户数据仅自己和下级可见、其它组织不可见（"其它组织不可见"已由租户隔离覆盖）。
 - 已实现（2026-08-05）：主体加组织层级（`orgPath` / `managerUid` / `subUids`），auth 登录计算下级集合；查询改写 + OPA 加层级过滤。
-- 延伸：通用业务能力组件（审批/任务/报表/审计）已基于组织层级落地，见 `docs/business-core-plan.md`。
