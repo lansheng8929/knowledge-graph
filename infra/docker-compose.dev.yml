@@ -178,6 +178,26 @@ services:
       - "8005:8005"
     restart: unless-stopped
 
+  agent:
+    build:
+      # context 为仓库根：Dockerfile 需 COPY shared/service-common（JWT 统一实现）
+      context: ../
+      dockerfile: services/agent-service/Dockerfile
+    container_name: kg-dev-agent
+    volumes:
+      - ../services/agent-service/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8006
+    environment:
+      LLM_PROVIDER: mock
+      # P1 预留：身份重签密钥 + 上游服务地址（dev 服务名）
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      GRAPH_QUERY_URL: http://kg-dev-query:8001
+      IMPORT_SERVICE_URL: http://kg-dev-import:8005
+      INGESTION_URL: http://kg-dev-ingestion:8003
+    ports:
+      - "8006:8006"
+    restart: unless-stopped
+
   # ── 前端（挂载仓库源码 + 容器内装依赖 + vite dev HMR）──
   web:
     image: oven/bun:1.1
@@ -194,6 +214,7 @@ services:
       VITE_AUTH_PROXY: http://kg-dev-auth:8004
       VITE_INGEST_PROXY: http://kg-dev-ingestion:8003
       VITE_IMPORT_PROXY: http://kg-dev-import:8005
+      VITE_AGENT_PROXY: http://kg-dev-agent:8006
     ports:
       - "3001:3001"
     depends_on:
@@ -203,6 +224,7 @@ services:
       - opa
       - ingestion
       - import
+      - agent
     restart: unless-stopped
 
 # 复用现有 Neo4j 数据卷（与生产共用，勿同时跑 dev/prod）

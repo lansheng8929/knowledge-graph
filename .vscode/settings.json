@@ -1,6 +1,13 @@
 {
-  // 每个 Python 服务都有独立 venv（services/*/.venv，py3.14）。
-  // 根目录 .venv 是 py3.9 空壳，只含 pip/setuptools，会导致 fastapi/service_common 等导入报 unresolved。
-  // 这里把默认解释器指向 auth-service 的 venv（含全部依赖 + shared/service-common editable 安装）。
-  "python.defaultInterpreterPath": "${workspaceFolder}/services/auth-service/.venv/bin/python"
+  // 全局统一 Python 解释器（仅编译器/类型提示用）：仓库根 .venv，uv 管理，CPython 3.12.13。
+  // 覆盖所有 services/* 的 Python 代码；shared 本地包用 extraPaths 解析（不 pip 安装，避免沙箱构建失败）。
+  // 系统 Python 是 3.8，无法解析 list[str] / str | None（PEP 604），故必须用 3.12。
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticMode": "openFiles",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/shared/service-common",
+    "${workspaceFolder}/shared/pep-client",
+    "${workspaceFolder}/shared/audit"
+  ]
 }

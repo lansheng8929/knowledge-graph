@@ -140,6 +140,26 @@ services:
       - postgres
     restart: unless-stopped
 
+  # ── 对话 Agent（P0 脚手架；LLM 默认 mock，真实接入见 P1）──
+  agent-service:
+    build:
+      # context 为仓库根：Dockerfile 需 COPY shared/service-common（JWT 统一实现）
+      context: ../
+      dockerfile: services/agent-service/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: kg-agent
+    environment:
+      LLM_PROVIDER: mock
+      # P1 预留：身份重签密钥 + 上游服务地址（容器网络服务名）
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      GRAPH_QUERY_URL: http://graph-query-service:8001
+      IMPORT_SERVICE_URL: http://file-import-service:8005
+      INGESTION_URL: http://graph-ingestion:8003
+      CORS_ALLOW_ORIGINS: ""
+    restart: unless-stopped
 
   gateway:
     image: nginx:1.27-alpine
@@ -153,6 +173,7 @@ services:
       - graph-rule-service
       - auth-service
       - file-import-service
+      - agent-service
     restart: unless-stopped
 
   # ── 前端 web（prod：Nginx 托管 + 代理网关，全容器）──

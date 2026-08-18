@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# env
+.env
+.env.local
+
+# 运行产物
+dist/
+build/
+
+# uv 本地缓存/解释器（放项目内以绕过沙箱；勿提交）
+.uv-cache/
+.uv-python/
