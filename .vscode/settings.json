@@ -1,0 +1,6 @@
+{
+  // 每个 Python 服务都有独立 venv（services/*/.venv，py3.14）。
+  // 根目录 .venv 是 py3.9 空壳，只含 pip/setuptools，会导致 fastapi/service_common 等导入报 unresolved。
+  // 这里把默认解释器指向 auth-service 的 venv（含全部依赖 + shared/service-common editable 安装）。
+  "python.defaultInterpreterPath": "${workspaceFolder}/services/auth-service/.venv/bin/python"
+}

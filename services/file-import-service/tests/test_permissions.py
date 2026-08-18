@@ -68,11 +68,11 @@ def test_subject_from_header_missing_is_default():
 
 
 def test_visibility_allowed_by_clearance():
+    # 2026-08-06 起可见性统一为 public/internal/private（无 secret 档）
     assert visibility_allowed(VIEWER) == ["public", "internal", "private"]
     assert visibility_allowed(ANALYST) == ["public", "internal", "private"]
-    # secret 需密级 ≥2
-    assert "secret" in visibility_allowed(OTHER)
-    assert visibility_allowed(ADMIN) == ["public", "internal", "secret", "private"]
+    assert visibility_allowed(OTHER) == ["public", "internal", "private"]
+    assert visibility_allowed(ADMIN) == ["public", "internal", "private"]
 
 
 def test_classification_max_capped():
@@ -199,7 +199,6 @@ def test_options_endpoint_without_user():
     assert data["constraints"]["visibilityAllowed"] == [
         "public",
         "internal",
-        "secret",
         "private",
     ]
 
@@ -251,7 +250,7 @@ def test_options_endpoint_admin_jwt_full():
     data = r.json()["data"]
     assert data["constraints"]["classificationMax"] == 3
     assert data["constraints"]["canSetOwner"] is True
-    assert "secret" in data["constraints"]["visibilityAllowed"]
+    assert "secret" not in data["constraints"]["visibilityAllowed"]
 
 
 def test_options_endpoint_bad_jwt_falls_back_unrestricted():
@@ -265,6 +264,5 @@ def test_options_endpoint_bad_jwt_falls_back_unrestricted():
     assert data["constraints"]["visibilityAllowed"] == [
         "public",
         "internal",
-        "secret",
         "private",
     ]

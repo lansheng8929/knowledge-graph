@@ -4,9 +4,10 @@
 决策动作：rule_validate（见 policies/kg.rego action 白名单）。
 """
 
-import json
 import logging
 from typing import Any, Dict
+
+from service_common.subject import subject_from_request as _subject_from_request
 
 from .config import settings
 
@@ -22,22 +23,13 @@ DEFAULT_SUBJECT: Dict[str, Any] = {
 
 
 def subject_from_request(request) -> Dict[str, Any]:
-    """解析主体属性：优先 X-User-Context（网关注入），否则默认主体。"""
-    raw = request.headers.get("X-User-Context", "")
-    if raw:
-        try:
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                return {
-                    "tenantId": str(data.get("tenantId", "default")),
-                    "clearance": int(data.get("clearance", 0)),
-                    "uid": str(data.get("uid", "anonymous")),
-                    "roles": list(data.get("roles", ["analyst"])),
-                    "teams": list(data.get("teams", [])),
-                }
-        except (json.JSONDecodeError, ValueError, TypeError):
-            logger.warning("invalid X-User-Context header")
-    return dict(DEFAULT_SUBJECT)
+    """解析主体属性：优先 X-User-Context（网关注入），否则默认主体。
+    （统一实现见 service_common.subject，单一来源）"""
+    return _subject_from_request(
+        request,
+        default=DEFAULT_SUBJECT,
+        default_roles=["analyst"],
+    )[0]
 
 
 _pep = None

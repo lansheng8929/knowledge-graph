@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import type { GraphNode } from "@lansheng/knowledge-graph/client/type"
 import type { ExpansionService } from "../expansion-service"
+import type { RuleCondition } from "../RuleMenu"
 
 export function useRuleMenu(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -36,38 +37,19 @@ export function useRuleMenu(
   }, [])
 
   const handleRuleExpand = useCallback(
-    async (nodeId: string, _ruleIds: string[], conditions?: any[]) => {
+    async (nodeId: string, conditions?: RuleCondition[]) => {
       setRuleMenu(null)
       const svc = expansionRef.current
       if (!svc) return
       setExpanding(true)
-      const onError = (err: any) => {
-        const msg = err?.message ?? String(err)
+      const onError = (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
         console.error("[ExpandError]", msg)
         setRuntimeError(msg)
         setTimeout(() => setRuntimeError(null), 5000)
       }
       try {
         if (conditions) {
-          // 打印拓展规则，便于调试（ruleId / conditions 详情）
-          console.log(
-            `[Expand] node=${nodeId} ruleIds=${_ruleIds.join(",")} ruleId=${_ruleIds[0] ?? "__custom__"}`,
-          )
-          conditions.forEach((c: any, i: number) => {
-            const filters =
-              Array.isArray(c.filters) && c.filters.length
-                ? c.filters
-                    .map(
-                      (f: any) =>
-                        `${f.property} ${f.operator} ${JSON.stringify(f.value)}`,
-                    )
-                    .join("; ")
-                : ""
-            console.log(
-              `[Expand]   condition[${i}] ${c.direction ?? ""} ${c.relationType ?? ""} -> ${c.targetType ?? ""}` +
-                (filters ? ` | filters: ${filters}` : ""),
-            )
-          })
           await svc.expand(nodeId, JSON.stringify(conditions)).catch(onError)
         }
       } finally {

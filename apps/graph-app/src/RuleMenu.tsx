@@ -20,7 +20,7 @@ interface PropertyFilter {
   value: string
 }
 
-interface RuleCondition {
+export interface RuleCondition {
   targetType: string
   relationType: string
   direction: string
@@ -60,11 +60,7 @@ interface RuleMenuProps {
   loadedNeighbors: Record<string, { out: number; in: number }>
   x: number
   y: number
-  onExpand: (
-    nodeId: string,
-    ruleIds: string[],
-    conditions?: RuleCondition[],
-  ) => void
+  onExpand: (nodeId: string, conditions?: RuleCondition[]) => void
   onClose: () => void
 }
 
@@ -650,7 +646,7 @@ export function RuleMenu({
           }}
           onClick={() => {
             if (!validate()) return
-            onExpand(node.id, ["__custom__"], conditions)
+            onExpand(node.id, conditions)
             onClose()
           }}
         >

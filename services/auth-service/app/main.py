@@ -16,6 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from service_common.subject import subject_from_payload
+
 from .config import settings
 from .jwt import issue, verify
 from .org import compute_sub_uids
@@ -61,17 +63,7 @@ def _subject_from_token(token: str) -> dict:
         payload = verify(token, settings.auth_secret)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"invalid token: {e}") from e
-    return {
-        "username": payload.get("sub", ""),
-        "tenantId": payload.get("tenantId", "default"),
-        "clearance": int(payload.get("clearance", 0)),
-        "uid": payload.get("uid", payload.get("sub", "anonymous")),
-        "roles": list(payload.get("roles", [])),
-        "teams": list(payload.get("teams", [])),
-        "orgPath": payload.get("orgPath", ""),
-        "managerUid": payload.get("managerUid", ""),
-        "subUids": list(payload.get("subUids", [])),
-    }
+    return subject_from_payload(payload)
 
 
 def _require_admin(subject: dict) -> None:

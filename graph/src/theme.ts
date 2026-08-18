@@ -32,6 +32,8 @@ export interface Style {
   fontSize?: number
   radius?: number
   opacity?: number
+  /** 光晕颜色（节点渲染光晕时用，缺省不画） */
+  light?: string
 }
 export type NodeStyle<G extends GraphDataGenerics> = Record<G["NS"], Style>
 

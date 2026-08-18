@@ -408,13 +408,13 @@ function FileBox(props: {
               props.onChange({ classification: Number(e.target.value) })
             }
           >
-            {CLASSIFICATION_OPTIONS.filter(
-              (o) => o.value <= classificationMax,
-            ).map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
+            {CLEARANCE_OPTIONS.filter((o) => o.value <= classificationMax).map(
+              (o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ),
+            )}
           </select>
         </label>
         <label className="kg-field">

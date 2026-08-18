@@ -1,6 +1,12 @@
 import { Magnet, RotateCcw } from "lucide-react"
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
+import {
+  INFLUENCE_MIN,
+  INFLUENCE_MAX,
+  INFLUENCE_STEP,
+  INTIMACY_INFLUENCE_DEFAULT,
+} from "./physics-config"
 
 const panelStyle: React.CSSProperties = {
   background: "rgb(var(--background))",
@@ -28,11 +34,6 @@ const btn: React.CSSProperties = {
   color: "rgb(var(--foreground))",
 }
 
-const INFLUENCE_MIN = 0
-const INFLUENCE_MAX = 3
-const INFLUENCE_STEP = 0.1
-const INFLUENCE_DEFAULT = 1.2
-
 /**
  * PhysicsPanel — 引力调节面板：调节「亲密度→吸引力」的影响强度。
  * 影响系数越大，亲密边 rest distance 越小、弹簧强度越大（节点拉得越紧）。
@@ -42,7 +43,10 @@ export default function PhysicsPanel({ onClose }: { onClose: () => void }) {
 
   const current = Math.min(
     INFLUENCE_MAX,
-    Math.max(INFLUENCE_MIN, intimacyInfluence ?? INFLUENCE_DEFAULT),
+    Math.max(
+      INFLUENCE_MIN,
+      intimacyInfluence ?? INTIMACY_INFLUENCE_DEFAULT,
+    ),
   )
 
   return (
@@ -71,7 +75,7 @@ export default function PhysicsPanel({ onClose }: { onClose: () => void }) {
         <span style={{ fontWeight: "bold" }}>引力调节</span>
         <span style={{ flex: 1 }} />
         <button
-          onClick={() => applyIntimacyInfluence(INFLUENCE_DEFAULT)}
+          onClick={() => applyIntimacyInfluence(INTIMACY_INFLUENCE_DEFAULT)}
           style={btn}
           title="恢复默认"
         >

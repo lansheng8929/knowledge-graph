@@ -80,7 +80,9 @@ services:
   # ── T4.1.1：auth-service（IDP/签发+校验 JWT）────────
   auth-service:
     build:
-      context: ../services/auth-service
+      # context 为仓库根：Dockerfile 需 COPY shared/service-common（JWT 统一实现）
+      context: ../
+      dockerfile: services/auth-service/Dockerfile
       args:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
@@ -117,7 +119,9 @@ services:
 
   file-import-service:
     build:
-      context: ../services/file-import-service
+      # context 为仓库根：Dockerfile 需 COPY shared/service-common（JWT 统一实现）
+      context: ../
+      dockerfile: services/file-import-service/Dockerfile
       args:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
@@ -136,23 +140,6 @@ services:
       - postgres
     restart: unless-stopped
 
-  # ── 通用业务能力组件（审批/任务/报表/审计，业务无关）────
-  business-core:
-    build:
-      context: ../services/business-core-service
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-}
-    container_name: kg-business-core
-    environment:
-      BUSINESS_CORE_STORE: postgres
-      PG_DSN: postgresql://kg:kg@postgres:5432/kg
-      CORS_ALLOW_ORIGINS: ""
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
 
   gateway:
     image: nginx:1.27-alpine
@@ -166,7 +153,6 @@ services:
       - graph-rule-service
       - auth-service
       - file-import-service
-      - business-core
     restart: unless-stopped
 
   # ── 前端 web（prod：Nginx 托管 + 代理网关，全容器）──

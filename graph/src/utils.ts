@@ -23,24 +23,6 @@ export const mergeModelGraphData = <G extends GraphDataGenerics>(
       const existingNode = prevGraphData.graphData.nodes[existingNodeIndex]
 
       if (existingNode.data && node.data) {
-        // 新值覆盖旧值，保留原有的 pageIndex 和 pageSize 如果它们存在
-        // existingNode.data = {
-        //   ...existingNode.data,
-        //   ...node.data,
-        //   pageIndex:
-        //     existingNode.data.pageIndex !== undefined
-        //       ? existingNode.data.pageIndex
-        //       : node.data.pageIndex,
-        //   count:
-        //     existingNode.data.count !== undefined
-        //       ? existingNode.data.count
-        //       : node.data.count,
-        //   total:
-        //     existingNode.data.total !== undefined
-        //       ? existingNode.data.total
-        //       : node.data.total,
-        // }
-
         existingNode.data = node.data
       }
 
@@ -61,11 +43,7 @@ export const mergeModelGraphData = <G extends GraphDataGenerics>(
     )
 
     if (existingLinkIndex !== -1) {
-      // const existingLink = prevGraphData.graphData.links[existingLinkIndex]
-      // if (existingLink.data && link.data)
-      //   Object.assign(existingLink.data, link.data)
-      // existingLink.source = link.source
-      // existingLink.target = link.target
+      // 已存在：保持原边不变（不覆盖 source/target/data）
     } else {
       prevGraphData.graphData.links.push(link)
     }

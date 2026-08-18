@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { GraphModel } from "@lansheng/knowledge-graph"
+import { linkEndpoints } from "../link-utils"
 
 export interface TimeRange {
   min: number
@@ -139,12 +140,7 @@ export function useGraphFilters(modelRef: { current: GraphModel }) {
         }
         if (hideNodes.size > 0) {
           for (const l of data.links) {
-            const s = String(
-              typeof l.source === "object" ? l.source.id : l.source,
-            )
-            const t = String(
-              typeof l.target === "object" ? l.target.id : l.target,
-            )
+            const [s, t] = linkEndpoints(l)
             if (hideNodes.has(s) || hideNodes.has(t)) hideLinks.add(l.id)
           }
         }

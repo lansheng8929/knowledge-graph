@@ -1,6 +1,7 @@
 import { PanelContainer, PanelLayer } from "./panel"
 import { useAppCtx } from "./AppContext"
 import { relationLabel } from "./i18n"
+import { linkEndpoints } from "./link-utils"
 
 interface LinkTooltipProps {}
 
@@ -13,10 +14,7 @@ export function LinkTooltip(_props: LinkTooltipProps) {
   const label = (linkData as any).label ?? ""
   const time = (linkData as any).time ?? ""
   const intimacy = (linkData as any).intimacy
-  const sourceId =
-    typeof link.source === "object" ? link.source.id : link.source
-  const targetId =
-    typeof link.target === "object" ? link.target.id : link.target
+  const [sourceId, targetId] = linkEndpoints(link)
 
   return (
     <PanelContainer

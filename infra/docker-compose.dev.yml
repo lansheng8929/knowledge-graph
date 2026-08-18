@@ -116,8 +116,9 @@ services:
 
   auth:
     build:
-      context: ../services/auth-service
-      dockerfile: Dockerfile
+      # context 为仓库根：Dockerfile 需 COPY shared/service-common（JWT 统一实现）
+      context: ../
+      dockerfile: services/auth-service/Dockerfile
     container_name: kg-dev-auth
     volumes:
       - ../services/auth-service/app:/app/app
@@ -156,8 +157,9 @@ services:
 
   import:
     build:
-      context: ../services/file-import-service
-      dockerfile: Dockerfile
+      # context 为仓库根：Dockerfile 需 COPY shared/service-common（JWT 统一实现）
+      context: ../
+      dockerfile: services/file-import-service/Dockerfile
     container_name: kg-dev-import
     volumes:
       - ../services/file-import-service/app:/app/app
@@ -174,22 +176,6 @@ services:
         condition: service_healthy
     ports:
       - "8005:8005"
-    restart: unless-stopped
-
-  # ── 通用业务能力组件（审批/任务/报表/审计，业务无关）────
-  business-core:
-    build:
-      context: ../services/business-core-service
-      dockerfile: Dockerfile
-    container_name: kg-dev-business-core
-    volumes:
-      - ../services/business-core-service/app:/app/app
-    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8006
-    environment:
-      BUSINESS_CORE_STORE: postgres
-      PG_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
-    ports:
-      - "8006:8006"
     restart: unless-stopped
 
   # ── 前端（挂载仓库源码 + 容器内装依赖 + vite dev HMR）──
@@ -217,7 +203,6 @@ services:
       - opa
       - ingestion
       - import
-      - business-core
     restart: unless-stopped
 
 # 复用现有 Neo4j 数据卷（与生产共用，勿同时跑 dev/prod）

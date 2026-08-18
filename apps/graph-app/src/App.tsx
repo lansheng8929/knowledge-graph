@@ -23,6 +23,8 @@ import { useRuleMenu } from "./hooks/useRuleMenu"
 import { useGraphApp } from "./hooks/useGraphApp"
 import { useGraphSelection } from "./hooks/useGraphSelection"
 import { applyIcons } from "./icon-map"
+import { linkEndpoints } from "./link-utils"
+import { BASE_FORCE_CONFIG } from "./physics-config"
 import { graphApi } from "./api/client"
 import TimePanel from "./TimePanel"
 import FilterPanel from "./FilterPanel"
@@ -36,9 +38,8 @@ function getLoadedNeighbors(
 ) {
   const loaded: Record<string, { out: number; in: number }> = {}
   for (const link of graphData.links) {
-    const sid = typeof link.source === "object" ? link.source.id : link.source
-    const tid = typeof link.target === "object" ? link.target.id : link.target
-    if (String(sid) === nodeId) {
+    const [sid, tid] = linkEndpoints(link)
+    if (sid === nodeId) {
       const targetNode = graphData.nodes.find((n: any) => n.id === tid)
       if (targetNode) {
         const t = (targetNode as any).data?.nodeType ?? "unknown"
@@ -46,7 +47,7 @@ function getLoadedNeighbors(
         loaded[t].out += 1
       }
     }
-    if (String(tid) === nodeId) {
+    if (tid === nodeId) {
       const sourceNode = graphData.nodes.find((n: any) => n.id === sid)
       if (sourceNode) {
         const t = (sourceNode as any).data?.nodeType ?? "unknown"
@@ -225,20 +226,13 @@ export default function App() {
   )
 
   // 布局切换：力导向 ⇄ 树形（根=选中节点，无选中取画布首节点）
-  const forceConfig = {
-    repulsion: -200,
-    linkDistance: 100,
-    linkStrength: 0.2,
-    centerStrength: 0.1,
-    velocityDecay: 0.4,
-  }
   const toggleTreeLayout = useCallback(() => {
     const view = viewRef.current
     if (!view) return
     if (treeMode) {
       // 重建力导向时带上当前亲密度→引力系数，切回后仍保持调节效果
       view.setLayout(
-        new ForceSimulation({ ...forceConfig, ...intimacyForceFns }),
+        new ForceSimulation({ ...BASE_FORCE_CONFIG, ...intimacyForceFns }),
       )
       setTreeMode(false)
     } else {
@@ -338,17 +332,6 @@ export default function App() {
                 >
                   Fetching from mock API ...
                 </div>
-                <div
-                  id="runtime-error"
-                  style={{
-                    display: "none",
-                    marginTop: "20px",
-                    color: "#ff6b6b",
-                    fontSize: "13px",
-                    maxWidth: "500px",
-                    wordBreak: "break-all",
-                  }}
-                ></div>
                 {initError && (
                   <div
                     style={{

@@ -3,7 +3,7 @@ name = "business-core-service"
 version = "0.1.0"
 description = "通用业务能力组件：审批流/任务分派/报表聚合/审计责任（业务无关，对接任意业务）"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

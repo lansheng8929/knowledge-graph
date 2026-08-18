@@ -10,7 +10,6 @@ import {
 } from "react"
 import { usePanel, type UsePanelOptions } from "./usePanel"
 import { useDrag } from "./useDrag"
-import { GripHorizontal } from "lucide-react"
 
 interface PanelContainerProps extends UsePanelOptions {
   children: ReactNode
@@ -185,7 +184,6 @@ export const PanelContainer = memo(function PanelContainer({
           className="panel-grip"
           onMouseDown={onGripMouseDown}
         >
-          {/* <GripHorizontal size={14} /> */}
           {onClose && (
             <button
               onClick={(e) => {
