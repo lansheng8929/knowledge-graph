@@ -353,6 +353,8 @@ export function useGraphApp(ids?: string[]) {
   useEffect(() => {
     const model = modelRef.current
     ;(async () => {
+      if (ids?.length === 0) return
+
       try {
         // 流式 init：边收边增量渲染（数据已写入 model），全部到达后一次性布局
         setLoadProgress({ nodes: 0, links: 0 })
@@ -370,6 +372,7 @@ export function useGraphApp(ids?: string[]) {
           },
         })
       } catch (err) {
+        setLoadProgress(null)
         setInitError(err instanceof Error ? err.message : String(err))
       }
     })()

@@ -93,7 +93,6 @@ export default function App() {
       handleToggleSnapshotPanel,
       handleUndo,
       handleRedo,
-      // 亲密度→吸引力调节
       physicsPanelOpen,
       setPhysicsPanelOpen,
       intimacyForceFns,
@@ -509,7 +508,9 @@ export default function App() {
             )}
 
             {/* ─── 流式加载进度（独立浮层，不挡画布可看见） ─── */}
-            {loadProgress && (
+            {loadProgress &&
+              (loadProgress.nodes ?? 0) > 0 &&
+              (loadProgress.links ?? 0) > 0 && (
               <div
                 style={{
                   position: "fixed",
