@@ -79,82 +79,6 @@
       #single-spa-application\:user-app:not(:empty) {
         pointer-events: auto;
       }
-      /* ── 登录界面（T2.3.3 生产鉴权，颜色取主题 token）── */
-      #login-view {
-        position: fixed;
-        inset: 0;
-        z-index: 1000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: radial-gradient(
-          circle at 30% 20%,
-          rgb(var(--surface)),
-          rgb(var(--background)) 70%
-        );
-      }
-      #login-view[hidden] {
-        display: none;
-      }
-      .login-card {
-        width: 320px;
-        padding: 32px 28px;
-        border-radius: 12px;
-        background: rgb(var(--surface));
-        border: 1px solid rgb(var(--border) / 0.7);
-        box-shadow: 0 20px 60px rgb(0 0 0 / 0.5);
-        color: rgb(var(--foreground));
-      }
-      .login-card h1 {
-        margin: 0 0 4px;
-        font-size: 20px;
-      }
-      .login-card p.sub {
-        margin: 0 0 20px;
-        font-size: 13px;
-        color: rgb(var(--muted-foreground));
-      }
-      .login-card label {
-        display: block;
-        font-size: 13px;
-        color: rgb(var(--muted-foreground));
-        margin: 12px 0 4px;
-      }
-      .login-card input {
-        box-sizing: border-box;
-        width: 100%;
-        padding: 9px 10px;
-        border-radius: 6px;
-        border: 1px solid rgb(var(--border) / 0.8);
-        background: rgb(var(--background));
-        color: rgb(var(--foreground));
-        font-size: 14px;
-        outline: none;
-      }
-      .login-card input:focus {
-        border-color: rgb(var(--overlay-bg));
-      }
-      .login-card button {
-        width: 100%;
-        margin-top: 20px;
-        padding: 10px;
-        border: none;
-        border-radius: 6px;
-        background: rgb(var(--primary));
-        color: rgb(var(--primary-foreground));
-        font-size: 14px;
-        cursor: pointer;
-      }
-      .login-card button:disabled {
-        opacity: 0.6;
-        cursor: default;
-      }
-      .login-error {
-        min-height: 18px;
-        margin-top: 10px;
-        font-size: 13px;
-        color: rgb(var(--danger));
-      }
       /* 壳层导航：退出登录（跟随右侧用户芯片，不再独占 auto） */
       #logout-btn {
         padding: 4px 10px;
@@ -168,6 +92,12 @@
       #logout-btn:hover {
         border-color: rgb(var(--danger));
         color: rgb(var(--danger));
+      }
+
+      .chat {
+        position: absolute;
+        bottom: 5px;
+        right: 5px;
       }
     </style>
   </head>
@@ -186,36 +116,10 @@
       <div id="single-spa-application:import-app"></div>
       <div id="single-spa-application:user-app"></div>
     </main>
-    <!-- T2.3.3 登录界面（生产鉴权）：启动前必须登录换取 JWT -->
-    <div id="login-view" hidden>
-      <form class="login-card" id="login-form">
-        <h1>知识图谱平台</h1>
-        <p class="sub">请使用平台账号登录</p>
-        <label for="login-username">用户名</label>
-        <input
-          id="login-username"
-          name="username"
-          autocomplete="username"
-          required
-        />
-        <label for="login-password">密码</label>
-        <input
-          id="login-password"
-          name="password"
-          type="password"
-          autocomplete="current-password"
-          required
-        />
-        <button id="login-submit" type="submit">登 录</button>
-        <div class="login-error" id="login-error" role="alert"></div>
-      </form>
-    </div>
-    <!-- T2.3.4 动态 importmap：由 importmap.json 决定子应用版本与共享依赖。
-         更新/回滚子应用 = 只改 importmap.json（部署态文件），shell 零重建零部署。 -->
+
+    <login-view hidden></login-view>
+
     <script>
-      // 在任何模块执行前同步拉取 importmap 并注入为原生 importmap，
-      // 保证 import("graph-app") 可解析（含共享依赖 ESM）。
-      // （子应用产物由 scripts/publish-graph-app.sh 发布到 ./subapps/）
       ;(function () {
         function applyImportMap(map) {
           var s = document.createElement("script")

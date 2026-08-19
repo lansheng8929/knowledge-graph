@@ -11,6 +11,9 @@ SERVICE_NAME = "agent-service"
 SERVICE_VERSION = os.getenv("SERVICE_VERSION", "0.1.0")
 DEFAULT_CORS_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000")
 
+SESSION_STORE = os.getenv("SESSION_STORE", "postgres")
+PG_DSN = os.getenv("PG_DSN", "postgresql://kg:kg@localhost:5432/kg")
+
 
 def get_env(name: str, default: str = "") -> str:
     """取环境变量；未设置返回 default。"""

@@ -48,9 +48,13 @@ class ImportTask:
     # 该任务实际导入的实体 id（供前端跳转图谱定位展示）
     entity_ids: List[str] = field(default_factory=list)
     # ── 主任务/子任务流水线（P3：亲密度编排）───────────
-    steps: List[str] = field(default_factory=list)  # 有序子任务名，如 ["parse","compute_intimacy"]
+    steps: List[str] = field(
+        default_factory=list
+    )  # 有序子任务名，如 ["parse","compute_intimacy"]
     current_step: str = ""  # 当前执行到的子任务名
-    subtasks: List[dict] = field(default_factory=list)  # 子任务进度 [{name,status,detail,started_at,finished_at}]
+    subtasks: List[dict] = field(
+        default_factory=list
+    )  # 子任务进度 [{name,status,detail,started_at,finished_at}]
     queued_at: str = ""
     # 上传入参（含临时文件路径；to_dict 不回传，避免泄漏主体/文件信息）
     payload: dict = field(default_factory=dict)
@@ -80,7 +84,8 @@ class ImportTask:
             "steps": self.steps,
             "current_step": self.current_step,
             "subtasks": [
-                {"name": s.get("name"), "status": s.get("status")} for s in self.subtasks
+                {"name": s.get("name"), "status": s.get("status")}
+                for s in self.subtasks
             ],
             "owner": self.owner,
             "owner_uid": self.owner_uid,

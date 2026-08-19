@@ -1,12 +1,9 @@
-/**
- * Single-SPA root-config（T2.3.1 / T2.3.2 + 原生 importmap 共享依赖）。
- *
- * dev：同仓引用子应用源码（热更）；生产：原生 importmap 加载子应用 ESM 产物
- * 与共享依赖 ESM（react/react-dom 单一实例）。
- */
-
 import { navigateToUrl, registerApplication, start } from "single-spa"
-// 平台主题 token 单一来源（壳层加载，供所有子模块读取）
+
+import "./components/chat"
+import { LoginView } from "./components/login"
+import { authStore } from "./utils/auth"
+
 import "./styles/tokens.css"
 
 // T2.3.4 前端单模块更新 + 原生 importmap：
@@ -34,31 +31,15 @@ const loadUserApp = import.meta.env.DEV
   ? () => import("../../user-app/src/single-spa")
   : () => import(/* @vite-ignore */ USER_APP_ENTRY)
 
-// ── token 生命周期（内存 + sessionStorage）────────────
-// 生产流程：无默认/演示账号、无 URL 覆盖；token 由登录界面换取后注入。
-// sessionStorage 仅会话内持久：刷新保持登录，关闭标签页即失效需重新登录。
-const TOKEN_KEY = "kg-token"
-let token = sessionStorage.getItem(TOKEN_KEY) ?? ""
-;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = token || undefined
+authStore.init()
 
 // ── 当前用户芯片（导航右上角，点击进个人中心 /user）──────
 const userChip = document.getElementById("shell-user") as HTMLElement | null
 
-function decodeJwtPayload(t: string): Record<string, unknown> | null {
-  try {
-    const payload = t.split(".")[1] ?? ""
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
-    return JSON.parse(json) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
 function refreshUserChip(): void {
   if (!userChip) return
-  const tok = (window as { __KG_TOKEN__?: string }).__KG_TOKEN__
-  const payload = tok ? decodeJwtPayload(tok) : null
-  const name = String(payload?.sub ?? "") || String(payload?.uid ?? "")
+  const user = authStore.user
+  const name = user?.username || user?.uid || ""
   if (name) {
     userChip.textContent = name
     userChip.hidden = false
@@ -67,11 +48,19 @@ function refreshUserChip(): void {
   }
 }
 
-// ─────────────────────────────────────────────────────
-// 配置：隐藏壳层导航的路由前缀。
-// 命中时 #shell-nav 隐藏，子应用自动占满整屏。
-// 当前：图谱模块 = 全屏独立模块（不显示顶部菜单）
-// ─────────────────────────────────────────────────────
+function mountChat(): void {
+  const user = authStore.user
+  if (!user) return
+  document.querySelector("chat-component")?.remove()
+  const el = document.createElement("chat-component")
+  el.id = "chat"
+  el.className = "chat"
+  el.setAttribute("user-id", user.uid)
+  el.setAttribute("username", user.username)
+  document.body.appendChild(el)
+}
+if (authStore.user) mountChat()
+
 const HIDE_NAV_PREFIXES: string[] = ["/graph"]
 
 function applyNavVisibility(): void {
@@ -169,88 +158,32 @@ function hasValidToken(t: string): boolean {
   return exp !== null && exp * 1000 > Date.now()
 }
 
-const loginView = document.getElementById("login-view") as HTMLElement
-const loginForm = document.getElementById("login-form") as HTMLFormElement
-const loginError = document.getElementById("login-error") as HTMLElement
-const usernameInput = document.getElementById(
-  "login-username",
-) as HTMLInputElement
-const passwordInput = document.getElementById(
-  "login-password",
-) as HTMLInputElement
-const loginSubmit = document.getElementById("login-submit") as HTMLButtonElement
+const loginEl = document.querySelector("login-view") as LoginView
 const logoutBtn = document.getElementById("logout-btn") as HTMLButtonElement
 
-function showLogin(): void {
-  loginView.hidden = false
-  usernameInput.focus()
-}
-function hideLogin(): void {
-  loginView.hidden = true
-}
-function clearAuth(): void {
-  token = ""
-  ;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = undefined
-  sessionStorage.removeItem(TOKEN_KEY)
-}
+loginEl.onSuccess = (tok) => {
+  authStore.setToken(tok)
+  refreshUserChip()
+  mountChat()
+  loginEl.hide()
+  startSpa()
 
-async function handleLogin(e: Event): Promise<void> {
-  e.preventDefault()
-  const username = usernameInput.value.trim()
-  const password = passwordInput.value
-  if (!username || !password) {
-    loginError.textContent = "请输入用户名和密码"
-    return
-  }
-  loginError.textContent = ""
-  loginSubmit.disabled = true
-  loginSubmit.textContent = "登录中…"
-  try {
-    const res = await fetch("/api/v1/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    })
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as {
-        detail?: string
-      } | null
-      throw new Error(body?.detail ?? `登录失败（HTTP ${res.status}）`)
-    }
-    const j = (await res.json()) as { data?: { token?: string } }
-    const tok = j?.data?.token
-    if (!tok) throw new Error("服务端未返回 token")
-    token = tok
-    ;(window as { __KG_TOKEN__?: string }).__KG_TOKEN__ = tok
-    sessionStorage.setItem(TOKEN_KEY, tok)
-    refreshUserChip()
-    hideLogin()
-    startSpa()
-    // 登录后落在首页（菜单栏可见），不直接进入图谱模块
-    if (location.pathname !== "/") navigateToUrl("/")
-  } catch (err) {
-    loginError.textContent = err instanceof Error ? err.message : String(err)
-  } finally {
-    loginSubmit.disabled = false
-    loginSubmit.textContent = "登 录"
-  }
+  if (location.pathname !== "/") navigateToUrl("/")
 }
 
 logoutBtn.addEventListener("click", () => {
-  clearAuth()
+  authStore.clear()
   refreshUserChip()
-  passwordInput.value = ""
-  showLogin()
+  document.querySelector("chat-component")?.remove()
+  loginEl.clearPassword()
+  loginEl.show()
 })
 
-loginForm.addEventListener("submit", handleLogin)
-
-// 启动前先确认登录态：有未过期 token 直接进系统，否则显示登录界面
-if (hasValidToken(token)) {
-  hideLogin()
+if (hasValidToken(authStore.user?.token ?? "")) {
+  loginEl.hide()
   startSpa()
 } else {
-  clearAuth()
-  showLogin()
+  authStore.clear()
+  loginEl.show()
 }
 refreshUserChip()

@@ -15,6 +15,7 @@ WORKDIR /app
 
 COPY services/agent-service/requirements.txt .
 RUN pip install -r requirements.txt
+RUN pip install -q pytest
 
 # JWT 统一实现（service-common，P1 身份重签用）
 COPY shared/service-common ./shared/service-common

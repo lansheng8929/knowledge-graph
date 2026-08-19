@@ -2,5 +2,4 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 pydantic>=2.7
 httpx>=0.27
-# JWT 统一实现（service-common，P1 身份重签用）：本地 venv 用 `pip install -e ../../shared/service-common`；
-# Docker 镜像由 Dockerfile 单独 COPY 安装（相对路径超出构建上下文）
+psycopg[binary]>=3.1

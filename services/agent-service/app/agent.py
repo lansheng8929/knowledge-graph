@@ -72,6 +72,7 @@ async def run_agent(
         reply: LLMMessage = await llm.chat(messages, tools=tools.specs())
 
         if not reply.tool_calls:
+            messages.append(LLMMessage.assistant(reply.content[:MAX_OUTPUT_TOKENS]))
             for ev in _delta_events(reply.content[:MAX_OUTPUT_TOKENS]):
                 yield ev
             yield _done_event(session_id, messages)

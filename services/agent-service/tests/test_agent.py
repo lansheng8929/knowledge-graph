@@ -63,6 +63,7 @@ def test_plain_reply_delta_chunks():
     text = "x" * 200  # 64/块 → 4 个 delta + done
     llm = RecordingLLM([LLMMessage.assistant(text)])
     events = _collect(llm=llm, tools=_registry_with())
+    print(events)
     assert [e.event for e in events] == ["delta"] * 4 + ["done"]
     assert "".join(e.data["text"] for e in events[:-1]) == text
 
@@ -177,7 +178,9 @@ def test_subject_used_for_execution():
         ]
     )
     ctx = ChatContext(subject={"uid": "u1", "username": "张三"})
-    _collect(message="查找", context=ctx, llm=llm, tools=_registry_with(capture_handler))
+    _collect(
+        message="查找", context=ctx, llm=llm, tools=_registry_with(capture_handler)
+    )
     assert seen["subject"] == {"uid": "u1", "username": "张三"}
 
 

@@ -186,14 +186,22 @@ services:
     container_name: kg-dev-agent
     volumes:
       - ../services/agent-service/app:/app/app
-    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8006
+      - ../services/agent-service/tests:/app/tests
+
+    command:
+      - sh
+      - -c
+      - "exec uvicorn app.main:app --reload --host 0.0.0.0 --port 8006"
     environment:
       LLM_PROVIDER: mock
-      # P1 预留：身份重签密钥 + 上游服务地址（dev 服务名）
+      SESSION_STORE: postgres
+      PG_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
       GRAPH_QUERY_URL: http://kg-dev-query:8001
       IMPORT_SERVICE_URL: http://kg-dev-import:8005
       INGESTION_URL: http://kg-dev-ingestion:8003
+    depends_on:
+      - postgres
     ports:
       - "8006:8006"
     restart: unless-stopped

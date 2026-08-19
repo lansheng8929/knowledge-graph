@@ -76,6 +76,11 @@ export default defineConfig({
         target: process.env.VITE_IMPORT_PROXY ?? "http://localhost:8005",
         changeOrigin: true,
       },
+      "/api/v1/agent": {
+        // 对话 Agent agent-service（容器化 dev 用 VITE_AGENT_PROXY 指向 kg-dev-agent）
+        target: process.env.VITE_AGENT_PROXY ?? "http://localhost:8006",
+        changeOrigin: true,
+      },
       "/api": {
         // 容器化 dev 用 VITE_PROXY_TARGET 指向 kg-dev-query
         target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8001",
