@@ -1,6 +1,7 @@
 """SSE 对话端点：组装器（请求/配置/注册表 → run_agent → SSE 帧）。"""
 
 import json
+import logging
 
 from fastapi import Request
 
@@ -10,6 +11,8 @@ from .llm import get_llm
 from .models import ChatContext, ChatRequest
 from .session_store import create_session_store
 from .tools.registry import registry
+
+logger = logging.getLogger(__name__)
 
 
 def _subject_from_request(request: Request) -> dict:
@@ -47,6 +50,19 @@ async def gen(req: ChatRequest, request: Request):
     ctx.subject = _subject_from_request(request)
     owner = str(ctx.subject.get("uid") or ctx.subject.get("username") or "")
 
+    try:
+        llm = get_llm()
+        ok, detail = await llm.ping()
+        if not ok:
+            yield f"event: error\ndata: {json.dumps({'message': f'LLM 服务检查失败: {detail}'}, ensure_ascii=False)}\n\n"
+            yield "event: done\ndata: {}\n\n"
+            return
+    except Exception as e:
+        logger.exception("LLM 初始化失败: %s", e)
+        yield f"event: error\ndata: {json.dumps({'message': f'LLM 初始化失败: {e}'}, ensure_ascii=False)}\n\n"
+        yield "event: done\ndata: {}\n\n"
+        return
+
     store = create_session_store(PG_DSN)
 
     try:
@@ -62,11 +78,10 @@ async def gen(req: ChatRequest, request: Request):
             session_id = conv["id"]
             is_new_session = True
     except Exception as e:
+        logger.exception("会话初始化失败: %s", e)
         yield f"event: error\ndata: {json.dumps({'message': f'会话初始化失败: {e}'}, ensure_ascii=False)}\n\n"
         yield "event: done\ndata: {}\n\n"
         return
-
-    llm = get_llm()
 
     try:
         async for ev in run_agent(
@@ -81,5 +96,6 @@ async def gen(req: ChatRequest, request: Request):
                 ev.data["session_id"] = session_id
             yield f"event: {ev.event}\ndata: {json.dumps(ev.data, ensure_ascii=False)}\n\n"
     except Exception as e:
-        yield f"event: error\ndata: {json.dumps({'message': str(e)}, ensure_ascii=False)}\n\n"
+        logger.exception("chat 流处理异常: %s", e)
+        yield 'event: error\ndata: {"message": "服务器开小差了，请稍后重试"}\n\n'
         yield "event: done\ndata: {}\n\n"

@@ -8,31 +8,8 @@
 import json
 import logging
 import os
-from datetime import datetime, timezone
 
-# ── 结构化日志（T2.4.3）──────────────────────────────
-
-
-class JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        payload = {
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "msg": record.getMessage(),
-        }
-        if record.exc_info:
-            payload["exc"] = self.formatException(record.exc_info)
-        return json.dumps(payload, ensure_ascii=False)
-
-
-def setup_logging(level: str = "INFO") -> None:
-    handler = logging.StreamHandler()
-    handler.setFormatter(JsonFormatter())
-    root = logging.getLogger()
-    root.handlers[:] = [handler]
-    root.setLevel(level)
-
+from service_common.logging import setup_logging
 
 # ── OpenTelemetry Trace（T2.4.1）─────────────────────
 

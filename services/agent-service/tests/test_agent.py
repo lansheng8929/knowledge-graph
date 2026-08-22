@@ -103,7 +103,23 @@ def test_tool_success_flow():
     # done 的 messages 里也包含工具结果
     tool_msgs = [m for m in events[-1].data["messages"] if m["role"] == "tool"]
     assert len(tool_msgs) == 1
-    assert "找到 3 个节点" in tool_msgs[0]["content"]
+
+
+def test_tool_call_logged(caplog):
+    import logging
+
+    call = ToolCall(id="c1", name="search_nodes", arguments={"query": "张三"})
+    llm = RecordingLLM(
+        [
+            LLMMessage.assistant(tool_calls=[call]),
+            LLMMessage.assistant("查找到 3 个相关节点。"),
+        ]
+    )
+    with caplog.at_level(logging.INFO, logger="app.agent"):
+        _collect(message="帮我查找张三", llm=llm, tools=_registry_with())
+    msgs = [r.message for r in caplog.records]
+    assert any("工具调用 search_nodes" in m and "张三" in m for m in msgs)
+    assert any("工具 search_nodes → done" in m and "找到 3 个节点" in m for m in msgs)
 
 
 def test_tool_failure_flow():

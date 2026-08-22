@@ -21,6 +21,7 @@ from . import metrics
 from . import models as m
 from .config import settings
 from .observability import audit, init_tracing, instrument_fastapi, setup_logging
+from service_common.errors import register_exception_handler
 from .pep import get_pep, subject_from_request
 from .store import RuleStore, create_store
 from .validator import ConditionValidationError, parse_conditions, validate_conditions
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
 
     # 可观测（T2.4）：结构化日志 + OTel Trace（未配置 collector 时静默跳过）
     setup_logging()
+    register_exception_handler(app)
     if init_tracing(settings.service_name):
         instrument_fastapi(app)
 

@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from typing import Any, AsyncIterator
 
@@ -23,6 +24,8 @@ from .config import get_env_int
 from .llm import LLMClient
 from .models import ChatContext, LLMMessage, SseEvent
 from .tools.registry import ToolRegistry
+
+logger = logging.getLogger(__name__)
 
 # ── 内置常量（§11.3）────────────────────────────────────
 
@@ -80,6 +83,7 @@ async def run_agent(
 
         messages.append(reply)
         for call in reply.tool_calls:
+            logger.info("工具调用 %s args=%s", call.name, call.arguments)
             yield SseEvent(
                 event="tool",
                 data={
@@ -90,12 +94,14 @@ async def run_agent(
             )
 
             result = await tools.execute(call, subject)
+            status = "done" if result.ok else "error"
+            logger.info("工具 %s → %s: %s", call.name, status, result.summary)
 
             yield SseEvent(
                 event="tool",
                 data={
                     "name": call.name,
-                    "status": "done" if result.ok else "error",
+                    "status": status,
                     "summary": result.summary,
                 },
             )

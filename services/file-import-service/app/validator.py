@@ -25,7 +25,7 @@ DEFAULT_NODE_TYPES = {
     "device",
 }
 
-VALID_VISIBILITY = {"public", "internal", "secret", "private"}
+VALID_VISIBILITY = {"public", "internal", "private"}
 MIN_CLASSIFICATION = 0
 MAX_CLASSIFICATION = 3
 

@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 import json
+import logging
 
 from .chat import _subject_from_request, gen
 from .config import (
@@ -26,7 +27,12 @@ from .config import (
 )
 from .models import ChatRequest
 from .session_store import create_session_store
+from .tools.graph import register_graph_tools
 from .tools.registry import registry
+from service_common.errors import register_exception_handler
+from service_common.logging import setup_logging
+
+logger = logging.getLogger(__name__)
 
 STREAM_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
@@ -38,10 +44,13 @@ def _owner_of(request: Request) -> str:
 
 
 def create_app() -> FastAPI:
+    setup_logging()
     app = FastAPI(
         title="Knowledge Graph Agent Service",
         version=SERVICE_VERSION,
     )
+    register_exception_handler(app)
+    register_graph_tools(registry)
 
     # CORS：开发白名单（生产由网关统一出口）
     origins = get_env_list("CORS_ALLOW_ORIGINS", DEFAULT_CORS_ORIGINS)
@@ -72,6 +81,7 @@ def create_app() -> FastAPI:
         try:
             req = ChatRequest(**await request.json())
         except Exception as exc:
+            logger.exception("chat 请求解析失败: %s", exc)
             frames = (
                 f"event: error\ndata: {json.dumps({'message': f'请求解析失败: {exc}'}, ensure_ascii=False)}\n\n"
                 "event: done\ndata: {}\n\n"

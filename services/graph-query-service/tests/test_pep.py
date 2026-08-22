@@ -109,6 +109,27 @@ def test_default_subject_has_subuids():
     assert DEFAULT_SUBJECT["subUids"] == []
 
 
+def test_subject_from_request_uses_default_without_header():
+    from types import SimpleNamespace
+
+    from app.pep import subject_from_request
+
+    subject = subject_from_request(SimpleNamespace(headers={}))
+    assert subject["tenantId"] == "default"
+    assert subject["uid"] == "anonymous"
+
+
+def test_subject_from_request_parses_context_header():
+    from types import SimpleNamespace
+
+    from app.pep import subject_from_request
+
+    raw = '{"uid":"u1","username":"张三","roles":["analyst"]}'
+    subject = subject_from_request(SimpleNamespace(headers={"X-User-Context": raw}))
+    assert subject["uid"] == "u1"
+    assert subject["username"] == "张三"
+
+
 # ── 可见性分层（2026-08-05 精细化）────────────────────
 
 
@@ -151,17 +172,17 @@ def test_internal_owner_scope():
     assert l3_visible(sub_data, outsider) is False
 
 
-def test_secret_compat_as_internal():
-    # secret 存量兼容按 internal：属主本人低 clearance 也可见（密级不挡可见）
+def test_secret_visibility_denied_after_removal():
+    # secret 档已移除（2026-08-23）：不再按 internal 兼容，未知档位安全默认拒绝
     data = {
         "tenantId": "t1",
         "classification": 1,
         "visibility": "secret",
         "owner": "u-a",
     }
-    assert l3_visible(data, SUBJECT) is True
+    assert l3_visible(data, SUBJECT) is False
     low = {**SUBJECT, "clearance": 1}
-    assert l3_visible(data, low) is True
+    assert l3_visible(data, low) is False
     other = {**SUBJECT, "uid": "u-other", "teams": [], "subUids": []}
     assert l3_visible(data, other) is False
 
@@ -180,7 +201,6 @@ def test_l3_conditions_layered_visibility():
     where, params = l3_conditions(SUBJECT)
     assert "visibility = 'private'" in where
     assert "visibility = 'internal'" in where
-    assert "visibility = 'secret'" in where  # 存量兼容
     assert "ownerUid = $subject_uid" in where
     assert "ownerUid IN $subject_subUids" in where
     assert "owner IN $subject_subUids" in where

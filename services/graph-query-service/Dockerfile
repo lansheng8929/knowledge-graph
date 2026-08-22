@@ -16,6 +16,10 @@ WORKDIR /app
 COPY services/graph-query-service/requirements.txt .
 RUN pip install -r requirements.txt
 
+# 共享基础包（JWT / 主体解析 / 统一日志）
+COPY shared/service-common ./shared/service-common
+RUN pip install ./shared/service-common
+
 # ABAC PEP 客户端（L2，shared/pep-client）
 COPY shared/pep-client ./shared/pep-client
 RUN pip install ./shared/pep-client

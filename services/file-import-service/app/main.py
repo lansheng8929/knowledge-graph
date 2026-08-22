@@ -23,6 +23,9 @@ from typing import Optional, Tuple
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
+from service_common.errors import register_exception_handler
+from service_common.logging import setup_logging
+
 from . import models as m
 from .config import settings
 from .mapper import map_tables
@@ -75,6 +78,7 @@ def _cleanup_temp(task_id: str) -> None:
 
 
 def create_app() -> FastAPI:
+    setup_logging()
     # 全局串行队列（lifespan 启动 worker；上传请求经 enqueue 入队）
     queue: Optional[TaskQueue] = None
 
@@ -94,6 +98,7 @@ def create_app() -> FastAPI:
         version=settings.service_version,
         lifespan=lifespan,
     )
+    register_exception_handler(app)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,

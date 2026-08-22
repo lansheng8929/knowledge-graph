@@ -91,6 +91,8 @@ services:
     environment:
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
       CORS_ALLOW_ORIGINS: ""
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
       # 用户存储（T4.1）：postgres 落库（auth_users 表）
       USER_STORE: postgres
       AUTH_DB_DSN: postgresql://kg:kg@postgres:5432/kg
@@ -104,7 +106,8 @@ services:
   # ── 数据导入模块（T3.1 / import-module-plan P1）──────
   graph-ingestion:
     build:
-      context: ../services/graph-ingestion
+      context: ../
+      dockerfile: services/graph-ingestion/Dockerfile
       args:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
@@ -132,6 +135,8 @@ services:
       # dev 直连/网关缺省时校验 Authorization JWT 的密钥（与 auth-service 一致）
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
       CORS_ALLOW_ORIGINS: ""
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
       # 历史任务落库 Postgres
       TASK_STORE: postgres
       PG_DSN: postgresql://kg:kg@postgres:5432/kg
@@ -152,7 +157,12 @@ services:
         NO_PROXY: ${NO_PROXY:-}
     container_name: kg-agent
     environment:
-      LLM_PROVIDER: mock
+      LLM_PROVIDER: openai
+      LLM_BASE_URL: http://192.168.124.15:11434/v1
+      LLM_MODEL: qwen3:8b
+      LLM_API_KEY: ""
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-human}
       # P1 预留：身份重签密钥 + 上游服务地址（容器网络服务名）
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
       GRAPH_QUERY_URL: http://graph-query-service:8001

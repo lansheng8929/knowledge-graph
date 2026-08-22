@@ -85,6 +85,7 @@ services:
       AUDIT_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
       # dev 直连 JWT 兜底（与 auth 同密钥）
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,6 +108,7 @@ services:
       OPA_URL: http://kg-dev-opa:8181
       AUDIT_SINK: postgres
       AUDIT_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,6 +129,8 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
       USER_STORE: postgres
       AUTH_DB_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
       # 初始管理员密码（仅 bootstrap；生产由 Secret 注入）
       AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-admin123}
     depends_on:
@@ -139,8 +143,8 @@ services:
   # ── 数据导入模块（T3.1 / import-module-plan P1）──────
   ingestion:
     build:
-      context: ../services/graph-ingestion
-      dockerfile: Dockerfile
+      context: ../
+      dockerfile: services/graph-ingestion/Dockerfile
     container_name: kg-dev-ingestion
     volumes:
       - ../services/graph-ingestion/app:/app/app
@@ -151,6 +155,7 @@ services:
       NEO4J_PASSWORD: password123
       # 亲密度 v2 多维配置：类型权重 × 金额归一化（timeDecay/frequency 默认关）
       INTIMACY_CONFIG: '{"combine":"product","dimensions":{"linkTypeWeight":{"enabled":true,"weights":{"CALL":0.6,"TRANSFER":0.9,"OWNS":0.7},"defaultWeight":0.5},"businessMetric":{"enabled":true,"fields":[{"field":"amount","min":0,"max":100000}]},"timeDecay":{"enabled":false},"frequency":{"enabled":false}}}'
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
     ports:
       - "8003:8003"
     restart: unless-stopped
@@ -168,6 +173,8 @@ services:
       INGESTION_BASE_URL: http://kg-dev-ingestion:8003
       # 与 auth-service 同一密钥：dev 直连（无网关）时校验 Authorization JWT
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
       # 历史任务落库 Postgres（P2：重启不丢 / 多 worker 一致）
       TASK_STORE: postgres
       PG_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
@@ -193,7 +200,12 @@ services:
       - -c
       - "exec uvicorn app.main:app --reload --host 0.0.0.0 --port 8006"
     environment:
-      LLM_PROVIDER: mock
+      LLM_PROVIDER: openai
+      LLM_BASE_URL: http://192.168.124.15:11434/v1
+      LLM_MODEL: qwen3:8b
+      LLM_API_KEY: ""
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_FORMAT: ${LOG_FORMAT:-human}
       SESSION_STORE: postgres
       PG_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
       AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}

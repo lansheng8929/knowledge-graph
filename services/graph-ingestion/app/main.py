@@ -13,6 +13,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j import GraphDatabase
 
+from service_common.errors import register_exception_handler
+
 from . import intimacy as intimacy_mod
 from . import models as m
 from .config import settings
@@ -65,6 +67,7 @@ def create_app() -> FastAPI:
         version=settings.service_version,
         lifespan=lifespan,
     )
+    register_exception_handler(app)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,

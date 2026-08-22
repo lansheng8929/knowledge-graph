@@ -5,6 +5,7 @@
 - Cypher 由受控模板生成，标识符/操作符经 validator 白名单校验。
 """
 
+import logging
 from typing import Any, Dict, List, Optional
 
 from neo4j import Driver
@@ -14,6 +15,14 @@ from .masking import mask_sensitive
 from .pep import l3_conditions, l3_visible
 from .validator import normalize_conditions, parse_conditions
 
+logger = logging.getLogger(__name__)
+
+
+def _run(session, query, *args, **kwargs):
+    """执行 Cypher 并记录查询语句/参数（DEBUG 级）。"""
+    logger.debug("Cypher: %s | params: %s", " ".join(query.split()), args or kwargs)
+    return session.run(query, *args, **kwargs)
+
 
 # ── 公共工具 ──────────────────────────────────────────
 
@@ -21,17 +30,19 @@ from .validator import normalize_conditions, parse_conditions
 def get_neighbor_summary(driver: Driver, node_id: str) -> Dict[str, Any]:
     """查询节点的邻居类型、方向及数量（保持原结构）。"""
     with driver.session() as session:
-        out_result = session.run(
+        out_result = _run(
+            session,
             """
             MATCH (n {id: $nodeId})-[r]->(target)
-            RETURN type(r) AS relType, COALESCE(target.nodeType, head(labels(target))) AS targetType, count(r) AS cnt
+            RETURN type(r) AS relType, head(labels(target)) AS targetType, count(r) AS cnt
             """,
             nodeId=node_id,
         )
-        in_result = session.run(
+        in_result = _run(
+            session,
             """
             MATCH (n {id: $nodeId})<-[r]-(target)
-            RETURN type(r) AS relType, COALESCE(target.nodeType, head(labels(target))) AS targetType, count(r) AS cnt
+            RETURN type(r) AS relType, head(labels(target)) AS targetType, count(r) AS cnt
             """,
             nodeId=node_id,
         )
@@ -100,7 +111,8 @@ def query_init(
     nodes: List[Dict[str, Any]] = []
     with driver.session() as session:
         for nid in ids:
-            result = session.run(
+            result = _run(
+                session,
                 f"MATCH (n {{id: $nid}}) WHERE {where} RETURN n, labels(n) AS labels",
                 nid=nid,
                 **params,
@@ -117,7 +129,8 @@ def query_init(
         links: List[Dict[str, Any]] = []
         if nodes:
             id_list = [n["id"] for n in nodes]
-            link_result = session.run(
+            link_result = _run(
+                session,
                 """
                 MATCH (a)-[r]->(b)
                 WHERE a.id IN $ids AND b.id IN $ids
@@ -162,10 +175,11 @@ def query_search(
     where, params = l3_conditions(subject or {}, "n")
     nodes: List[Dict[str, Any]] = []
     with driver.session() as session:
-        result = session.run(
+        result = _run(
+            session,
             f"""
             MATCH (n)
-            WHERE n.label CONTAINS $q AND {where}
+            WHERE (n.id = $q OR n.label CONTAINS $q) AND {where}
             RETURN n, labels(n) AS labels
             LIMIT $limit
             """,
@@ -273,7 +287,7 @@ def query_expand(
     seen_node_ids: set = set(req.existingNodeIds)
 
     with driver.session() as session:
-        result = session.run(combined_query, all_params)
+        result = _run(session, combined_query, all_params)
         all_records = list(result)
         total = len(all_records)
 
@@ -367,7 +381,8 @@ def query_analyze(driver: Driver, req: m.AnalysisRequest) -> Dict[str, Any]:
                 time_filter = "AND r.time >= $cutoff"
                 params["cutoff"] = cutoff
 
-            result = session.run(
+            result = _run(
+                session,
                 f"""
                 MATCH (n {{id: $nodeId}})-[r:CALLED]-(other:phone)
                 WHERE r.time IS NOT NULL {time_filter}
@@ -490,12 +505,14 @@ def query_init_stream(
             return None
 
     with driver.session() as node_session, driver.session() as link_session:
-        node_result = node_session.run(
+        node_result = _run(
+            node_session,
             f"MATCH (n) WHERE n.id IN $ids AND {where} RETURN n, labels(n) AS labels",
             ids=ids,
             **params,
         )
-        link_result = link_session.run(
+        link_result = _run(
+            link_session,
             """
             MATCH (a)-[r]->(b)
             WHERE a.id IN $ids AND b.id IN $ids
@@ -576,7 +593,7 @@ def query_expand_stream(
     combined_query = "\nUNION ALL\n".join(query_parts)
 
     with driver.session() as session:
-        result = session.run(combined_query, all_params)
+        result = _run(session, combined_query, all_params)
         rows = list(result)
         total = len(rows)
         yield {"type": "meta", "total": total}

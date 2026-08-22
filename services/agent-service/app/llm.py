@@ -30,6 +30,8 @@ class LLMClient(Protocol):
         tools: list[dict] | None = None,
     ) -> LLMMessage: ...
 
+    async def ping(self) -> tuple[bool, str]: ...
+
 
 class MockLLM:
     """确定性 mock：无真实网络。
@@ -86,6 +88,9 @@ class MockLLM:
 
         # ③ 普通回显
         return LLMMessage.assistant(f"[mock] {last_user}")
+
+    async def ping(self) -> tuple[bool, str]:
+        return True, ""
 
 
 # ── OpenAI 兼容转换（chat/completions 协议）─────────────
@@ -163,6 +168,29 @@ class OpenAILLMClient:
             raise ValueError(
                 "LLM_PROVIDER=openai 需要配置 LLM_BASE_URL 与 LLM_MODEL（LLM_API_KEY 可空）"
             )
+
+    async def ping(self) -> tuple[bool, str]:
+        """连通性 + 模型可用性探测（GET /models），不可用返回 (False, 原因)。"""
+        headers = {"Authorization": f"Bearer {self._api_key}"} if self._api_key else {}
+        try:
+            async with httpx.AsyncClient(
+                timeout=min(self._timeout, 5.0), transport=self._transport
+            ) as client:
+                resp = await client.get(f"{self._base_url}/models", headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code if exc.response is not None else "?"
+            logger.exception("LLM 服务 /models 返回 HTTP %s", code)
+            return False, f"LLM 服务不可达: HTTP {code}"
+        except Exception as exc:
+            detail = str(exc) or type(exc).__name__
+            logger.exception("LLM 服务不可达: %s", detail)
+            return False, f"LLM 服务不可达: {detail}"
+        models = [m.get("id") for m in data.get("data", [])]
+        if models and self._model not in models:
+            return False, f"模型 {self._model} 不在可用列表（{', '.join(models)}）"
+        return True, ""
 
     async def chat(
         self,

@@ -7,7 +7,7 @@
 import logging
 from typing import Any, Dict, Optional, Tuple
 
-from service_common.subject import subject_from_request
+from service_common.subject import subject_from_request as _subject_from_request
 
 from .config import settings
 
@@ -27,7 +27,7 @@ DEFAULT_SUBJECT: Dict[str, Any] = {
 
 def subject_from_request(request) -> Dict[str, Any]:
     """解析主体属性（统一实现见 service_common.subject，单一来源）。"""
-    return subject_from_request(
+    return _subject_from_request(
         request,
         default=DEFAULT_SUBJECT,
         secret=settings.auth_secret,
@@ -45,7 +45,6 @@ def l3_conditions(
       - public    同租户全员可见
       - internal  自己及下级（owner/ownerUid 匹配 uid/username/subUids）
       - private   仅自己
-      - secret    存量兼容 → 按 internal 处理
     密级 classification 只驱动 L4 脱敏（见 masking.py）。
     """
     t = subject.get("tenantId", "default")
@@ -62,7 +61,7 @@ def l3_conditions(
         f"       {alias}.owner = $subject_uid"
         f"       OR {alias}.owner = $subject_username"
         f"       OR {alias}.ownerUid = $subject_uid))"
-        f"   OR (({alias}.visibility = 'internal' OR {alias}.visibility = 'secret') AND ("
+        f"   OR (({alias}.visibility = 'internal') AND ("
         f"       {alias}.owner = $subject_uid"
         f"       OR {alias}.owner = $subject_username"
         f"       OR {alias}.ownerUid = $subject_uid"
@@ -109,7 +108,7 @@ def l3_visible(node_data: Dict[str, Any], subject: Optional[Dict[str, Any]]) -> 
 
     if vs == "private":
         return self_ok()
-    if vs in ("internal", "secret"):  # secret 存量兼容
+    if vs == "internal":
         if self_ok() or owner_uid in sub_uids or owner in sub_uids:
             return True
         return False

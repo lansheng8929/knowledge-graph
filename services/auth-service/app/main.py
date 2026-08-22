@@ -16,6 +16,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from service_common.errors import register_exception_handler
+from service_common.logging import setup_logging
 from service_common.subject import subject_from_payload
 
 from .config import settings
@@ -85,6 +87,7 @@ def _l1_check(subject: dict, path: str) -> None:
 
 
 def create_app() -> FastAPI:
+    setup_logging()
     # 用户存储（memory | postgres）；仅 bootstrap 初始管理员（密码从 Secret 注入，不硬编码）
     store: UserStore = create_user_store(settings.user_store, settings.auth_db_dsn)
     if settings.bootstrap_admin_password and store.get("admin") is None:
@@ -105,6 +108,7 @@ def create_app() -> FastAPI:
         title="Knowledge Graph Auth Service",
         version=settings.service_version,
     )
+    register_exception_handler(app)
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,

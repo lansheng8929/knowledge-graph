@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 
 import httpx
 import pytest
@@ -240,3 +241,68 @@ def test_factory_unknown_provider(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "xxx")
     with pytest.raises(ValueError):
         get_llm()
+
+
+# ── ping 预检 ───────────────────────────────────────────
+
+def test_mock_ping_ok():
+    llm = MockLLM()
+    ok, detail = _run(llm.ping())
+    assert ok
+    assert detail == ""
+
+
+def test_openai_ping_ok_when_model_available(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"object": "list", "data": [{"id": "test-model"}, {"id": "other"}]},
+        )
+
+    llm = _openai(monkeypatch, transport=httpx.MockTransport(handler))
+    ok, detail = _run(llm.ping())
+    assert ok
+    assert detail == ""
+
+
+def test_openai_ping_fails_when_model_missing(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"object": "list", "data": [{"id": "other"}]})
+
+    llm = _openai(monkeypatch, transport=httpx.MockTransport(handler))
+    ok, detail = _run(llm.ping())
+    assert not ok
+    assert "test-model" in detail
+
+
+def test_openai_ping_fails_on_connect_error(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    llm = _openai(monkeypatch, transport=httpx.MockTransport(handler))
+    ok, detail = _run(llm.ping())
+    assert not ok
+    assert "不可达" in detail
+
+
+def test_openai_ping_fails_on_http_status(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": "unauthorized"})
+
+    llm = _openai(monkeypatch, transport=httpx.MockTransport(handler))
+    ok, detail = _run(llm.ping())
+    assert not ok
+    assert "HTTP 401" in detail
+
+
+def test_openai_ping_logs_error_with_stack(caplog, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    llm = _openai(monkeypatch, transport=httpx.MockTransport(handler))
+    with caplog.at_level(logging.ERROR, logger="app.llm"):
+        ok, _ = _run(llm.ping())
+    assert not ok
+    rec = next(r for r in caplog.records if "LLM 服务不可达" in r.message)
+    assert rec.exc_info is not None
+    assert "Traceback" in rec.exc_text

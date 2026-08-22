@@ -8,9 +8,12 @@ subject 为服务端注入的用户主体（context.subject），工具用它重
 
 from __future__ import annotations
 
+import logging
 from typing import Awaitable, Callable
 
 from ..models import ToolCall, ToolResult, ToolSpec
+
+logger = logging.getLogger(__name__)
 
 # 工具实现：绑定用户主体执行一次工具调用
 ToolHandler = Callable[[ToolCall, dict], Awaitable[ToolResult]]
@@ -48,6 +51,7 @@ class ToolRegistry:
         try:
             return await handler(call, subject)
         except Exception as exc:  # noqa: BLE001
+            logger.warning("工具 %s 执行失败: %s", call.name, exc)
             return ToolResult(
                 tool_call_id=call.id, ok=False, summary=f"工具执行失败: {exc}"
             )
