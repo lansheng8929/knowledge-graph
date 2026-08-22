@@ -1,8 +1,13 @@
-import { navigateToUrl, registerApplication, start } from "single-spa"
+import { registerApplication, start } from "single-spa"
 
 import "./components/chat"
 import { LoginView } from "./components/login"
 import { authStore } from "./utils/auth"
+
+import "./router/view-container"
+import { router } from "./router/router"
+import "./components/layout/home-view"
+import "./components/layout/not-found-view"
 
 import "./styles/tokens.css"
 
@@ -54,20 +59,16 @@ function mountChat(): void {
   document.querySelector("chat-component")?.remove()
   const el = document.createElement("chat-component")
   el.id = "chat"
-  el.className = "chat"
   el.setAttribute("user-id", user.uid)
   el.setAttribute("username", user.username)
   document.body.appendChild(el)
 }
 if (authStore.user) mountChat()
 
-const HIDE_NAV_PREFIXES: string[] = ["/graph"]
-
 function applyNavVisibility(): void {
   const nav = document.getElementById("shell-nav")
   if (!nav) return
-  const hidden = HIDE_NAV_PREFIXES.some((p) => location.pathname.startsWith(p))
-  nav.style.display = hidden ? "none" : ""
+  nav.style.display = router.current?.hideNav ? "none" : ""
 }
 
 registerApplication({
@@ -110,7 +111,7 @@ registerApplication({
   }),
 })
 
-// 壳层路由高亮（简单实现，无路由库）
+// ── 路由：单一事件源驱动导航高亮/显隐/壳层视图 ──
 const links = Array.from(
   document.querySelectorAll<HTMLAnchorElement>("a[data-route]"),
 )
@@ -126,12 +127,32 @@ function refreshActive(): void {
     a.classList.toggle("active", active)
   })
 }
-function onRouteChange(): void {
+router.init()
+router.listen(() => {
   refreshActive()
   applyNavVisibility()
-}
-window.addEventListener("single-spa:app-change", onRouteChange)
-onRouteChange()
+})
+
+// 站内链接走 SPA 导航（history.pushState），避免整页刷新导致白屏闪烁。
+// single-spa 不会拦截普通 <a>，必须自己处理。
+document.addEventListener("click", (e: MouseEvent) => {
+  if (
+    e.defaultPrevented ||
+    e.button !== 0 ||
+    e.metaKey ||
+    e.ctrlKey ||
+    e.shiftKey ||
+    e.altKey
+  )
+    return
+  const anchor = (e.target as Element).closest<HTMLAnchorElement>("a[href]")
+  if (!anchor) return
+  const href = anchor.getAttribute("href")
+  if (!href || /^(https?:|mailto:|tel:|#)/.test(href)) return
+  if (new URL(href, location.origin).origin !== location.origin) return
+  e.preventDefault()
+  router.navigate(href)
+})
 
 // ── 登录状态机（生产流程）───────────────────────────────
 
@@ -168,7 +189,7 @@ loginEl.onSuccess = (tok) => {
   loginEl.hide()
   startSpa()
 
-  if (location.pathname !== "/") navigateToUrl("/")
+  if (location.pathname !== "/") router.navigate("/")
 }
 
 logoutBtn.addEventListener("click", () => {

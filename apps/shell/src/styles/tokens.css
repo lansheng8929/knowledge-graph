@@ -74,3 +74,8 @@
   --canvas-bg: 24 27 31;
   --overlay-bg: 96 165 250;
 }
+
+/* Design Engineering easing（与主题无关，全局共用） */
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}

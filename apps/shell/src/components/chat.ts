@@ -6,8 +6,7 @@ const template = document.createElement("template")
 template.innerHTML = `
   <style>
     :host {
-      display: flex;
-      height: 100vh;
+      display: block;
       font-family: system-ui, sans-serif;
       --primary: 59, 130, 246;
       --primary-foreground: 255, 255, 255;
@@ -17,6 +16,8 @@ template.innerHTML = `
       --muted-foreground: 148, 163, 184;
       --border: 51, 65, 85;
       --danger: 239, 68, 68;
+      /* Design Engineering：UI 交互统一用强 ease-out 曲线 */
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     }
 
     * {
@@ -29,6 +30,63 @@ template.innerHTML = `
       height: 100%;
       background: rgb(var(--background));
       color: rgb(var(--foreground));
+    }
+
+    .chat-fab {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 1000;
+      width: 56px;
+      height: 56px;
+      border: none;
+      border-radius: 50%;
+      background: rgb(var(--primary));
+      color: rgb(var(--primary-foreground));
+      font-size: 22px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+      transition:
+        transform 160ms var(--ease-out),
+        box-shadow 160ms var(--ease-out),
+        background 160ms var(--ease-out);
+    }
+    .chat-fab:active {
+      transform: scale(0.95);
+    }
+
+    .chat-panel {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 1000;
+      width: min(720px, calc(100vw - 48px));
+      height: min(72vh, 620px);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgb(var(--border));
+      box-shadow: 0 24px 60px rgb(0 0 0 / 0.5);
+      opacity: 0;
+      transform: scale(0.95) translateY(8px);
+      transform-origin: bottom left; /* 锚定左下角按钮，从按钮处展开 */
+      visibility: hidden;
+      pointer-events: none;
+      transition:
+        opacity 200ms var(--ease-out),
+        transform 200ms var(--ease-out),
+        visibility 0s linear 200ms; /* 关闭时延迟隐藏，等位移淡出结束 */
+    }
+    :host([open]) .chat-fab {
+      display: none;
+    }
+    :host([open]) .chat-panel {
+      opacity: 1;
+      transform: none;
+      visibility: visible;
+      pointer-events: auto;
+      transition:
+        opacity 200ms var(--ease-out),
+        transform 200ms var(--ease-out);
     }
 
     .chat-sidebar {
@@ -50,13 +108,15 @@ template.innerHTML = `
       color: rgb(var(--foreground));
       cursor: pointer;
       font-size: 14px;
-      transition: all 0.2s;
+      /* 精确属性过渡（不用 transition: all）+ 按压缩放反馈 */
+      transition:
+        background 160ms var(--ease-out),
+        color 160ms var(--ease-out),
+        border-color 160ms var(--ease-out),
+        transform 160ms var(--ease-out);
     }
-
-    .new-chat-btn:hover {
-      background: rgb(var(--primary));
-      color: rgb(var(--primary-foreground));
-      border-color: rgb(var(--primary));
+    .new-chat-btn:active {
+      transform: scale(0.97);
     }
 
     .session-list {
@@ -74,12 +134,8 @@ template.innerHTML = `
       padding: 10px 12px;
       border-radius: 6px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 160ms var(--ease-out);
       font-size: 14px;
-    }
-
-    .session-item:hover {
-      background: rgba(255, 255, 255, 0.05);
     }
 
     .session-item.active {
@@ -102,15 +158,12 @@ template.innerHTML = `
       font-size: 18px;
       padding: 0 4px;
       opacity: 0;
-      transition: opacity 0.2s;
+      transition:
+        opacity 160ms var(--ease-out),
+        transform 160ms var(--ease-out);
     }
-
-    .session-item:hover .delete-btn {
-      opacity: 1;
-    }
-
-    .delete-btn:hover {
-      color: rgb(var(--danger));
+    .delete-btn:active {
+      transform: scale(0.92);
     }
 
     .chat-main {
@@ -122,6 +175,9 @@ template.innerHTML = `
     }
 
     .chat-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
       padding: 16px 24px;
       border-bottom: 1px solid rgb(var(--border));
       background: rgb(var(--surface));
@@ -131,6 +187,29 @@ template.innerHTML = `
     .chat-header h3 {
       margin: 0;
       font-size: 16px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .chat-close {
+      background: none;
+      border: none;
+      color: rgb(var(--muted-foreground));
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 4px 6px;
+      border-radius: 6px;
+      transition:
+        color 160ms var(--ease-out),
+        background 160ms var(--ease-out),
+        transform 160ms var(--ease-out);
+    }
+    .chat-close:active {
+      transform: scale(0.92);
     }
 
     .chat-messages {
@@ -155,12 +234,13 @@ template.innerHTML = `
       color: rgb(var(--muted-foreground));
       cursor: pointer;
       font-size: 12px;
+      transition:
+        background 160ms var(--ease-out),
+        transform 160ms var(--ease-out);
     }
-
-    .load-more button:hover:not(:disabled) {
-      background: rgba(var(--border), 0.2);
+    .load-more button:active:not(:disabled) {
+      transform: scale(0.97);
     }
-
     .load-more button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -170,7 +250,10 @@ template.innerHTML = `
       display: flex;
       gap: 12px;
       max-width: 80%;
-      animation: fadeIn 0.3s ease;
+    }
+    /* 仅新消息进入有动画：列表导航/切换不重放，避免整屏闪烁 */
+    .message.enter {
+      animation: fadeIn 200ms var(--ease-out) both;
     }
 
     .message.user {
@@ -219,7 +302,7 @@ template.innerHTML = `
     @keyframes fadeIn {
       from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(8px);
       }
       to {
         opacity: 1;
@@ -250,6 +333,7 @@ template.innerHTML = `
       color: rgb(var(--foreground));
       font-size: 14px;
       outline: none;
+      transition: border-color 160ms var(--ease-out);
     }
 
     .chat-input input:focus {
@@ -268,13 +352,13 @@ template.innerHTML = `
       border-radius: 6px;
       cursor: pointer;
       font-size: 14px;
-      transition: opacity 0.2s;
+      transition:
+        opacity 160ms var(--ease-out),
+        transform 160ms var(--ease-out);
     }
-
-    .chat-input button:hover:not(:disabled) {
-      opacity: 0.9;
+    .chat-input button:active:not(:disabled) {
+      transform: scale(0.97);
     }
-
     .chat-input button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -288,7 +372,61 @@ template.innerHTML = `
       color: rgb(var(--muted-foreground));
       font-size: 16px;
     }
+
+    /* 触摸设备 hover 会误触发 → 只对精指针设备启用 hover 效果 */
+    @media (hover: hover) and (pointer: fine) {
+      .new-chat-btn:hover {
+        background: rgb(var(--primary));
+        color: rgb(var(--primary-foreground));
+        border-color: rgb(var(--primary));
+      }
+      .session-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .session-item:hover .delete-btn {
+        opacity: 1;
+      }
+      .delete-btn:hover {
+        color: rgb(var(--danger));
+      }
+      .load-more button:hover:not(:disabled) {
+        background: rgba(var(--border), 0.2);
+      }
+      .chat-input button:hover:not(:disabled) {
+        opacity: 0.9;
+      }
+      .chat-close:hover {
+        color: rgb(var(--foreground));
+        background: rgba(var(--border), 0.3);
+      }
+    }
+
+    /* 减弱动效：保留 opacity 淡入，去除位移与循环闪烁 */
+    @media (prefers-reduced-motion: reduce) {
+      .message.enter {
+        animation: fadeInReduced 150ms ease-out both;
+      }
+      .message.streaming .message-content {
+        animation: none;
+      }
+      .new-chat-btn:active,
+      .delete-btn:active,
+      .chat-close:active,
+      .load-more button:active:not(:disabled),
+      .chat-input button:active:not(:disabled) {
+        transform: none;
+      }
+      .chat-panel {
+        transform: none;
+      }
+    }
+    @keyframes fadeInReduced {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
   </style>
+  <button class="chat-fab" aria-label="打开聊天">💬</button>
+  <div class="chat-panel">
   <div class="chat-container">
     <div class="chat-sidebar">
       <button class="new-chat-btn">+ 新对话</button>
@@ -297,6 +435,7 @@ template.innerHTML = `
     <div class="chat-main">
       <div class="chat-header">
         <h3>新对话</h3>
+        <button class="chat-close" aria-label="收起聊天">✕</button>
       </div>
       <div class="chat-messages">
         <div class="empty-state">开始你的第一次对话吧</div>
@@ -307,9 +446,12 @@ template.innerHTML = `
       </div>
     </div>
   </div>
+  </div>
 `
 
 interface ChatElements {
+  fab: HTMLButtonElement
+  closeBtn: HTMLButtonElement
   sessionList: HTMLElement
   newChatBtn: HTMLButtonElement
   chatHeader: HTMLElement
@@ -371,6 +513,8 @@ export class ChatComponent extends HTMLElement {
 
   private initElements(): void {
     this.elements = {
+      fab: this.shadow.querySelector(".chat-fab") as HTMLButtonElement,
+      closeBtn: this.shadow.querySelector(".chat-close") as HTMLButtonElement,
       sessionList: this.shadow.querySelector(".session-list") as HTMLElement,
       newChatBtn: this.shadow.querySelector(
         ".new-chat-btn",
@@ -386,6 +530,8 @@ export class ChatComponent extends HTMLElement {
   }
 
   private bindEvents(): void {
+    this.elements.fab.addEventListener("click", () => this.setOpen(true))
+    this.elements.closeBtn.addEventListener("click", () => this.setOpen(false))
     this.elements.newChatBtn.addEventListener("click", () =>
       this.createNewSession(),
     )
@@ -396,6 +542,11 @@ export class ChatComponent extends HTMLElement {
         this.handleSend()
       }
     })
+  }
+
+  private setOpen(open: boolean): void {
+    this.toggleAttribute("open", open)
+    if (open) requestAnimationFrame(() => this.elements?.input?.focus())
   }
 
   private async loadSessions(): Promise<void> {
@@ -481,7 +632,7 @@ export class ChatComponent extends HTMLElement {
     }
   }
 
-  private renderMessages(): void {
+  private renderMessages(animateLast = false): void {
     const container = this.elements.chatMessages
     container.innerHTML = ""
 
@@ -519,6 +670,11 @@ export class ChatComponent extends HTMLElement {
       div.appendChild(content)
       container.appendChild(div)
     })
+
+    // 仅新消息进入有动画（列表导航/切换不重放）
+    if (animateLast) {
+      container.lastElementChild?.classList.add("enter")
+    }
 
     // 滚动到底部
     setTimeout(() => {
@@ -589,7 +745,7 @@ export class ChatComponent extends HTMLElement {
     this.currentSession = updatedSession
     await chatDB.saveSession(updatedSession)
 
-    this.renderMessages()
+    this.renderMessages(true) // 用户消息进入动画
     input.value = ""
     input.disabled = true
     this.elements.sendBtn.disabled = true
@@ -599,7 +755,7 @@ export class ChatComponent extends HTMLElement {
     // 添加流式消息占位
     const container = this.elements.chatMessages
     const streamingDiv = document.createElement("div")
-    streamingDiv.className = "message assistant streaming"
+    streamingDiv.className = "message assistant streaming enter"
     streamingDiv.innerHTML = `
       <div class="message-avatar">🤖</div>
       <div class="message-content"></div>
@@ -664,7 +820,7 @@ export class ChatComponent extends HTMLElement {
         )
       }
 
-      this.renderMessages()
+      this.renderMessages(true) // 助手回复进入动画
       this.renderSessions()
       input.disabled = false
       this.elements.sendBtn.disabled = false

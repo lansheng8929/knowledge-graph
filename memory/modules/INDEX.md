@@ -6,3 +6,4 @@
 | microfrontend-shared-deps | 前端共享依赖（原生 importmap+ESM/jspm 转，单实例） | `memory/modules/microfrontend-shared-deps.md` |
 | intimacy-pipeline         | 亲密度计算 + 主任务/子任务流水线（全局串行队列）   | `memory/modules/intimacy-pipeline.md`         |
 | graph-streaming           | init/expand 流式传输（NDJSON+chunked，边收边渲染） | `memory/modules/graph-streaming.md`           |
+| shell                     | Single-SPA 壳层：路由/组件体系/SPA 导航/chat 抽屉  | `memory/modules/shell.md`                     |

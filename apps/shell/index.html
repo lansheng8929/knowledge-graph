@@ -78,6 +78,15 @@
       #single-spa-application\:import-app:not(:empty),
       #single-spa-application\:user-app:not(:empty) {
         pointer-events: auto;
+        animation: appIn 200ms var(--ease-out) both; /* 挂载后淡入，掩盖切换空窗 */
+      }
+      @keyframes appIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
       /* 壳层导航：退出登录（跟随右侧用户芯片，不再独占 auto） */
       #logout-btn {
@@ -93,11 +102,60 @@
         border-color: rgb(var(--danger));
         color: rgb(var(--danger));
       }
-
-      .chat {
+      /* 壳层页面视图：与子应用容器同处 #shell-main；空态不拦截点击 */
+      view-container {
         position: absolute;
-        bottom: 5px;
-        right: 5px;
+        inset: 0;
+        overflow: auto;
+        padding: 24px;
+        pointer-events: none;
+      }
+      view-container:not(:empty) {
+        pointer-events: auto;
+      }
+      /* 壳层视图切换：新视图淡入；.view-leave 由 view-container 播放淡出 */
+      view-container > * {
+        animation: viewIn 200ms var(--ease-out) both;
+      }
+      view-container > .view-leave {
+        animation: viewOut 120ms var(--ease-out) both;
+      }
+      @keyframes viewIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes viewOut {
+        from {
+          opacity: 1;
+          transform: none;
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+      }
+      /* 减弱动效：保留 opacity 淡入，去除位移 */
+      @media (prefers-reduced-motion: reduce) {
+        view-container > *,
+        #single-spa-application\:graph-app:not(:empty),
+        #single-spa-application\:import-app:not(:empty),
+        #single-spa-application\:user-app:not(:empty) {
+          animation: fadeInOnly 200ms ease-out both;
+        }
+      }
+      @keyframes fadeInOnly {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
     </style>
   </head>
@@ -115,6 +173,8 @@
       <div id="single-spa-application:graph-app"></div>
       <div id="single-spa-application:import-app"></div>
       <div id="single-spa-application:user-app"></div>
+      <!-- 壳层页面（首页 / 404）挂载容器 -->
+      <view-container></view-container>
     </main>
 
     <login-view hidden></login-view>
