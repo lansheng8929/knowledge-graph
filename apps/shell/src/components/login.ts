@@ -1,5 +1,7 @@
-const TEMPLATE = `
-  <style>
+import { LitElement, css, html } from "lit"
+
+export class LoginView extends LitElement {
+  static styles = css`
     :host {
       position: fixed;
       inset: 0;
@@ -76,67 +78,54 @@ const TEMPLATE = `
       font-size: 13px;
       color: rgb(var(--danger));
     }
-  </style>
-  <form class="login-card" id="login-form" novalidate>
-    <h1>知识图谱平台</h1>
-    <p class="sub">请使用平台账号登录</p>
-    <label for="login-username">用户名</label>
-    <input
-      id="login-username"
-      name="username"
-      autocomplete="username"
-      required
-    />
-    <label for="login-password">密码</label>
-    <input
-      id="login-password"
-      name="password"
-      type="password"
-      autocomplete="current-password"
-      required
-    />
-    <button id="login-submit" type="submit">登 录</button>
-    <div class="login-error" id="login-error" role="alert"></div>
-  </form>
-`
+  `
 
-export class LoginView extends HTMLElement {
-  private shadow!: ShadowRoot
-  private form!: HTMLFormElement
-  private errorEl!: HTMLElement
-  private usernameInput!: HTMLInputElement
-  private passwordInput!: HTMLInputElement
-  private submitBtn!: HTMLButtonElement
+  static properties = {
+    error: { state: true },
+    submitting: { state: true },
+  }
 
-  /** 登录成功回调（shell 注入；token 持久化 / startSpa 由 shell 处理）。 */
-  onSuccess: (token: string) => void = () => {}
+  /** 登录成功回调（shell 注入；会话 cookie 已由服务端下发，此处仅回传用户信息）。 */
+  onSuccess: (user: { uid: string; username: string }) => void = () => {}
+
+  declare error: string
+  declare submitting: boolean
 
   constructor() {
     super()
-    this.shadow = this.attachShadow({ mode: "open" })
-    const tpl = document.createElement("template")
-    tpl.innerHTML = TEMPLATE
-    this.shadow.appendChild(tpl.content.cloneNode(true))
-
-    this.form = this.shadow.querySelector("#login-form")!
-    this.errorEl = this.shadow.querySelector("#login-error")!
-    this.usernameInput = this.shadow.querySelector("#login-username")!
-    this.passwordInput = this.shadow.querySelector("#login-password")!
-    this.submitBtn = this.shadow.querySelector("#login-submit")!
+    this.error = ""
+    this.submitting = false
   }
 
-  connectedCallback(): void {
-    this.form.addEventListener("submit", this.handleLogin)
-  }
-
-  disconnectedCallback(): void {
-    this.form.removeEventListener("submit", this.handleLogin)
+  render() {
+    return html`
+      <form class="login-card" novalidate @submit=${this.handleLogin}>
+        <h1>知识图谱平台</h1>
+        <p class="sub">请使用平台账号登录</p>
+        <label for="username">用户名</label>
+        <input id="username" name="username" autocomplete="username" required />
+        <label for="password">密码</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+        <button type="submit" ?disabled=${this.submitting}>
+          ${this.submitting ? "登录中…" : "登 录"}
+        </button>
+        <div class="login-error" role="alert">${this.error}</div>
+      </form>
+    `
   }
 
   /** 显示登录界面（聚焦用户名框）。 */
   show(): void {
     this.hidden = false
-    this.usernameInput.focus()
+    this.updateComplete.then(() => {
+      this.renderRoot.querySelector<HTMLInputElement>("#username")?.focus()
+    })
   }
 
   /** 隐藏登录界面。 */
@@ -146,20 +135,24 @@ export class LoginView extends HTMLElement {
 
   /** 退出登录后清空密码框。 */
   clearPassword(): void {
-    this.passwordInput.value = ""
+    const input = this.renderRoot.querySelector<HTMLInputElement>("#password")
+    if (input) input.value = ""
   }
 
   private handleLogin = async (e: Event): Promise<void> => {
     e.preventDefault()
-    const username = this.usernameInput.value.trim()
-    const password = this.passwordInput.value
+    const form = e.currentTarget as HTMLFormElement
+    const username = (
+      form.querySelector<HTMLInputElement>("#username")?.value ?? ""
+    ).trim()
+    const password =
+      form.querySelector<HTMLInputElement>("#password")?.value ?? ""
     if (!username || !password) {
-      this.errorEl.textContent = "请输入用户名和密码"
+      this.error = "请输入用户名和密码"
       return
     }
-    this.errorEl.textContent = ""
-    this.submitBtn.disabled = true
-    this.submitBtn.textContent = "登录中…"
+    this.error = ""
+    this.submitting = true
     try {
       const res = await fetch("/api/v1/auth/login", {
         method: "POST",
@@ -172,16 +165,16 @@ export class LoginView extends HTMLElement {
         } | null
         throw new Error(body?.detail ?? `登录失败（HTTP ${res.status}）`)
       }
-      const j = (await res.json()) as { data?: { token?: string } }
-      const tok = j?.data?.token
-      if (!tok) throw new Error("服务端未返回 token")
-      this.onSuccess(tok)
+      const j = (await res.json()) as {
+        data?: { user?: { uid?: string; username?: string } }
+      }
+      const user = j?.data?.user
+      if (!user || !user.uid) throw new Error("服务端未返回用户信息")
+      this.onSuccess({ uid: user.uid, username: user.username ?? "" })
     } catch (err) {
-      this.errorEl.textContent =
-        err instanceof Error ? err.message : String(err)
+      this.error = err instanceof Error ? err.message : String(err)
     } finally {
-      this.submitBtn.disabled = false
-      this.submitBtn.textContent = "登 录"
+      this.submitting = false
     }
   }
 }

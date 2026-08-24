@@ -21,7 +21,7 @@ def test_tools_registered():
     body = r.json()
     assert body["success"] is True
     names = [t["name"] for t in body["data"]]
-    assert set(names) == {"search_nodes", "expand_graph", "analyze_node"}
+    assert set(names) == {"search_nodes", "expand_graph", "analyze_node", "graph_jump_link"}
 
 
 def test_chat_sse_stream():

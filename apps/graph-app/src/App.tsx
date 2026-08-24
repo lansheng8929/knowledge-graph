@@ -511,42 +511,42 @@ export default function App() {
             {loadProgress &&
               (loadProgress.nodes ?? 0) > 0 &&
               (loadProgress.links ?? 0) > 0 && (
-              <div
-                style={{
-                  position: "fixed",
-                  bottom: 40,
-                  right: 20,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  background: "rgb(var(--tooltip-bg) / 0.95)",
-                  border: "1px solid #7c3aed",
-                  borderRadius: 8,
-                  padding: "6px 12px",
-                  boxShadow: "var(--shadow)",
-                  zIndex: 9998,
-                  fontFamily: "monospace",
-                  fontSize: "12px",
-                  color: "rgb(var(--foreground))",
-                  pointerEvents: "none",
-                }}
-              >
-                <span
+                <div
                   style={{
-                    fontSize: "14px",
-                    animation: "spin 1s linear infinite",
+                    position: "fixed",
+                    bottom: 40,
+                    right: 20,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    background: "rgb(var(--tooltip-bg) / 0.95)",
+                    border: "1px solid #7c3aed",
+                    borderRadius: 8,
+                    padding: "6px 12px",
+                    boxShadow: "var(--shadow)",
+                    zIndex: 9998,
+                    fontFamily: "monospace",
+                    fontSize: "12px",
+                    color: "rgb(var(--foreground))",
+                    pointerEvents: "none",
                   }}
                 >
-                  ⟳
-                </span>
-                <span>
-                  {loadProgress.total != null
-                    ? `加载中 ${loadProgress.nodes}/${loadProgress.total} 节点 · ${loadProgress.links} 边`
-                    : `加载中 ${loadProgress.nodes} 节点 · ${loadProgress.links} 边`}
-                </span>
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              </div>
-            )}
+                  <span
+                    style={{
+                      fontSize: "14px",
+                      animation: "spin 1s linear infinite",
+                    }}
+                  >
+                    ⟳
+                  </span>
+                  <span>
+                    {loadProgress.total != null
+                      ? `加载中 ${loadProgress.nodes}/${loadProgress.total} 节点 · ${loadProgress.links} 边`
+                      : `加载中 ${loadProgress.nodes} 节点 · ${loadProgress.links} 边`}
+                  </span>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+              )}
 
             {/* ─── 框选覆盖层 ─── */}
             <SelectionOverlay />

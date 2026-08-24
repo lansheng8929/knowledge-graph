@@ -16,6 +16,14 @@ class Settings:
     auth_secret: str = os.getenv("AUTH_SECRET", "dev-secret-change-me")
     token_ttl_seconds: int = int(os.getenv("TOKEN_TTL_SECONDS", "3600"))
 
+    # ── 会话 Cookie ───────────────────────────────────
+    # 生产 https 下置 true（Secure 标记），否则 http 本地开发吃不到 cookie
+    cookie_secure: bool = os.getenv("COOKIE_SECURE", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
     # ── 用户存储（T4.1 完善）：memory（默认）| postgres ──
     user_store: str = os.getenv("USER_STORE", "memory")
     auth_db_dsn: str = os.getenv(

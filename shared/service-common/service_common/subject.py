@@ -2,7 +2,7 @@
 
 来源优先级（网关 / dev 直连）：
   1. X-User-Context 头（网关注入，可信）
-  2. Authorization: Bearer JWT（dev 直连兜底，本地验签；可选）
+#  2. Authorization: Bearer JWT / kg_session Cookie（dev 直连兜底，本地验签；可选）
   3. 默认主体（无鉴权直连，不拦截）
 
 服务间差异（默认 roles、是否启用 JWT 兜底）由调用方传参表达：
@@ -77,6 +77,10 @@ def subject_from_jwt(token: str, secret: str) -> Dict[str, Any]:
     return subject_from_payload(verify(token, secret))
 
 
+# 与 auth-service 登录签发的会话 cookie 名一致
+SESSION_COOKIE = "kg_session"
+
+
 def subject_from_request(
     request,
     *,
@@ -86,7 +90,8 @@ def subject_from_request(
 ) -> Tuple[Dict[str, Any], bool]:
     """解析主体，返回 (subject, authenticated)。
 
-    优先级：X-User-Context（可信）→ Bearer JWT（dev 直连，需 secret）→ 默认主体。
+    优先级：X-User-Context（网关注入，可信）→ Bearer JWT / kg_session Cookie
+    （dev 直连无网关场景，需 secret 验签）→ 默认主体。
     """
     raw = request.headers.get("X-User-Context", "")
     if raw:
@@ -95,8 +100,11 @@ def subject_from_request(
         token = request.headers.get("Authorization", "")
         if token.startswith("Bearer "):
             token = token[len("Bearer ") :].strip()
+        else:
+            token = request.cookies.get(SESSION_COOKIE, "") or ""
+        if token:
             try:
                 return subject_from_jwt(token, secret), True
             except (ValueError, KeyError, TypeError):
-                logger.warning("invalid Authorization JWT; treat as unauthenticated")
+                logger.warning("invalid JWT; treat as unauthenticated")
     return dict(default), False

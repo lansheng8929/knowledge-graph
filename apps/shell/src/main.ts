@@ -2,7 +2,7 @@ import { registerApplication, start } from "single-spa"
 
 import "./components/chat"
 import { LoginView } from "./components/login"
-import { authStore } from "./utils/auth"
+import { AUTH_CHANGE_EVENT, authStore } from "./utils/auth"
 
 import "./router/view-container"
 import { router } from "./router/router"
@@ -10,6 +10,12 @@ import "./components/layout/home-view"
 import "./components/layout/not-found-view"
 
 import "./styles/tokens.css"
+import { getSharedBaseSheet } from "./styles/global-sheets"
+
+document.adoptedStyleSheets = [
+  getSharedBaseSheet(),
+  ...document.adoptedStyleSheets,
+]
 
 // T2.3.4 前端单模块更新 + 原生 importmap：
 //   - 开发(dev)：同仓 import 源码 → 改码即热更（不改构建）
@@ -56,14 +62,15 @@ function refreshUserChip(): void {
 function mountChat(): void {
   const user = authStore.user
   if (!user) return
-  document.querySelector("chat-component")?.remove()
+  const existing = document.querySelector("chat-component")
+  if (existing && existing.getAttribute("user-id") === user.uid) return
+  existing?.remove()
   const el = document.createElement("chat-component")
   el.id = "chat"
   el.setAttribute("user-id", user.uid)
   el.setAttribute("username", user.username)
   document.body.appendChild(el)
 }
-if (authStore.user) mountChat()
 
 function applyNavVisibility(): void {
   const nav = document.getElementById("shell-nav")
@@ -75,11 +82,11 @@ registerApplication({
   name: "graph-app",
   app: loadGraphApp,
   activeWhen: (location) => location.pathname.startsWith("/graph"),
-  // T2.3.3 + T4.1.1：鉴权注入通道——壳层换取 token 后填到这里，
-  // 请求自动携带 Authorization: Bearer；网关校验后注入 X-User-Context
+  // T2.3.3 + T4.1.1：鉴权由网关 httpOnly Cookie（kg_session）逐请求校验，
+  // 不再向前端下发 token；子应用请求自带 Cookie 即可
   customProps: () => ({
     auth: {
-      token: (window as { __KG_TOKEN__?: string }).__KG_TOKEN__ ?? "",
+      token: "",
       tenantId: "",
     },
   }),
@@ -92,7 +99,7 @@ registerApplication({
   activeWhen: (location) => location.pathname.startsWith("/import"),
   customProps: () => ({
     auth: {
-      token: (window as { __KG_TOKEN__?: string }).__KG_TOKEN__ ?? "",
+      token: "",
       tenantId: "",
     },
   }),
@@ -105,7 +112,7 @@ registerApplication({
   activeWhen: (location) => location.pathname.startsWith("/user"),
   customProps: () => ({
     auth: {
-      token: (window as { __KG_TOKEN__?: string }).__KG_TOKEN__ ?? "",
+      token: "",
       tenantId: "",
     },
   }),
@@ -155,6 +162,8 @@ document.addEventListener("click", (e: MouseEvent) => {
 })
 
 // ── 登录状态机（生产流程）───────────────────────────────
+// 真实会话由服务端 httpOnly Cookie（kg_session）承载、网关逐请求校验；
+// 前端仅凭 JS 可见的 kg_user 标记 cookie 判断登录态与用户身份。
 
 let started = false
 function startSpa(): void {
@@ -163,48 +172,38 @@ function startSpa(): void {
   start()
 }
 
-/** 解码 JWT 的 exp（秒）；非法返回 null。 */
-function tokenExpiry(t: string): number | null {
-  try {
-    const payload = t.split(".")[1] ?? ""
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
-    return (JSON.parse(json) as { exp?: number }).exp ?? null
-  } catch {
-    return null
-  }
-}
-
-function hasValidToken(t: string): boolean {
-  const exp = tokenExpiry(t)
-  return exp !== null && exp * 1000 > Date.now()
-}
-
 const loginEl = document.querySelector("login-view") as LoginView
 const logoutBtn = document.getElementById("logout-btn") as HTMLButtonElement
 
-loginEl.onSuccess = (tok) => {
-  authStore.setToken(tok)
+// 登录态变化（本页登录/登出）→ 统一刷新 UI。
+function applyAuthUi(): void {
+  const loggedIn = authStore.user != null
   refreshUserChip()
-  mountChat()
-  loginEl.hide()
-  startSpa()
-
-  if (location.pathname !== "/") router.navigate("/")
+  if (loggedIn) {
+    loginEl.hide()
+    if (!started) startSpa()
+    mountChat()
+  } else {
+    loginEl.show()
+    document.querySelector("chat-component")?.remove()
+  }
 }
 
-logoutBtn.addEventListener("click", () => {
+loginEl.onSuccess = (user) => {
+  authStore.setUser(user)
+  if (location.pathname !== "/") router.navigate("/")
+  applyAuthUi()
+}
+
+logoutBtn.addEventListener("click", async () => {
+  try {
+    await fetch("/api/v1/auth/logout", { method: "POST" })
+  } catch {
+    // 服务端不可达也继续本地清理
+  }
   authStore.clear()
-  refreshUserChip()
-  document.querySelector("chat-component")?.remove()
   loginEl.clearPassword()
-  loginEl.show()
 })
 
-if (hasValidToken(authStore.user?.token ?? "")) {
-  loginEl.hide()
-  startSpa()
-} else {
-  authStore.clear()
-  loginEl.show()
-}
-refreshUserChip()
+window.addEventListener(AUTH_CHANGE_EVENT, applyAuthUi)
+applyAuthUi()

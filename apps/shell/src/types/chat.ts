@@ -7,6 +7,13 @@ export interface ChatMessage {
   seq?: number
 }
 
+export interface ToolCallEvent {
+  name: string
+  status: "start" | "done" | "error"
+  args?: Record<string, unknown>
+  summary?: string
+}
+
 export interface ChatSession {
   id: string
   userId: string

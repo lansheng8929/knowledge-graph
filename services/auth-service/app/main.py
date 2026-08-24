@@ -10,6 +10,7 @@
 
 import json
 import logging
+from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,6 +36,31 @@ L1_RULES = [
     ("/api/v1/graph/expand", {"analyst"}),  # 拓出需至少 analyst
 ]
 
+# ── 会话 Cookie：httpOnly 存 JWT；另设 JS 可见的用户标记（非敏感）──
+SESSION_COOKIE = "kg_session"
+USER_COOKIE = "kg_user"
+
+
+def _user_marker(user: dict) -> str:
+    """JS 可见标记：仅 uid/username，供前端同步判断登录态（真实鉴权走 httpOnly cookie）。"""
+    return quote(
+        json.dumps(
+            {"uid": user.get("uid", ""), "username": user.get("username", "")},
+            ensure_ascii=False,
+        )
+    )
+
+
+def _resolve_token(request: Request) -> str:
+    """取凭证：优先 kg_session Cookie，回退 Authorization: Bearer（兼容旧客户端）。"""
+    token = request.cookies.get(SESSION_COOKIE, "")
+    if token:
+        return token
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[len("Bearer ") :].strip()
+    raise HTTPException(status_code=401, detail="missing credentials")
+
 
 class LoginRequest(BaseModel):
     username: str
@@ -51,13 +77,6 @@ class UserCreate(BaseModel):
     teams: list[str] = []
     managerUid: str = ""
     orgPath: str = ""
-
-
-def _bearer_token(request: Request) -> str:
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="missing bearer token")
-    return auth[len("Bearer ") :].strip()
 
 
 def _subject_from_token(token: str) -> dict:
@@ -129,7 +148,7 @@ def create_app() -> FastAPI:
 
     # ── 登录（密码认证，T4.1 完善）───────────────────
 
-    def login(req: LoginRequest) -> dict:
+    def login(req: LoginRequest, response: Response) -> dict:
         user = store.get(req.username)
         if user is None:
             logger.info("login failed (no user): %s", req.username)
@@ -151,6 +170,25 @@ def create_app() -> FastAPI:
             secret=settings.auth_secret,
             ttl_seconds=settings.token_ttl_seconds,
         )
+        cookie_max_age = settings.token_ttl_seconds
+        response.set_cookie(
+            SESSION_COOKIE,
+            token,
+            max_age=cookie_max_age,
+            path="/",
+            httponly=True,
+            samesite="lax",
+            secure=settings.cookie_secure,
+        )
+        response.set_cookie(
+            USER_COOKIE,
+            _user_marker(login_user),
+            max_age=cookie_max_age,
+            path="/",
+            httponly=False,
+            samesite="lax",
+            secure=settings.cookie_secure,
+        )
         logger.info("login ok: %s", req.username)
         return {
             "success": True,
@@ -164,10 +202,21 @@ def create_app() -> FastAPI:
 
     app.add_api_route("/api/v1/auth/login", login, methods=["POST"])
 
+    # ── 登出：清空会话 cookie（httpOnly 无法由 JS 删除，必须走服务端）──
+
+    def logout(response: Response) -> dict:
+        for key in (SESSION_COOKIE, USER_COOKIE):
+            response.delete_cookie(
+                key, path="/", samesite="lax", secure=settings.cookie_secure
+            )
+        return {"success": True, "data": {}}
+
+    app.add_api_route("/api/v1/auth/logout", logout, methods=["POST"])
+
     # ── 用户管理（admin）─────────────────────────────
 
     def list_users(request: Request) -> dict:
-        subject = _subject_from_token(_bearer_token(request))
+        subject = _subject_from_token(_resolve_token(request))
         _require_admin(subject)
         return {
             "success": True,
@@ -175,7 +224,7 @@ def create_app() -> FastAPI:
         }
 
     def create_user(req: UserCreate, request: Request) -> dict:
-        subject = _subject_from_token(_bearer_token(request))
+        subject = _subject_from_token(_resolve_token(request))
         _require_admin(subject)
         if store.get(req.username) is not None:
             raise HTTPException(status_code=409, detail=f"user exists: {req.username}")
@@ -197,7 +246,7 @@ def create_app() -> FastAPI:
         return {"success": True, "data": {"username": req.username}}
 
     def userinfo(request: Request) -> dict:
-        token = _bearer_token(request)
+        token = _resolve_token(request)
         payload = verify(token, settings.auth_secret)
         subject = _subject_from_token(token)
         username = str(payload.get("sub", ""))
@@ -225,7 +274,7 @@ def create_app() -> FastAPI:
     # ── 网关 auth_request 端点（T4.1.2）────────────────
 
     def authz(request: Request) -> Response:
-        token = _bearer_token(request)
+        token = _resolve_token(request)
         subject = _subject_from_token(token)
         # L1 粗判：nginx 传入原始 URI/方法
         original_uri = request.headers.get("X-Original-URI", "")

@@ -1,4 +1,4 @@
-"""图查询工具（P1）：search_nodes / expand_graph / analyze_node。
+"""图查询工具（P1）：search_nodes / expand_graph / analyze_node / graph_jump_link。
 
 - httpx 直连 graph-query-service（GRAPH_QUERY_URL）
 - 共享 AUTH_SECRET 重签用户 JWT（Bearer）随请求发出 → 目标服务按用户既有 L2/L3/L4 执行
@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -124,6 +125,23 @@ async def _handler_analyze(call: ToolCall, subject: dict[str, Any]) -> ToolResul
     )
 
 
+async def _handler_jump_link(call: ToolCall, subject: dict[str, Any]) -> ToolResult:
+    a = call.arguments
+    node_ids = [str(x).strip() for x in (a.get("nodeIds") or []) if str(x).strip()]
+    if not node_ids:
+        return ToolResult(
+            tool_call_id=call.id, ok=False, summary="nodeIds 为空，无法生成图谱跳转链接"
+        )
+    label = str(a.get("label") or "").strip() or "在画布中打开图谱"
+    ids = ",".join(quote(x, safe="") for x in node_ids)
+    link = f"[{label}](/graph?ids={ids})"
+    return ToolResult(
+        tool_call_id=call.id,
+        ok=True,
+        summary=f"已生成图谱跳转链接，请原样插入回复末尾：{link}",
+    )
+
+
 TOOL_SPECS: list[ToolSpec] = [
     ToolSpec(
         name="search_nodes",
@@ -165,11 +183,30 @@ TOOL_SPECS: list[ToolSpec] = [
             "required": ["nodeIds"],
         },
     ),
+    ToolSpec(
+        name="graph_jump_link",
+        description="为回复中的具体节点组装「在画布中打开」跳转链接（/graph?ids=…）；返回的链接请原样插入回复末尾（只读，纯组装不查询）",
+        parameters={
+            "type": "object",
+            "properties": {
+                "nodeIds": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "要跳转的节点 id 列表（来自 search_nodes / expand_graph / analyze_node 的结果）",
+                },
+                "label": {
+                    "type": "string",
+                    "description": "链接文字，默认「在画布中打开图谱」",
+                },
+            },
+            "required": ["nodeIds"],
+        },
+    ),
 ]
 
 
 def register_graph_tools(registry) -> None:
     """注册图查询工具（P1）。"""
-    handlers = [_handler_search, _handler_expand, _handler_analyze]
+    handlers = [_handler_search, _handler_expand, _handler_analyze, _handler_jump_link]
     for spec, handler in zip(TOOL_SPECS, handlers):
         registry.register(spec, handler)

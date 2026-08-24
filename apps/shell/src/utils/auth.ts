@@ -1,25 +1,31 @@
 export interface GlobalUser {
   uid: string
   username: string
-  token: string
-  payload: Record<string, unknown>
 }
 
-export const TOKEN_KEY = "kg-token"
+export const USER_COOKIE = "kg_user"
 export const AUTH_CHANGE_EVENT = "kg-auth-change"
 
 declare global {
   interface Window {
-    __KG_TOKEN__?: string
     __KG_USER__?: GlobalUser
   }
 }
 
-function decodeJwtPayload(t: string): Record<string, unknown> | null {
+function readUserCookie(): GlobalUser | null {
+  const raw = document.cookie
+    .split("; ")
+    .find((c) => c.startsWith(`${USER_COOKIE}=`))
+  if (!raw) return null
   try {
-    const payload = t.split(".")[1] ?? ""
-    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
-    return JSON.parse(json) as Record<string, unknown>
+    const data = JSON.parse(
+      decodeURIComponent(raw.slice(USER_COOKIE.length + 1)),
+    ) as { uid?: string; username?: string }
+    if (!data.uid && !data.username) return null
+    return {
+      uid: String(data.uid ?? ""),
+      username: String(data.username ?? ""),
+    }
   } catch {
     return null
   }
@@ -39,28 +45,20 @@ export const authStore = {
   },
 
   init(): void {
-    const tok = sessionStorage.getItem(TOKEN_KEY)
-    if (tok) this.setToken(tok)
+    localStorage.removeItem("kg-token")
+    window.__KG_USER__ = readUserCookie() ?? undefined
   },
 
-  setToken(token: string): void {
-    const payload = decodeJwtPayload(token) ?? {}
-    const user: GlobalUser = {
-      uid: String(payload.uid ?? payload.sub ?? ""),
-      username: String(payload.username ?? payload.sub ?? ""),
-      token,
-      payload,
+  setUser(user: { uid?: string; username?: string }): void {
+    window.__KG_USER__ = {
+      uid: String(user.uid ?? ""),
+      username: String(user.username ?? ""),
     }
-    window.__KG_TOKEN__ = token
-    window.__KG_USER__ = user
-    sessionStorage.setItem(TOKEN_KEY, token)
     emitChange()
   },
 
   clear(): void {
-    window.__KG_TOKEN__ = undefined
     window.__KG_USER__ = undefined
-    sessionStorage.removeItem(TOKEN_KEY)
     emitChange()
   },
 }

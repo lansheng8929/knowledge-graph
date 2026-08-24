@@ -32,7 +32,7 @@ def _call(name, **args):
 
 def test_register_graph_tools():
     names = [t.name for t in _reg().list()]
-    assert names == ["analyze_node", "expand_graph", "search_nodes"]
+    assert names == ["analyze_node", "expand_graph", "graph_jump_link", "search_nodes"]
 
 
 def test_search_summary(monkeypatch):
@@ -112,3 +112,27 @@ def test_unknown_tool(monkeypatch):
     result = _run(_reg().execute(_call("no_such_tool", x=1), {"uid": "u1"}))
     assert not result.ok
     assert "未知工具" in result.summary
+
+
+def test_jump_link_default_label():
+    result = _run(_reg().execute(_call("graph_jump_link", nodeIds=["n1", "device-617"]), {"uid": "u1"}))
+    assert result.ok
+    assert "[在画布中打开图谱](/graph?ids=n1,device-617)" in result.summary
+
+
+def test_jump_link_custom_label():
+    result = _run(_reg().execute(_call("graph_jump_link", nodeIds=["n1"], label="查看张三"), {"uid": "u1"}))
+    assert result.ok
+    assert "[查看张三](/graph?ids=n1)" in result.summary
+
+
+def test_jump_link_encodes_ids():
+    result = _run(_reg().execute(_call("graph_jump_link", nodeIds=["n 1", "王五"]), {"uid": "u1"}))
+    assert result.ok
+    assert "/graph?ids=n%201,%E7%8E%8B%E4%BA%94" in result.summary
+
+
+def test_jump_link_empty_ids_error():
+    result = _run(_reg().execute(_call("graph_jump_link", nodeIds=[]), {"uid": "u1"}))
+    assert not result.ok
+    assert "nodeIds 为空" in result.summary

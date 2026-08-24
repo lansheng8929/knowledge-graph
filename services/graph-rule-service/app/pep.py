@@ -28,6 +28,7 @@ def subject_from_request(request) -> Dict[str, Any]:
     return _subject_from_request(
         request,
         default=DEFAULT_SUBJECT,
+        secret=settings.auth_secret,
         default_roles=["analyst"],
     )[0]
 

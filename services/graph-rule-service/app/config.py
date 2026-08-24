@@ -32,6 +32,9 @@ class Settings:
         if o.strip()
     )
 
+    # ── JWT（dev 直连兜底，与 auth 同密钥）──────────────
+    auth_secret: str = os.getenv("AUTH_SECRET", "dev-secret-change-me")
+
     # ── ABAC L2（T4.5.1 Rule Service 接入，可选）───────
     enable_pep: bool = os.getenv("ENABLE_PEP", "false").lower() in (
         "1",

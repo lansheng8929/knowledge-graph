@@ -10,6 +10,10 @@
     "tsc": "tsc --noEmit"
   },
   "dependencies": {
+    "dompurify": "^3.4.14",
+    "github-markdown-css": "^5.9.0",
+    "lit": "^3.2.1",
+    "marked": "^18.0.10",
     "single-spa": "^5.9.0"
   },
   "devDependencies": {

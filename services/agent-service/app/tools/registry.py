@@ -57,5 +57,5 @@ class ToolRegistry:
             )
 
 
-# 模块级单例：应用装配时注入工具（P1：graph 域 4 工具）
+# 模块级单例：应用装配时注入工具（P1：graph 域 5 工具）
 registry = ToolRegistry()

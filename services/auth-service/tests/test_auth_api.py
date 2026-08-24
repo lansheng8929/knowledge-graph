@@ -94,3 +94,58 @@ def test_authz_ok():
 def test_authz_missing_token():
     r = _client().get("/_authz")
     assert r.status_code == 401
+
+
+def _session_cookie(resp) -> str:
+    for c in resp.headers.get_list("set-cookie"):
+        if c.startswith("kg_session="):
+            return c.split(";")[0]
+    return ""
+
+
+def test_login_sets_session_cookie():
+    r = _client().post(
+        "/api/v1/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    assert r.status_code == 200
+    set_cookie = r.headers.get_list("set-cookie")
+    assert any(c.startswith("kg_session=") and "HttpOnly" in c for c in set_cookie)
+    assert any(c.startswith("kg_user=") and "HttpOnly" not in c for c in set_cookie)
+
+
+def test_authz_with_cookie():
+    client = _client()
+    login = client.post(
+        "/api/v1/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    cookie = _session_cookie(login)
+    assert cookie
+    r = client.get("/_authz", headers={"Cookie": cookie})
+    assert r.status_code == 200
+    assert "x-subject-context" in r.headers
+
+
+def test_userinfo_with_cookie():
+    client = _client()
+    login = client.post(
+        "/api/v1/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    r = client.get(
+        "/api/v1/auth/userinfo", headers={"Cookie": _session_cookie(login)}
+    )
+    assert r.status_code == 200
+    assert "admin" in r.json()["data"]["user"]["roles"]
+
+
+def test_logout_clears_cookies():
+    client = _client()
+    login = client.post(
+        "/api/v1/auth/login", json={"username": "admin", "password": "admin123"}
+    )
+    r = client.post(
+        "/api/v1/auth/logout", headers={"Cookie": _session_cookie(login)}
+    )
+    assert r.status_code == 200
+    cleared = r.headers.get_list("set-cookie")
+    assert any("kg_session=" in c and "Max-Age=0" in c for c in cleared)
+    assert any("kg_user=" in c and "Max-Age=0" in c for c in cleared)

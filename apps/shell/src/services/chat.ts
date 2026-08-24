@@ -1,5 +1,5 @@
 // src/services/chat.ts
-import type { ChatMessage, ChatSession } from "../types/chat"
+import type { ChatMessage, ChatSession, ToolCallEvent } from "../types/chat"
 import { chatDB } from "../utils/db"
 
 interface ApiEnvelope<T> {
@@ -34,6 +34,7 @@ export class ChatService {
     onChunk: (chunk: string) => void,
     onDone: (fullResponse: string, newSessionId?: string) => void,
     onError: (error: string) => void,
+    onTool?: (tool: ToolCallEvent) => void,
   ): Promise<void> {
     try {
       const response = await fetch(`${this.baseURL}/chat`, {
@@ -72,6 +73,19 @@ export class ChatService {
         if (event === "delta" && typeof parsed.text === "string") {
           onChunk(parsed.text)
           fullResponse += parsed.text
+        } else if (event === "tool") {
+          onTool?.({
+            name: String(parsed.name ?? ""),
+            status:
+              parsed.status === "done"
+                ? "done"
+                : parsed.status === "error"
+                  ? "error"
+                  : "start",
+            args: parsed.args as Record<string, unknown> | undefined,
+            summary:
+              typeof parsed.summary === "string" ? parsed.summary : undefined,
+          })
         } else if (event === "done") {
           if (typeof parsed.session_id === "string") {
             newSessionId = parsed.session_id
