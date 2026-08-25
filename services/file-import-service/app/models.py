@@ -47,6 +47,8 @@ class ImportConfig(BaseModel):
     # Excel sheet 映射：{ "entities": "人员表", "edges": "转账关系" }
     # 缺省回退：按 sheet 名 entities/edges（大小写不敏感）识别
     sheetMapping: Dict[str, str] = Field(default_factory=dict)
+    # 用户在前端勾选排除的实体 id（未选中不写库；边自动跟随端点）
+    excludeEntityIds: List[str] = Field(default_factory=list)
 
 
 def parse_config(raw: Optional[str]) -> ImportConfig:

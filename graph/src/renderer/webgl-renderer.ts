@@ -9,6 +9,7 @@ import {
   InteractionManager,
   type ViewTransform,
   type InteractionCallbacks,
+  type ZoomOptions,
 } from "./interaction-manager.js"
 import type { RenderPlugin } from "./render-plugin.js"
 import type {
@@ -31,6 +32,8 @@ export interface WebGLRendererOptions<
   showArrows?: boolean
   /** Minimum scale to show labels */
   labelMinScale?: number
+  /** 缩放配置（滚轮步进/上下限、fitView 钳制范围） */
+  zoom?: ZoomOptions
   /** 渲染插件工厂（必填，外部传入创建函数） */
   renderPlugin: (
     gl: WebGL2RenderingContext,
@@ -74,13 +77,14 @@ export class WebGLRenderer<
   private bgColor!: [number, number, number, number]
   private showArrows = false
   private labelMinScale = 0.5
+  private zoom: ZoomOptions = {}
   private width: number
   private height: number
   private _destroyed = false
   private _rafId = 0
   private _fitAnimId = 0
-  // 首次尺寸就绪时是否已自动 fitView（修复 macOS 挂载初期 height=0 导致节点小/左上角）
-  private _autoFitDone = false
+  // 首次尺寸就绪时是否已把默认相机对准世界原点（原点居中，避免节点先堆在左上角）
+  private _defaultCameraSet = false
 
   // 回调
   onNodeClick?: (nodeId: string | null, event: MouseEvent) => void
@@ -140,6 +144,7 @@ export class WebGLRenderer<
 
     this.showArrows = opts.showArrows ?? false
     this.labelMinScale = opts.labelMinScale ?? 0.5
+    this.zoom = opts.zoom ?? {}
 
     // 渲染插件（由外部工厂创建，必填）
     this.plugin = opts.renderPlugin(gl, this.canvas)
@@ -149,6 +154,7 @@ export class WebGLRenderer<
       this.canvas,
       this.plugin,
       this.makeCallbacks(),
+      this.zoom,
     )
     this.interaction.transform = this.camera.state as ViewTransform
 
@@ -297,17 +303,13 @@ export class WebGLRenderer<
     this.gl.viewport(0, 0, this.width * dpr, this.height * dpr)
     this.plugin.resize(this.width, this.height)
 
-    // 首次尺寸就绪（0 → 非 0）且已有节点 → 自动 fitView。
-    // 修复：数据加载时容器 height 可能为 0（single-spa 挂载初期/macOS 时序），
-    // 那帧 fitView 被跳过且无重试，导致相机停在默认态（节点小、堆在左上角）。
-    if (
-      !this._autoFitDone &&
-      this.width > 0 &&
-      this.height > 0 &&
-      this.nodes.length > 0
-    ) {
-      this._autoFitDone = true
-      this.fitView(40)
+    // 首次尺寸就绪：默认相机对准世界原点——默认态 k=1,x=0,y=0 时原点在画布左上角，
+    // 平移 W/2,H/2 使原点居中（节点加入前视野即对准原点）。
+    if (!this._defaultCameraSet && this.width > 0 && this.height > 0) {
+      this._defaultCameraSet = true
+      if (this.camera.k === 1 && this.camera.x === 0 && this.camera.y === 0) {
+        this.camera.pan(this.width / 2, this.height / 2)
+      }
     }
   }
 
@@ -339,9 +341,11 @@ export class WebGLRenderer<
     this._fitAnimId = requestAnimationFrame(step)
   }
 
-  fitView(padding = 0, animate = true): void {
+  fitView(padding = 0, animate = true): Promise<void> {
     // 尺寸为 0 时（如 single-spa 挂载初期容器高度未就绪）跳过，避免 k=0 / NaN 变换
-    if (this.nodes.length === 0 || this.width <= 0 || this.height <= 0) return
+    if (this.nodes.length === 0 || this.width <= 0 || this.height <= 0) {
+      return Promise.resolve()
+    }
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
@@ -358,35 +362,42 @@ export class WebGLRenderer<
     const graphH = Math.max(1, maxY - minY)
     const availW = Math.max(1, this.width - padding * 2)
     const availH = Math.max(1, this.height - padding * 2)
-    const k = Math.min(availW / graphW, availH / graphH, 2)
+    // fit 倍率：fitMin/fitMax 外部传入（未提供则不钳制）
+    let k = Math.min(availW / graphW, availH / graphH)
+    if (typeof this.zoom.fitMax === "number") k = Math.min(this.zoom.fitMax, k)
+    if (typeof this.zoom.fitMin === "number") k = Math.max(this.zoom.fitMin, k)
     const t = this.interaction.transform
     // 世界平移语义（配合 shader `(world + u_translation) * u_scale`）：
     // world=中心 → 映射到画布中心；四周留 padding 像素
     const tx = this.width / (2 * k) - (minX + maxX) / 2
     const ty = this.height / (2 * k) - (minY + maxY) / 2
-    const done = () => {
-      this.camera.reset()
-      this.onZoom?.(t)
-    }
-    // 目标与当前几乎一致 → 直接落位；否则平滑过渡
-    if (
-      !animate ||
-      (Math.abs(t.k - k) < 1e-4 &&
-        Math.abs(t.x - tx) < 1e-4 &&
-        Math.abs(t.y - ty) < 1e-4)
-    ) {
-      t.k = k
-      t.x = tx
-      t.y = ty
-      done()
-      return
-    }
-    this.animateTransform(
-      { k: t.k, x: t.x, y: t.y },
-      { k, x: tx, y: ty },
-      320,
-      done,
-    )
+    // 返回 Promise：取景完成（直接落位或过渡动画结束）后才 resolve，供调用方阻塞等待
+    return new Promise<void>((resolve) => {
+      const done = (): void => {
+        this.camera.reset()
+        this.onZoom?.(t)
+        resolve()
+      }
+      // 目标与当前几乎一致 → 直接落位；否则平滑过渡
+      if (
+        !animate ||
+        (Math.abs(t.k - k) < 1e-4 &&
+          Math.abs(t.x - tx) < 1e-4 &&
+          Math.abs(t.y - ty) < 1e-4)
+      ) {
+        t.k = k
+        t.x = tx
+        t.y = ty
+        done()
+        return
+      }
+      this.animateTransform(
+        { k: t.k, x: t.x, y: t.y },
+        { k, x: tx, y: ty },
+        320,
+        done,
+      )
+    })
   }
 
   focusNode(nodeId: string): void {

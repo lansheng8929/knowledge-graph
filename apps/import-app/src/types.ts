@@ -19,6 +19,8 @@ export interface ImportConfig {
   strictNodeTypes?: boolean
   dangling?: "skip" | "auto-create"
   danglingNodeType?: string
+  /** 用户勾选排除的实体 id（未选中不写库；边自动跟随端点） */
+  excludeEntityIds?: string[]
 }
 
 export interface ParsedEntity {

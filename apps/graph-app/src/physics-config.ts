@@ -6,10 +6,14 @@ import type { SimLink } from "@lansheng/knowledge-graph/physics"
  */
 export const BASE_FORCE_CONFIG = {
   repulsion: -200,
-  linkDistance: 100,
-  linkStrength: 0.2,
+  linkDistance: 70,
+  linkStrength: 0.5,
   centerStrength: 0.1,
+  // 模拟时间配置（库不内置默认，全部外部传入）
   velocityDecay: 0.4,
+  alphaMin: 0.0002,
+  stableVelocity: 0.01,
+  stableTicks: 5,
 }
 
 /** 亲密度→吸引力影响系数：越大，亲密边拉得越紧 */
@@ -34,7 +38,7 @@ export function buildIntimacyFns(influence: number) {
     linkStrengthFn: (link: SimLink) => {
       const i = link.intimacy
       if (i === undefined) return undefined
-      return 0.2 * (0.3 + i * (0.9 * influence))
+      return 0.5 * (0.3 + i * (0.9 * influence))
     },
   }
 }

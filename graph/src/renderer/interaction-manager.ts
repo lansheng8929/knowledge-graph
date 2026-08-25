@@ -31,10 +31,28 @@ export interface InteractionCallbacks {
   onPan?: (transform: ViewTransform) => void
 }
 
+/** 缩放配置——库不内置默认值，全部由外部传入。
+ *  - step：必填语义；未提供则滚轮不缩放
+ *  - min/max/fitMin/fitMax：可选；未提供则不钳制
+ */
+export interface ZoomOptions {
+  /** 滚轮每格缩放增量比例（0.05 = 每格 5%）；未提供则滚轮不缩放 */
+  step?: number
+  /** 滚轮最小倍率；未提供则不设下限 */
+  min?: number
+  /** 滚轮最大倍率；未提供则不设上限 */
+  max?: number
+  /** fitView 放大上限；未提供则不设上限 */
+  fitMax?: number
+  /** fitView 缩小下限；未提供则不设下限 */
+  fitMin?: number
+}
+
 export class InteractionManager {
   private canvas: HTMLCanvasElement
   private picker: Picker
   private callbacks: InteractionCallbacks
+  private zoom: ZoomOptions
 
   /** 当前相机变换（渲染器需保持同步） */
   transform: ViewTransform = { x: 0, y: 0, k: 1 }
@@ -59,6 +77,8 @@ export class InteractionManager {
   private boundPointerDown: (e: PointerEvent) => void
   private boundPointerMove: (e: PointerEvent) => void
   private boundPointerUp: (e: PointerEvent) => void
+  private boundPointerCancel: (e: PointerEvent) => void
+  private boundLostCapture: (e: PointerEvent) => void
   private boundPointerLeave: (e: PointerEvent) => void
   private boundWheel: (e: WheelEvent) => void
   private boundContextMenu: (e: Event) => void
@@ -67,15 +87,19 @@ export class InteractionManager {
     canvas: HTMLCanvasElement,
     picker: Picker,
     callbacks: InteractionCallbacks = {},
+    options: ZoomOptions = {},
   ) {
     this.canvas = canvas
     this.picker = picker
     this.callbacks = callbacks
+    this.zoom = options
 
     // 预绑定 this
     this.boundPointerDown = this.onPointerDown.bind(this)
     this.boundPointerMove = this.onPointerMove.bind(this)
     this.boundPointerUp = this.onPointerUp.bind(this)
+    this.boundPointerCancel = this.onPointerCancel.bind(this)
+    this.boundLostCapture = this.onLostCapture.bind(this)
     this.boundPointerLeave = this.onPointerLeave.bind(this)
     this.boundWheel = this.onWheel.bind(this)
     this.boundContextMenu = this.onContextMenu.bind(this)
@@ -90,6 +114,8 @@ export class InteractionManager {
     this.canvas.addEventListener("pointerdown", this.boundPointerDown)
     this.canvas.addEventListener("pointermove", this.boundPointerMove)
     this.canvas.addEventListener("pointerup", this.boundPointerUp)
+    this.canvas.addEventListener("pointercancel", this.boundPointerCancel)
+    this.canvas.addEventListener("lostpointercapture", this.boundLostCapture)
     this.canvas.addEventListener("pointerleave", this.boundPointerLeave)
     this.canvas.addEventListener("wheel", this.boundWheel, { passive: false })
     this.canvas.addEventListener("contextmenu", this.boundContextMenu)
@@ -100,6 +126,8 @@ export class InteractionManager {
     this.canvas.removeEventListener("pointerdown", this.boundPointerDown)
     this.canvas.removeEventListener("pointermove", this.boundPointerMove)
     this.canvas.removeEventListener("pointerup", this.boundPointerUp)
+    this.canvas.removeEventListener("pointercancel", this.boundPointerCancel)
+    this.canvas.removeEventListener("lostpointercapture", this.boundLostCapture)
     this.canvas.removeEventListener("pointerleave", this.boundPointerLeave)
     this.canvas.removeEventListener("wheel", this.boundWheel)
     this.canvas.removeEventListener("contextmenu", this.boundContextMenu)
@@ -210,9 +238,23 @@ export class InteractionManager {
     this.canvas.releasePointerCapture(e.pointerId)
   }
 
-  /** 指针离开 canvas → 清除 hover 状态 */
-  private onPointerLeave(_e: PointerEvent): void {
-    if (this.hoveredId !== null) {
+  /** 手势被取消（如触控滚动拦截/系统打断）→ 复位平移/拖拽状态，避免 isPanning 卡死导致 hover 永久失效 */
+  private onPointerCancel(_e: PointerEvent): void {
+    this.isDragging = false
+    this.dragNodeId = null
+    this.isPanning = false
+    this.clearHover()
+  }
+
+  /** 指针捕获丢失（浏览器主动释放）→ 同样复位状态 */
+  private onLostCapture(_e: PointerEvent): void {
+    this.isDragging = false
+    this.dragNodeId = null
+    this.isPanning = false
+  }
+
+  private clearHover(): void {
+    if (this.hoveredId !== null || this.hoveredType !== null) {
       this.hoveredId = null
       this.hoveredType = null
       this.canvas.style.cursor = "default"
@@ -221,13 +263,24 @@ export class InteractionManager {
     }
   }
 
+  /** 指针离开 canvas → 清除 hover 状态并复位平移（防御 pointerup 丢失） */
+  private onPointerLeave(_e: PointerEvent): void {
+    this.isPanning = false
+    this.isDragging = false
+    this.clearHover()
+  }
+
   private onWheel(e: WheelEvent): void {
     e.preventDefault()
     const pos = this.getPos(e)
-    // 减慢缩放：每格 5%（原 10%）；最小缩放 0.03（可缩得很远看全局；放大上限 10）
-    const ratio = e.deltaY > 0 ? 0.95 : 1.05
+    // 缩放配置全部外部传入：step 未提供则不缩放；min/max 未提供则不钳制
+    const step = this.zoom.step
+    if (typeof step !== "number" || !(step > 0)) return
+    const ratio = e.deltaY > 0 ? 1 - step : 1 + step
     const t = this.transform
-    const newK = Math.max(0.03, Math.min(10, t.k * ratio))
+    let newK = t.k * ratio
+    if (typeof this.zoom.min === "number") newK = Math.max(this.zoom.min, newK)
+    if (typeof this.zoom.max === "number") newK = Math.min(this.zoom.max, newK)
 
     // 以鼠标所在世界坐标为中心缩放
     const worldX = (pos.x - t.x * t.k) / t.k

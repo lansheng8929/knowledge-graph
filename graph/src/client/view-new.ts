@@ -28,6 +28,7 @@ import type { GraphEvents } from "../events.js"
 import type { NodeId, LinkId } from "../type.js"
 import type { StyleManager } from "../style-manager.js"
 import type { RenderPlugin } from "../renderer/render-plugin.js"
+import type { ZoomOptions } from "../renderer/interaction-manager.js"
 import { getNodeStyleByStateType, getLinkStyleByStateType } from "../theme.js"
 import type { GraphViewStyle, NodeStyle, LinkStyle, LStyle } from "../theme.js"
 import type { NodeRenderPipeline } from "../renderer/node-pipeline.js"
@@ -49,6 +50,9 @@ export interface GraphViewOptions<
 
   /** 自定义布局引擎（默认使用 d3-force ForceSimulation） */
   layout?: Layout
+
+  /** 缩放配置（滚轮步进/上下限、fitView 钳制范围） */
+  zoom?: ZoomOptions
 
   /** 渲染插件工厂（必填，外部传入，内部创建实例） */
   renderPlugin: (
@@ -141,8 +145,6 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   // Node/link lookup
   private nodeMap = new Map<string, GraphNode<G["NO"], G["NT"], G["NS"]>>()
   private linkMap = new Map<string, GraphLink<G>>()
-  // 首次布局稳定后是否已自动 fitView（避免 init 后布局演化导致节点超出视野）
-  private _autoFitOnEndDone = false
 
   events: GraphEvents<G>
   styleManager: StyleManager<G>
@@ -162,6 +164,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       height: opts.height,
       backgroundColor: opts.backgroundColor,
       showArrows: opts.arrowDisplay,
+      zoom: opts.zoom,
       renderPlugin: opts.renderPlugin,
     })
 
@@ -192,15 +195,6 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.layout = opts.layout ?? new ForceSimulation(opts.forceConfig)
     this.layout.onTick = (simNodes) => {
       this.onPhysicsTick(simNodes)
-    }
-    // 布局首次稳定后自动 fitView 一次：
-    // init 后 RAF 的 fitView 用的是布局初始位置（边界不准），布局演化后节点会超出视野；
-    // 在模拟稳定（onEnd）后按最终边界再 fit 一次，保证所有节点入画。
-    this.layout.onEnd = () => {
-      if (!this._autoFitOnEndDone) {
-        this._autoFitOnEndDone = true
-        this.renderer.fitView(40)
-      }
     }
 
     // Wire renderer callbacks
@@ -283,7 +277,15 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     }
 
     this.renderer.onNodeDragEnd = (nodeId) => {
-      this.layout.releaseNode(nodeId)
+      // 拖动结束：固定节点到当前位置（sim + model 双写，重建/重布局后仍保持）
+      const simNodes = (this.layout as any).nodes as SimNode[]
+      const simNode = simNodes.find((n) => n.id === nodeId)
+      const gn = this.model.getNodeById(nodeId)
+      if (simNode && gn) {
+        gn.fx = simNode.fx ?? simNode.x
+        gn.fy = simNode.fy ?? simNode.y
+        this.layout.fixNode(nodeId, gn.fx, gn.fy)
+      }
       const node = this.nodeMap.get(nodeId) ?? null
       this.events.publish("nodeDragEnd", node)
     }
@@ -303,7 +305,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
     // Listen to model data changes
     this.events.subscribe("dataChange", ({ graphData }) => {
-      this.rebuildFromModel(false)
+      this.rebuildFromModel()
     })
 
     this.events.subscribe("selectionChange", ({ nodeIds }) => {
@@ -365,7 +367,7 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
   // ========== Data rebuilding ==========
 
-  private rebuildFromModel(fitView: boolean = true): void {
+  private rebuildFromModel(): void {
     const { graphData } = this.model.getGraphModelData()
 
     // Build lookup maps
@@ -386,8 +388,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
         renderNodes.push(rn)
         simNodes.push({
           id: gn.id,
-          x: gn.x ?? (Math.random() - 0.5) * 100,
-          y: gn.y ?? (Math.random() - 0.5) * 100,
+          x: gn.x ?? 0,
+          y: gn.y ?? 0,
           radius: rn.radius,
           fx: gn.fx ?? null,
           fy: gn.fy ?? null,
@@ -426,13 +428,6 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.renderer.updateData(renderNodes, renderLinks)
     this.layout.setData(simNodes, simLinks)
     this.layout.start()
-
-    // Fit view (skipped when triggered by data changes like expansion)
-    if (fitView) {
-      requestAnimationFrame(() => {
-        this.renderer.fitView()
-      })
-    }
   }
 
   private defaultMapNode(
@@ -593,16 +588,13 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
     this.layout.onTick = (simNodes) => {
       this.onPhysicsTick(simNodes)
     }
-    // 切换布局不自动 fitView：保持当前视角，由用户手动 Fit View
-    this.layout.onEnd = () => {
-      if (!this._autoFitOnEndDone) this._autoFitOnEndDone = true
-    }
     // 用当前 model 数据重建并启动新布局（rebuildFromModel 内会 setData + start）
-    this.rebuildFromModel(false)
+    this.rebuildFromModel()
   }
 
-  fitView(padding: number): void {
-    this.renderer.fitView(padding)
+  /** 取景（含过渡动画）完成时 resolve，可 await 阻塞 */
+  fitView(padding: number): Promise<void> {
+    return this.renderer.fitView(padding)
   }
 
   /** Get the renderer proxy */
@@ -630,8 +622,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   /**
    * 把物理引擎中心设到指定世界坐标。
    * 搜索新增时传当前视口中心——统一兼容两种情况：
-   *  - 空画布（相机从未 fitView，默认态 k=1,x=0,y=0）：视口中心世界坐标=(W/2,H/2)，
-   *    物理中心跟随 → 节点聚在屏幕中央，不被中心力拉回世界原点(左上角)；
+   *  - 空画布（相机从未 fitView，默认态对准原点 k=1,x=W/2,y=H/2）：视口中心世界坐标=(0,0)，
+   *    物理中心跟随 → 节点聚在屏幕中央，不被中心力拉回世界原点；
    *  - 非空画布：视口中心世界坐标≈当前视野中央 → 增量节点出现在视野中央、不跳视角。
    */
   setPhysicsCenter(x: number, y: number): void {
@@ -639,15 +631,11 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
   }
 
   /**
-   * 进入图后排布并 fitView。
-   * 不再用 settle 同步 300 tick 立即冻结：改为 start() 启动异步冷却模拟，
-   * 让节点有动画地自然稳定（alpha 衰减到 alphaMin 后才停）。
-   * tree-layout 的 start() 仍是同步铺开（无动画），行为不变。
+   * 进入图后启动布局（异步冷却模拟，节点有动画地自然稳定，
+   * alpha 衰减到 alphaMin 后才停）。fitView 由外部主动调用。
    */
   settleLayout(_iterations?: number): void {
     this.layout.start()
-    // 容器尺寸可能尚未就绪（single-spa 挂载初期 height=0），下一帧再 fitView
-    requestAnimationFrame(() => this.renderer.fitView(40))
   }
 
   /** Get underlying canvas */

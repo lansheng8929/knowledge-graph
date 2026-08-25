@@ -54,6 +54,10 @@ export interface ForceConfig {
   alphaMin?: number
   /** Max iterations for force link. Default: 1 */
   linkIterations?: number
+  /** 稳定判定速度阈值（px/tick）：全部节点速度低于该值并持续 stableTicks 次 → 模拟停止。Default: 0.01 */
+  stableVelocity?: number
+  /** 连续满足稳定速度的 tick 数。Default: 5 */
+  stableTicks?: number
   /**
    * 自定义每条边 rest distance（可据 link.intimacy 等属性返回不同值）；
    * 返回 undefined 时回退到 linkDistance。由调用方外部定义亲密度→拉扯力策略。
@@ -63,22 +67,39 @@ export interface ForceConfig {
   linkStrengthFn?: (link: SimLink) => number | undefined
 }
 
-/** 可选函数字段保持可选，其余必填 */
+/** 可选函数字段保持可选；模拟时间类字段（velocityDecay/alphaMin/stableVelocity/stableTicks）也保持可选——库不内置默认，由外部传入 */
 type RequiredForceConfig = Required<
-  Omit<ForceConfig, "linkDistanceFn" | "linkStrengthFn">
+  Omit<
+    ForceConfig,
+    | "linkDistanceFn"
+    | "linkStrengthFn"
+    | "velocityDecay"
+    | "alphaMin"
+    | "stableVelocity"
+    | "stableTicks"
+  >
 > &
-  Partial<Pick<ForceConfig, "linkDistanceFn" | "linkStrengthFn">>
+  Partial<
+    Pick<
+      ForceConfig,
+      | "linkDistanceFn"
+      | "linkStrengthFn"
+      | "velocityDecay"
+      | "alphaMin"
+      | "stableVelocity"
+      | "stableTicks"
+    >
+  >
 
 const DEFAULT_CONFIG: RequiredForceConfig = {
   repulsion: -300,
-  linkDistance: 80,
-  linkStrength: 0.3,
+  linkDistance: 55,
+  linkStrength: 0.7,
   centerStrength: 0.05,
   collisionRadius: 1.2,
   collisionIterations: 1,
-  velocityDecay: 0.3,
-  alphaMin: 0.001,
   linkIterations: 1,
+  // 模拟时间类（velocityDecay/alphaMin/stableVelocity/stableTicks）不在此内置，由外部传入；
   // linkDistanceFn / linkStrengthFn 缺省不设置（由调用方外部定义亲密度→拉扯力）
 }
 
@@ -89,6 +110,7 @@ export class ForceSimulation implements Layout {
   private config: RequiredForceConfig
   private centerX = 0
   private centerY = 0
+  private stableCount = 0
 
   // Callbacks
   onTick?: (nodes: SimNode[]) => void
@@ -122,6 +144,7 @@ export class ForceSimulation implements Layout {
     if (this.simulation) {
       this.simulation.stop()
     }
+    this.stableCount = 0
 
     this.simulation = forceSimulation<SimNode>(this.nodes)
       .force("link", this.buildLinkForce())
@@ -138,10 +161,17 @@ export class ForceSimulation implements Layout {
           (d) => (d.radius || 5) * this.config.collisionRadius,
         ).iterations(this.config.collisionIterations),
       )
-      .velocityDecay(this.config.velocityDecay)
-      .alphaMin(this.config.alphaMin)
+    // 模拟时间配置由外部传入；未提供则不设置（沿用 d3 引擎自身默认）
+    if (typeof this.config.velocityDecay === "number") {
+      this.simulation.velocityDecay(this.config.velocityDecay)
+    }
+    if (typeof this.config.alphaMin === "number") {
+      this.simulation.alphaMin(this.config.alphaMin)
+    }
+    this.simulation
       .on("tick", () => {
         this.onTick?.(this.nodes)
+        this.tickStableCheck()
       })
       .on("end", () => {
         this.onEnd?.()
@@ -151,6 +181,31 @@ export class ForceSimulation implements Layout {
   /** Stop the simulation */
   stop(): void {
     this.simulation?.stop()
+  }
+
+  /**
+   * 稳定检测：全部节点速度低于阈值并持续 N tick → 停止（模拟到完全稳定）。
+   * alphaMin 仍是兜底（病态震荡时不会无限跑）。
+   */
+  private tickStableCheck(): void {
+    const threshold = this.config.stableVelocity
+    const ticks = this.config.stableTicks
+    // 外部未配置稳定判定 → 不做速度稳定检测（由 d3 alphaMin 决定停止）
+    if (typeof threshold !== "number" || typeof ticks !== "number") return
+    let maxV = 0
+    for (const n of this.nodes) {
+      const v = Math.hypot(n.vx ?? 0, n.vy ?? 0)
+      if (v > maxV) maxV = v
+    }
+    if (maxV < threshold) {
+      this.stableCount += 1
+      if (this.stableCount >= ticks) {
+        this.stop()
+        this.onEnd?.()
+      }
+    } else {
+      this.stableCount = 0
+    }
   }
 
   /** Reheat the simulation */
@@ -189,8 +244,12 @@ export class ForceSimulation implements Layout {
           this.config.centerStrength,
         ),
       )
-      sim.velocityDecay(this.config.velocityDecay)
-      sim.alphaMin(this.config.alphaMin)
+      if (typeof this.config.velocityDecay === "number") {
+        sim.velocityDecay(this.config.velocityDecay)
+      }
+      if (typeof this.config.alphaMin === "number") {
+        sim.alphaMin(this.config.alphaMin)
+      }
       sim.alpha(0.3).restart()
     }
   }

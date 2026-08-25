@@ -204,14 +204,23 @@ def create_app() -> FastAPI:
         graph.warnings = twarn + graph.warnings
         result = validate(graph, cfg)
         limit = settings.preview_limit
+        # 实体/边全量返回（前端选择入库用）；仍保持自洽：只返回端点都在实体集内的边，
+        # 否则前端图谱渲染会出现引用缺失节点的悬空边。errors/warnings 保留截断控制体积。
+        entities = [asdict(e) for e in result.entities]
+        ent_ids = {e["id"] for e in entities}
+        edges = [
+            asdict(e)
+            for e in result.edges
+            if e.source in ent_ids and e.target in ent_ids
+        ]
         return {
             "success": True,
             "data": {
                 "entityCount": len(result.entities),
                 "edgeCount": len(result.edges),
                 "skipped": result.skipped,
-                "entities": [asdict(e) for e in result.entities[:limit]],
-                "edges": [asdict(e) for e in result.edges[:limit]],
+                "entities": entities,
+                "edges": edges,
                 "errors": result.errors[:limit],
                 "warnings": result.warnings[:limit],
             },
@@ -242,6 +251,16 @@ def create_app() -> FastAPI:
         graph = map_tables(tables, cfg)
         graph.warnings = twarn + graph.warnings
         result = validate(graph, cfg)
+        # 用户勾选排除：未选中的实体及其关联边不写库（边跟随端点）
+        excl = set(cfg.excludeEntityIds)
+        if excl:
+            result.entities = [e for e in result.entities if e.id not in excl]
+            kept_ids = {e.id for e in result.entities}
+            result.edges = [
+                e
+                for e in result.edges
+                if e.source in kept_ids and e.target in kept_ids
+            ]
         store.set_entity_ids(task_id, [e.id for e in result.entities])
         if result.errors:
             raise PipelineAbort(

@@ -60,7 +60,6 @@ function getLoadedNeighbors(
 }
 
 export default function App() {
-  // 从 URL 读取初始 ids（每次挂载重读，支持从其它模块深链进入）
   const [initialIds] = useState<string[] | undefined>(() => {
     const params = new URLSearchParams(window.location.search)
     const ids = params.get("ids")
@@ -147,8 +146,8 @@ export default function App() {
 
     // 统一策略（兼容空/非空画布）：新节点放到“当前视口中心的世界坐标”，并把物理
     // 引擎中心同步锚定到该点，使中心力 forceCenter 拉向视口中心而非固定原点 (0,0)：
-    //  - 空画布：相机从未 fitView（默认态 k=1,x=0,y=0），视口中心世界坐标=(W/2,H/2)，
-    //    节点聚在屏幕中央，不会被中心力拉回世界原点 → 左上角；
+    //  - 空画布：相机从未 fitView（默认态对准原点 k=1,x=W/2,y=H/2），视口中心世界坐标=(0,0)，
+    //    节点聚在屏幕中央；
     //  - 非空画布：视口中心世界坐标≈当前视野中央，增量节点出现在视野中央、不跳视角。
     const t = view.renderer.interaction.transform
     const canvas = view.renderer.canvas
@@ -508,9 +507,7 @@ export default function App() {
             )}
 
             {/* ─── 流式加载进度（独立浮层，不挡画布可看见） ─── */}
-            {loadProgress &&
-              (loadProgress.nodes ?? 0) > 0 &&
-              (loadProgress.links ?? 0) > 0 && (
+            {loadProgress && (
                 <div
                   style={{
                     position: "fixed",

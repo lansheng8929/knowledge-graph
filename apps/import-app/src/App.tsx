@@ -12,8 +12,6 @@ import type {
   ImportOptions,
   ImportTask,
   ImportTemplate,
-  ParsedEdge,
-  ParsedEntity,
   PreviewData,
   View,
 } from "./types"
@@ -24,6 +22,7 @@ import {
   VISIBILITY_LABELS,
   CLASSIFICATION_OPTIONS,
 } from "./i18n"
+import ImportPreviewDetail, { Stat } from "./ImportPreviewDetail"
 
 /** 待上传的单个文件及其独立配置与预览状态。 */
 interface ImportItem {
@@ -33,6 +32,8 @@ interface ImportItem {
   classification: number
   visibility: string
   businessKey: string
+  /** 用户勾选排除的实体 id（提交时随配置携带，不写库） */
+  excludeEntityIds: string[]
   previewData: PreviewData | null
   previewError: string | null
   previewing: boolean
@@ -128,6 +129,7 @@ export default function App() {
       strictNodeTypes: tc.strictNodeTypes,
       dangling: tc.dangling as ImportConfig["dangling"] | undefined,
       danglingNodeType: tc.danglingNodeType,
+      excludeEntityIds: it.excludeEntityIds,
     }
   }
 
@@ -146,6 +148,7 @@ export default function App() {
         classification: options?.defaults.classification ?? 0,
         visibility: options?.defaults.visibility ?? "internal",
         businessKey: bkDefault,
+        excludeEntityIds: [],
         previewData: null,
         previewError: null,
         previewing: false,
@@ -408,13 +411,13 @@ function FileBox(props: {
               props.onChange({ classification: Number(e.target.value) })
             }
           >
-            {CLEARANCE_OPTIONS.filter((o) => o.value <= classificationMax).map(
-              (o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ),
-            )}
+            {CLASSIFICATION_OPTIONS.filter(
+              (o) => o.value <= classificationMax,
+            ).map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
         </label>
         <label className="kg-field">
@@ -444,12 +447,18 @@ function FileBox(props: {
         <p className="kg-template-desc">{tpl.description}</p>
       )}
 
-      <FilePreview item={item} />
+      <FilePreview
+        item={item}
+        onSelection={(ids) => props.onChange({ excludeEntityIds: ids })}
+      />
     </section>
   )
 }
 
-function FilePreview(props: { item: ImportItem }) {
+function FilePreview(props: {
+  item: ImportItem
+  onSelection: (excludeEntityIds: string[]) => void
+}) {
   const { item } = props
   if (item.previewing) {
     return (
@@ -464,110 +473,7 @@ function FilePreview(props: { item: ImportItem }) {
   }
   const d = item.previewData
   if (!d) return null
-  return (
-    <>
-      <div className="kg-stat-row">
-        <Stat label="实体" value={d.entityCount} />
-        <Stat label="关系" value={d.edgeCount} />
-        <Stat label="跳过" value={d.skipped} tone="warn" />
-        <Stat
-          label="错误"
-          value={d.errors.length}
-          tone={d.errors.length ? "bad" : "ok"}
-        />
-      </div>
-      {(d.errors.length > 0 || d.warnings.length > 0) && (
-        <div
-          className={
-            d.errors.length ? "kg-msg kg-msg-err" : "kg-msg kg-msg-warn"
-          }
-        >
-          <ul>
-            {(d.errors.length ? d.errors : d.warnings)
-              .slice(0, 10)
-              .map((m, i) => (
-                <li key={i}>{m}</li>
-              ))}
-          </ul>
-        </div>
-      )}
-      <details className="kg-file-detail">
-        <summary>
-          预览详情（实体 {d.entities.length} · 关系 {d.edges.length}）
-        </summary>
-        <div className="kg-file-detail-body">
-          <EntityTable entities={d.entities} />
-          <EdgeTable edges={d.edges} />
-        </div>
-      </details>
-    </>
-  )
-}
-
-function EntityTable(props: { entities: ParsedEntity[] }) {
-  if (props.entities.length === 0)
-    return <div className="kg-empty">无实体数据</div>
-  return (
-    <div className="kg-table-wrap">
-      <table className="kg-table">
-        <thead>
-          <tr>
-            <th>编号</th>
-            <th>类型</th>
-            <th>名称</th>
-            <th>属性</th>
-          </tr>
-        </thead>
-        <tbody>
-          {props.entities.map((e) => (
-            <tr key={e.id}>
-              <td className="mono">{e.id}</td>
-              <td>
-                <span className="kg-tag">{e.nodeType}</span>
-              </td>
-              <td>{e.label || "—"}</td>
-              <td className="dim">{formatProps(e.props)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function EdgeTable(props: { edges: ParsedEdge[] }) {
-  if (props.edges.length === 0)
-    return <div className="kg-empty">无关系数据</div>
-  return (
-    <div className="kg-table-wrap">
-      <table className="kg-table">
-        <thead>
-          <tr>
-            <th>源</th>
-            <th>关系</th>
-            <th>目标</th>
-            <th>序号</th>
-            <th>更新时间</th>
-            <th>属性</th>
-          </tr>
-        </thead>
-        <tbody>
-          {props.edges.map((e) => (
-            <tr key={e.id}>
-              <td className="mono">{e.source}</td>
-              <td>
-                <span className="kg-tag kg-tag-blue">{e.linkType}</span>
-              </td>
-              <td className="mono">{e.target}</td>
-              <td className="mono">{String(e.rank ?? e.props.rank ?? "—")}</td>
-              <td className="dim">{e.time}</td>
-              <td className="dim">{formatProps(e.props)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
+  return <ImportPreviewDetail data={d} onSelectionChange={props.onSelection} />
 }
 
 /* ── 结果 tab：本次任务 + 历史任务 ─────────────────── */
@@ -824,19 +730,6 @@ function TasksView(props: { taskIds: string[] }) {
 
 /* ── 小组件 ─────────────────────────────────────────── */
 
-function Stat(props: { label: string; value: number; tone?: string }) {
-  return (
-    <div className={`kg-stat ${props.tone ?? ""}`}>
-      <b>{props.value}</b>
-      <span>{props.label}</span>
-    </div>
-  )
-}
 
-function formatProps(p: Record<string, unknown>): string {
-  const entries = Object.entries(p).filter(
-    ([, v]) => v !== undefined && v !== null && v !== "",
-  )
-  if (entries.length === 0) return "—"
-  return entries.map(([k, v]) => `${k}=${String(v)}`).join("  ")
-}
+
+

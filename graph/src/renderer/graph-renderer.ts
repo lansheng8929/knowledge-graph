@@ -9,6 +9,7 @@ import { WebGLRenderer } from "./webgl-renderer.js"
 import {
   InteractionManager,
   type ViewTransform,
+  type ZoomOptions,
 } from "./interaction-manager.js"
 import type { Picker } from "./picker.js"
 import type { RenderPlugin } from "./render-plugin.js"
@@ -27,6 +28,8 @@ export interface GraphRendererOptions<
   backgroundColor?: string
   showArrows?: boolean
   labelMinScale?: number
+  /** 缩放配置（滚轮步进/上下限、fitView 钳制范围） */
+  zoom?: ZoomOptions
   /** 渲染插件工厂（必填） */
   renderPlugin: (
     gl: WebGL2RenderingContext,
@@ -113,6 +116,7 @@ export class GraphRenderer<
       backgroundColor: opts.backgroundColor,
       showArrows: opts.showArrows,
       labelMinScale: opts.labelMinScale,
+      zoom: opts.zoom,
       renderPlugin: opts.renderPlugin,
     })
 
@@ -143,8 +147,8 @@ export class GraphRenderer<
   }
 
   /** 自适应视图 */
-  fitView(padding?: number): void {
-    this.backend.fitView(padding)
+  fitView(padding?: number): Promise<void> {
+    return this.backend.fitView(padding)
   }
 
   /** 聚焦到某节点 */

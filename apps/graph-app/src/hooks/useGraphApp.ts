@@ -25,6 +25,24 @@ import {
 import { createDefaultLinkStyle } from "../links/default/style"
 import { MetadataManager } from "@lansheng/knowledge-graph/meta-manager"
 import { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
+
+/** 阻塞直到模拟停止：velocity 稳定判定或 alphaMin 触发 onEnd 才结束；timeoutMs 仅作安全兜底（正常不会走到） */
+function settleOnce(view: MyGraphView, timeoutMs = 15000): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const finish = (): void => {
+      if (settled) return
+      settled = true
+      if (timer) clearTimeout(timer)
+      if (view.layout.onEnd === onSettled) view.layout.onEnd = undefined
+      resolve()
+    }
+    const onSettled = (): void => finish()
+    view.layout.onEnd = onSettled
+    timer = setTimeout(finish, timeoutMs)
+  })
+}
 import type {
   GraphViewModel,
   GraphNode,
@@ -41,6 +59,7 @@ import { getPalette, type Theme } from "../theme"
 import { applyIcons, applyIcon } from "../icon-map"
 import { linkEndpoints } from "../link-utils"
 import { graphApi } from "../api/client"
+import { RenderTaskQueue } from "./render-task-queue"
 import {
   BASE_FORCE_CONFIG,
   INTIMACY_INFLUENCE_DEFAULT,
@@ -49,6 +68,12 @@ import {
 
 interface InitResponse {
   graphData: GraphViewModel<DefaultGraphDataGenerics>["graphData"]
+}
+
+/** 一个渲染任务：待入图的节点 + 边（边端点是否就绪由 worker 裁决） */
+interface RenderTask {
+  nodes: GraphNode[]
+  links: GraphLink[]
 }
 
 export function useGraphApp(ids?: string[]) {
@@ -62,6 +87,8 @@ export function useGraphApp(ids?: string[]) {
     new GraphModel({ initData: { graphData: { nodes: [], links: [] } } }),
   )
   const viewRef = useRef<MyGraphView | null>(null)
+  /** 加载纪元：每次开始加载/组件卸载时递增，旧渲染循环据此退出（任务队列取消） */
+  const loadEpochRef = useRef(0)
   const historyManagerRef = useRef<HistoryManager>(new HistoryManager())
   const expansionRef = useRef<ExpansionService | null>(null)
 
@@ -76,7 +103,7 @@ export function useGraphApp(ids?: string[]) {
     labels: string[]
   } | null>(null)
 
-  // ── 亲密度→吸引力影响系数（引力面板调节）────────
+  // 亲密度→吸引力影响系数（引力面板调节）
   const [intimacyInfluence, setIntimacyInfluence] = useState(
     INTIMACY_INFLUENCE_DEFAULT,
   )
@@ -88,11 +115,7 @@ export function useGraphApp(ids?: string[]) {
     total?: number
   } | null>(null)
 
-  // ── 流式图数据加载（方案 A：边查边收边渲染）──────
-
-  /** 流式 init：逐节点/边到达时增量 merge 进 model，最后返回完整数据。
-   *  边可能先于其端点节点到达（节点/边并行交错）——未就绪的边暂存 pending，
-   *  待端点节点到齐后再合并，避免 d3 forceLink 找不到节点抛错导致模拟中断。 */
+  // 流式图数据加载
   const streamInitData = useCallback(
     async (
       ids: string[],
@@ -103,85 +126,118 @@ export function useGraphApp(ids?: string[]) {
       }) => void,
     ) => {
       const model = modelRef.current
-      const nodes: GraphNode[] = []
-      const links: GraphLink[] = []
-      const nodeIds = new Set<string>()
-      const pendingLinks: GraphLink[] = []
-      const BATCH = 300
-      let batchNodes: GraphNode[] = []
-      let batchLinks: GraphLink[] = []
-      let acc = 0
+      const nodes: GraphNode[] = [] // 全量节点（历史记录用）
+      const links: GraphLink[] = [] // 全量边（历史记录用）
+      // ── 任务队列参数 ──
+      const BATCH = 500 // 任务粒度：攒够多少个节点/边算一个渲染任务
+      const FAST_SETTLE_MS = 8000 // 中间任务：等模拟停止的安全兜底（正常由 onEnd 结束）
+      const FINAL_SETTLE_MS = 15000 // 最终任务：等模拟停止的安全兜底（更大余量）
       let total: number | undefined
       const report = () =>
         onProgress?.({ nodes: nodes.length, links: links.length, total })
 
-      const linkReady = (l: GraphLink): boolean => {
-        const [s, t] = linkEndpoints(l)
-        return nodeIds.has(s) && nodeIds.has(t)
-      }
-      // 把端点已到齐的暂存边移入当前批次
-      const drainPending = () => {
-        let i = pendingLinks.length
-        while (i--) {
-          const l = pendingLinks[i]
-          if (linkReady(l)) {
-            pendingLinks.splice(i, 1)
-            links.push(l)
-            batchLinks.push(l)
+      const view = viewRef.current
+      // 本次加载的纪元：新加载/组件卸载会使 epoch 递增，旧队列据此停止（取消）
+      const epoch = ++loadEpochRef.current
+      const isCancelled = (): boolean =>
+        epoch !== loadEpochRef.current || !viewRef.current
+
+      // ── 渲染累积状态（跨任务共享；队列串行消费，无并发写） ──
+      const cur = model.getGraphModelData().graphData
+      let inModel: GraphNode[] = cur.nodes
+      let inLinks: GraphLink[] = cur.links
+      const modelIds = new Set(inModel.map((n) => n.id))
+      let pendingLinks: GraphLink[] = []
+
+      // ── 任务队列：worker 定义单个渲染任务，队列负责调度/串行/取消 ──
+      const queue = new RenderTaskQueue<RenderTask>(
+        // 单个渲染任务：入图 → 立即取景 → 快速模拟 → 限时稳定 → 精修取景
+        async (task, isFinal) => {
+          if (isCancelled()) return
+          task.nodes.forEach((n) => modelIds.add(n.id))
+          // 端点已入图的边随本任务渲染，其余延后（避免 forceLink 找不到节点）
+          const ready: GraphLink[] = []
+          const rest: GraphLink[] = []
+          for (const l of pendingLinks) {
+            const [s, t] = linkEndpoints(l)
+            if (modelIds.has(s) && modelIds.has(t)) ready.push(l)
+            else rest.push(l)
           }
-        }
-      }
+          pendingLinks = [...rest, ...task.links]
+          inModel = [...inModel, ...task.nodes]
+          inLinks = [...inLinks, ...ready]
+          model.updateGraphData({
+            graphData: { nodes: inModel, links: inLinks },
+          })
+          if (view && !isCancelled()) {
+            view.layout.reheat(0.15)
+            // 阻塞：直到模拟完全停止（onEnd）才继续
+            await settleOnce(view, isFinal ? FINAL_SETTLE_MS : FAST_SETTLE_MS)
+            // 阻塞：直到取景（含过渡动画）完成才继续
+            await view.fitView(40)
+          }
+          // 渲染阶段进度 = 已入图的计数
+          onProgress?.({ nodes: inModel.length, links: inLinks.length, total })
+        },
+        isCancelled, // 停止谓词：纪元变化/视图销毁时队列自行退出
+      )
 
-      const flush = () => {
-        drainPending()
-        if (!batchNodes.length && !batchLinks.length) return
-        const cur = model.getGraphModelData().graphData
-        model.updateGraphData({
-          graphData: {
-            nodes: [...cur.nodes, ...batchNodes],
-            links: [...cur.links, ...batchLinks],
-          },
-        })
-        batchNodes = []
-        batchLinks = []
-      }
-
+      // ── 生产者：接收流，攒批入队（不阻塞流接收） ──
+      onProgress?.({ nodes: 0, links: 0, total })
+      let pendingBatch: RenderTask = { nodes: [], links: [] }
       await graphApi.initStream(ids, (chunk) => {
         if (chunk.type === "meta") {
           total = chunk.total
+          onProgress?.({ nodes: 0, links: 0, total })
         } else if (chunk.type === "node") {
           const n = chunk.data as unknown as GraphNode
           applyIcon(n)
           nodes.push(n)
-          nodeIds.add(n.id)
-          batchNodes.push(n)
-          drainPending()
-          viewRef.current?.fitView(50)
+          pendingBatch.nodes.push(n)
         } else if (chunk.type === "link") {
           const l = chunk.data as unknown as GraphLink
-          if (linkReady(l)) {
-            links.push(l)
-            batchLinks.push(l)
-          } else {
-            pendingLinks.push(l)
-          }
-          viewRef.current?.fitView(50)
+          links.push(l)
+          pendingBatch.links.push(l)
         }
-        if (++acc >= BATCH) {
-          acc = 0
-          flush()
-          report()
+        if (pendingBatch.nodes.length + pendingBatch.links.length >= BATCH) {
+          queue.enqueue(pendingBatch)
+          pendingBatch = { nodes: [], links: [] }
         }
       })
-      flush()
+
+      // ── 流结束：flush 残余批 → 声明完成 → 等队列收尾 ──
+      if (pendingBatch.nodes.length > 0 || pendingBatch.links.length > 0) {
+        queue.enqueue(pendingBatch)
+      }
+      queue.close()
+      await queue.waitDone()
+
+      // 残余边（端点全部已入图）：最终充分稳定后取景
+      if (!isCancelled() && pendingLinks.length > 0) {
+        const ready = pendingLinks.filter((l) => {
+          const [s, t] = linkEndpoints(l)
+          return modelIds.has(s) && modelIds.has(t)
+        })
+        if (ready.length > 0) {
+          inLinks = [...inLinks, ...ready]
+          model.updateGraphData({
+            graphData: { nodes: inModel, links: inLinks },
+          })
+          if (view && !isCancelled()) {
+            view.layout.reheat(0.15)
+            await settleOnce(view, FINAL_SETTLE_MS)
+            await view.fitView(40)
+          }
+        }
+      }
+
       report()
       return { graphData: { nodes, links } } as InitResponse
     },
     [],
   )
 
-  /** 流式 expand：边收边 merge 进 model，最后返回完整拓出结果（供历史记录）。
-   *  同样延迟处理端点未到齐的边，避免 forceLink 找不到节点抛错。 */
+  // 流式 expand
   const expansionFetcher: ExpansionFetcher = useCallback(async (request) => {
     const model = modelRef.current
     const view = viewRef.current
@@ -258,7 +314,7 @@ export function useGraphApp(ids?: string[]) {
     return { nodes, links, total: nodes.length }
   }, [])
 
-  // ─── 初始化 GraphView / ExpansionService ──────
+  // 初始化
   useEffect(() => {
     if (!containerRef.current) return
     const model = modelRef.current
@@ -267,12 +323,12 @@ export function useGraphApp(ids?: string[]) {
       container: containerRef.current,
       graphModel: model,
       arrowDisplay: true,
-      // 主题从外部传入（useTheme），注册 view 时手动配置
       runtimeTheme: theme,
       backgroundColor: getPalette(theme).canvas,
+      // 缩放配置（库不内置默认，全部外部传入；以下为原硬编码行为：5%/格，0.03~10，fit 上限 2）
+      zoom: { step: 0.05, min: 0.03, max: 10, fitMax: 2 },
       forceConfig: {
         ...BASE_FORCE_CONFIG,
-        // 亲密度→物理拉扯力（影响系数默认 1.2，可经引力面板调节）
         ...buildIntimacyFns(INTIMACY_INFLUENCE_DEFAULT),
       },
       theme: {
@@ -286,9 +342,6 @@ export function useGraphApp(ids?: string[]) {
           ip: (node, t) => createIpStyle(node, t as Theme),
           device: (node, t) => createDeviceStyle(node, t as Theme),
         },
-        // 边的关系类型是后端动态值（USE_DEVICE / CALLED 等），无法静态枚举；
-        // 用 Proxy 让任意 linkType 都解析到默认边样式（插件的兜底声明），
-        // 未来如需按关系类型定制，给具体 key 覆盖即可。
         link: new Proxy(
           {
             default: (_link: unknown, t: unknown) =>
@@ -338,10 +391,11 @@ export function useGraphApp(ids?: string[]) {
     return () => {
       graphView.destroy()
       viewRef.current = null
+      loadEpochRef.current += 1 // 终止仍在运行的旧渲染循环
     }
   }, [])
 
-  // ─── 主题切换 → 把主题传入 view 并重新解析样式 ──────
+  // 主题切换
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
@@ -349,20 +403,18 @@ export function useGraphApp(ids?: string[]) {
     view.renderer.setBackgroundColor?.(getPalette(theme).canvas)
   }, [theme])
 
-  // ─── ids 变化 → 加载图数据 ───────────────────
+  // ids 变化
   useEffect(() => {
     const model = modelRef.current
     ;(async () => {
       if (ids?.length === 0) return
 
       try {
-        // 流式 init：边收边增量渲染（数据已写入 model），全部到达后一次性布局
         setLoadProgress({ nodes: 0, links: 0 })
         const initData = await streamInitData(ids ?? [], (p) =>
           setLoadProgress(p),
         )
         setLoadProgress(null)
-        // init：一次性算法排布并 fitView，不再等待物理引擎冷却
         historyManagerRef.current.pushState({
           type: "init",
           description: "初始图谱",
@@ -378,7 +430,7 @@ export function useGraphApp(ids?: string[]) {
     })()
   }, [ids, streamInitData])
 
-  // ─── 快照操作 ─────────────────────────────────
+  // 快照操作
   const handleTakeSnapshot = useCallback(() => {
     const model = modelRef.current
     const view = viewRef.current
@@ -446,7 +498,7 @@ export function useGraphApp(ids?: string[]) {
     setSnapshotPanelOpen((v) => !v)
   }, [])
 
-  /** 调节亲密度→吸引力影响系数并重排（引力面板滑块） */
+  // 调节亲密度→吸引力影响系数并重排（引力面板滑块）
   const applyIntimacyInfluence = useCallback((influence: number) => {
     setIntimacyInfluence(influence)
     viewRef.current?.updatePhysics(buildIntimacyFns(influence))
