@@ -265,8 +265,10 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
 
     this.renderer.onNodeDrag = (nodeId, x, y) => {
       this.layout.fixNode(nodeId, x, y)
-      // 重新加热物理引擎，让其他节点被力牵引
-      this.layout.reheat(0.3)
+      // 重新加热物理引擎，让其他节点被力牵引。
+      // alpha 不宜过高：每次拖动事件都 reheat 会把模拟持续打满，
+      // 导致所有节点（含远处无关节点）大范围晃动；0.15 让邻居温和跟随。
+      this.layout.reheat(0.15)
       // Update render node
       const simNodes = (this.layout as any).nodes as SimNode[]
       const simNode = simNodes.find((n) => n.id === nodeId)
@@ -286,6 +288,9 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
         gn.fy = simNode.fy ?? simNode.y
         this.layout.fixNode(nodeId, gn.fx, gn.fy)
       }
+      // 拖动结束：低 alpha 快速收敛——若沿用拖动中的高 alpha，
+      // 其他节点会继续飘到 alpha 自然衰减完（0.3→0.0002 需数秒）。
+      this.layout.reheat(0.05)
       const node = this.nodeMap.get(nodeId) ?? null
       this.events.publish("nodeDragEnd", node)
     }
@@ -388,8 +393,11 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
         renderNodes.push(rn)
         simNodes.push({
           id: gn.id,
-          x: gn.x ?? 0,
-          y: gn.y ?? 0,
+          // x/y 保留 undefined：无初始位置的节点（首次/新增）交给布局 seedPositions
+          // 环形散布；已有位置的节点保留旧坐标。若 ?? 0 会把 undefined 变 0，
+          // seedPositions 的 x===undefined 判断失效 → 新节点堆在原点。
+          x: gn.x ?? undefined,
+          y: gn.y ?? undefined,
           radius: rn.radius,
           fx: gn.fx ?? null,
           fy: gn.fy ?? null,
@@ -541,6 +549,8 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
         gn.y = sn.y ?? 0
         gn.vx = sn.vx ?? 0
         gn.vy = sn.vy ?? 0
+        gn.fx = sn.fx ?? undefined
+        gn.fy = sn.fy ?? undefined
       }
     }
 

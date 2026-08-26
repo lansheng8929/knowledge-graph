@@ -13,6 +13,7 @@ import type {
   ImportTask,
   ImportTemplate,
   PreviewData,
+  PreviewQuery,
   View,
 } from "./types"
 import {
@@ -102,6 +103,12 @@ export default function App() {
 
   const firstTemplate = templates[0] ?? null
 
+  /** 表格后端分页/筛选：按当前文件配置重新请求 preview 页 */
+  const fetchPreviewPage = (
+    it: ImportItem,
+    q: PreviewQuery,
+  ): Promise<PreviewData> => preview(it.file, buildConfig(it), it.templateId, q)
+
   // 各文件输入的签名串：作为自动解析 effect 的依赖（输入变化才重跑）
   const previewKey = items.map(itemSig).join("\n")
 
@@ -176,7 +183,10 @@ export default function App() {
       const timer = window.setTimeout(async () => {
         updateItem(it.id, { previewing: true, previewError: null })
         try {
-          const data = await preview(it.file, cfg, it.templateId)
+          const data = await preview(it.file, cfg, it.templateId, {
+            includeGraph: true,
+            pageSize: 10,
+          })
           updateItem(it.id, {
             previewData: data,
             previewing: false,
@@ -267,6 +277,7 @@ export default function App() {
           options={options}
           submitting={submitting}
           onConfirm={confirmAll}
+          fetchPreviewPage={fetchPreviewPage}
         />
       )}
 
@@ -286,6 +297,7 @@ function MultiFileView(props: {
   options: ImportOptions | null
   submitting: boolean
   onConfirm: () => void
+  fetchPreviewPage: (item: ImportItem, q: PreviewQuery) => Promise<PreviewData>
 }) {
   return (
     <div className="kg-import-body">
@@ -305,6 +317,7 @@ function MultiFileView(props: {
           options={props.options}
           onRemove={() => props.removeItem(it.id)}
           onChange={(patch) => props.updateItem(it.id, patch)}
+          fetchPreviewPage={props.fetchPreviewPage}
         />
       ))}
 
@@ -358,6 +371,7 @@ function FileBox(props: {
   options: ImportOptions | null
   onRemove: () => void
   onChange: (patch: Partial<ImportItem>) => void
+  fetchPreviewPage: (item: ImportItem, q: PreviewQuery) => Promise<PreviewData>
 }) {
   const { item } = props
   const opts = props.options
@@ -450,6 +464,7 @@ function FileBox(props: {
       <FilePreview
         item={item}
         onSelection={(ids) => props.onChange({ excludeEntityIds: ids })}
+        fetchPreviewPage={props.fetchPreviewPage}
       />
     </section>
   )
@@ -458,6 +473,7 @@ function FileBox(props: {
 function FilePreview(props: {
   item: ImportItem
   onSelection: (excludeEntityIds: string[]) => void
+  fetchPreviewPage: (item: ImportItem, q: PreviewQuery) => Promise<PreviewData>
 }) {
   const { item } = props
   if (item.previewing) {
@@ -473,7 +489,13 @@ function FilePreview(props: {
   }
   const d = item.previewData
   if (!d) return null
-  return <ImportPreviewDetail data={d} onSelectionChange={props.onSelection} />
+  return (
+    <ImportPreviewDetail
+      data={d}
+      onSelectionChange={props.onSelection}
+      onFetchPage={(q) => props.fetchPreviewPage(item, q)}
+    />
+  )
 }
 
 /* ── 结果 tab：本次任务 + 历史任务 ─────────────────── */
@@ -729,7 +751,3 @@ function TasksView(props: { taskIds: string[] }) {
 }
 
 /* ── 小组件 ─────────────────────────────────────────── */
-
-
-
-

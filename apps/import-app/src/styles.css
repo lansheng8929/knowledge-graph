@@ -264,6 +264,7 @@
   gap: 4px;
   color: rgb(var(--muted-foreground));
 }
+.kg-filter-hint { font-size: 12px; color: rgb(var(--muted-foreground)); padding: 2px 0; }
 .kg-filter-count {
   margin-left: auto;
   color: rgb(var(--muted-foreground));
@@ -609,6 +610,15 @@
   color: rgb(var(--primary));
   background: rgb(var(--primary) / 0.12);
   border: 1px solid rgb(var(--primary) / 0.3);
+  white-space: nowrap; /* 类型标签不换行 */
+}
+.kg-edge-stats {
+  font-size: 12px;
+  color: rgb(var(--muted-foreground));
+  white-space: nowrap;
+}
+.kg-edge-stats b {
+  color: rgb(var(--primary));
 }
 .kg-tag-blue {
   color: rgb(var(--border-hover));

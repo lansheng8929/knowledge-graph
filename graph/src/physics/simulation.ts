@@ -46,6 +46,11 @@ export interface ForceConfig {
   centerStrength?: number
   /** Collision radius multiplier. Default: 1.2 */
   collisionRadius?: number
+  /**
+   * 初始位置预设：节点无 x/y 时，围绕 (centerX, centerY) 按索引环形散布，
+   * 实际半径 = seedRadius * sqrt(n)（n=1 时在中心）。未设置则不预设（d3 默认随机初始位置）。
+   */
+  seedRadius?: number
   /** Collision iterations. Default: 1 */
   collisionIterations?: number
   /** Velocity decay. Default: 0.3 */
@@ -77,6 +82,7 @@ type RequiredForceConfig = Required<
     | "alphaMin"
     | "stableVelocity"
     | "stableTicks"
+    | "seedRadius"
   >
 > &
   Partial<
@@ -88,6 +94,7 @@ type RequiredForceConfig = Required<
       | "alphaMin"
       | "stableVelocity"
       | "stableTicks"
+      | "seedRadius"
     >
   >
 
@@ -139,12 +146,43 @@ export class ForceSimulation implements Layout {
       .iterations(this.config.linkIterations)
   }
 
+  /** 初始位置预设：节点无 x/y 时围绕中心环形散布（确定性，替代 d3 随机初始位置）。
+   *  孤立节点（无任何边）直接钉在计算位置（fx/fy），避免被斥力推远；
+   *  有边节点交给力导向正常布局。 */
+  private seedPositions(): void {
+    const base = this.config.seedRadius
+    if (typeof base !== "number" || this.nodes.length === 0) return
+    const n = this.nodes.length
+    const radius = n === 1 ? 0 : base * Math.sqrt(n)
+    const linked = new Set<string>()
+    for (const l of this.links) {
+      const src = typeof l.source === "object" ? (l.source as SimNode).id : String(l.source)
+      const tgt = typeof l.target === "object" ? (l.target as SimNode).id : String(l.target)
+      linked.add(src)
+      linked.add(tgt)
+    }
+    this.nodes.forEach((node, i) => {
+      if (node.x === undefined || node.y === undefined) {
+        const angle = (2 * Math.PI * i) / n
+        node.x = this.centerX + radius * Math.cos(angle)
+        node.y = this.centerY + radius * Math.sin(angle)
+      }
+      // 孤立节点无论是否已有位置都钉住（重建后 fx/fy 丢失需恢复），
+      // 避免被斥力推远；有边节点交给力导向正常布局。
+      if (!linked.has(node.id)) {
+        node.fx = node.x ?? this.centerX
+        node.fy = node.y ?? this.centerY
+      }
+    })
+  }
+
   /** Start or restart the simulation */
   start(): void {
     if (this.simulation) {
       this.simulation.stop()
     }
     this.stableCount = 0
+    this.seedPositions()
 
     this.simulation = forceSimulation<SimNode>(this.nodes)
       .force("link", this.buildLinkForce())

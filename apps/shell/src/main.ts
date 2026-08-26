@@ -42,6 +42,12 @@ const loadUserApp = import.meta.env.DEV
   ? () => import("../../user-app/src/single-spa")
   : () => import(/* @vite-ignore */ USER_APP_ENTRY)
 
+// filter-config-app（筛选配置管理平台 /filter-config：类型驱动的 filter_schema CRUD）
+const FILTER_CONFIG_APP_ENTRY = "filter-config-app"
+const loadFilterConfigApp = import.meta.env.DEV
+  ? () => import("../../filter-config-app/src/single-spa")
+  : () => import(/* @vite-ignore */ FILTER_CONFIG_APP_ENTRY)
+
 authStore.init()
 
 // ── 当前用户芯片（导航右上角，点击进个人中心 /user）──────
@@ -110,6 +116,19 @@ registerApplication({
   name: "user-app",
   app: loadUserApp,
   activeWhen: (location) => location.pathname.startsWith("/user"),
+  customProps: () => ({
+    auth: {
+      token: "",
+      tenantId: "",
+    },
+  }),
+})
+
+// 筛选配置管理平台（/filter-config/*）：filter_schema 增删改查
+registerApplication({
+  name: "filter-config-app",
+  app: loadFilterConfigApp,
+  activeWhen: (location) => location.pathname.startsWith("/filter-config"),
   customProps: () => ({
     auth: {
       token: "",

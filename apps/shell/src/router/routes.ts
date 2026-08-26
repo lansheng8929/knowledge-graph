@@ -1,4 +1,4 @@
-export const SUBAPP_PREFIXES = ["/graph", "/import", "/user"] as const
+export const SUBAPP_PREFIXES = ["/graph", "/import", "/user", "/filter-config"] as const
 
 export interface ShellView {
   tag: string

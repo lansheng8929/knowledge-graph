@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tempfile
@@ -173,6 +174,60 @@ def create_app() -> FastAPI:
             return tables, warnings
         return _parse_tables(entities, edges, config), []
 
+    def _prop(it: dict, attr: str):
+        return (it.get("props") or {}).get(attr)
+
+
+    def _num(it: dict, attr: str):
+        v = _prop(it, attr)
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+
+    def _apply_conditions(items: list, raw: str) -> list:
+        """按条件 DSL（{"and":[{"attr":..,"op":..,"value":..}...]}）AND 过滤 items（匹配 props）。"""
+        if not raw or not raw.strip():
+            return items
+        try:
+            group = json.loads(raw)
+        except ValueError:
+            return items
+        for c in (group.get("and") or []):
+            attr, op, value = c.get("attr"), c.get("op"), c.get("value")
+            if op == "between" and isinstance(value, list) and len(value) == 2:
+                lo, hi = float(value[0]), float(value[1])
+                items = [
+                    it
+                    for it in items
+                    if _num(it, attr) is not None and lo <= _num(it, attr) <= hi
+                ]
+            elif op == "in" and isinstance(value, list):
+                allowed = {str(x) for x in value}
+                items = [it for it in items if str(_prop(it, attr)) in allowed]
+            elif op == "contains":
+                q = str(value).lower()
+                items = [it for it in items if q in str(_prop(it, attr)).lower()]
+            elif op in ("eq", "neq"):
+                items = [
+                    it
+                    for it in items
+                    if (str(_prop(it, attr)) == str(value)) == (op == "eq")
+                ]
+            elif op in ("gt", "gte", "lt", "lte"):
+                n = float(value)
+                if op == "gt":
+                    items = [it for it in items if _num(it, attr) is not None and _num(it, attr) > n]
+                elif op == "gte":
+                    items = [it for it in items if _num(it, attr) is not None and _num(it, attr) >= n]
+                elif op == "lt":
+                    items = [it for it in items if _num(it, attr) is not None and _num(it, attr) < n]
+                else:
+                    items = [it for it in items if _num(it, attr) is not None and _num(it, attr) <= n]
+        return items
+
+
     async def _read_upload(f: Optional[UploadFile]) -> Optional[Tuple[str, bytes]]:
         if f is None:
             return None
@@ -188,6 +243,24 @@ def create_app() -> FastAPI:
         file: Optional[UploadFile] = File(None),
         config: Optional[str] = Form(None),
         template_id: Optional[str] = Form(None),
+        # ── 表格后端分页 ──
+        page: int = Form(1),
+        page_size: int = Form(10),
+        # ── 实体筛选 ──
+        ent_q: str = Form(""),
+        ent_type: str = Form(""),
+        ent_only_sel: bool = Form(False),
+        # ── 边筛选 ──
+        edge_q: str = Form(""),
+        edge_type: str = Form(""),
+        edge_status: str = Form("all"),
+        # ── 条件 DSL（类型驱动筛选：{and:[{attr,op,value}...]}）──
+        entity_conditions: str = Form(""),
+        edge_conditions: str = Form(""),
+        # ── 选择状态与图谱全量 ──
+        excluded_ids: str = Form("[]"),
+        include_graph: bool = Form(False),
+        include_ids: bool = Form(False),
     ) -> dict:
         cfg = m.parse_config(config)
         subject, authenticated = subject_from_request(request)
@@ -204,8 +277,8 @@ def create_app() -> FastAPI:
         graph.warnings = twarn + graph.warnings
         result = validate(graph, cfg)
         limit = settings.preview_limit
-        # 实体/边全量返回（前端选择入库用）；仍保持自洽：只返回端点都在实体集内的边，
-        # 否则前端图谱渲染会出现引用缺失节点的悬空边。errors/warnings 保留截断控制体积。
+
+        # 全量实体/边（图谱用 + 计数）；保持自洽：只返回端点都在实体集内的边
         entities = [asdict(e) for e in result.entities]
         ent_ids = {e["id"] for e in entities}
         edges = [
@@ -213,18 +286,80 @@ def create_app() -> FastAPI:
             for e in result.edges
             if e.source in ent_ids and e.target in ent_ids
         ]
-        return {
-            "success": True,
-            "data": {
-                "entityCount": len(result.entities),
-                "edgeCount": len(result.edges),
-                "skipped": result.skipped,
-                "entities": entities,
-                "edges": edges,
-                "errors": result.errors[:limit],
-                "warnings": result.warnings[:limit],
-            },
+        try:
+            excluded = set(json.loads(excluded_ids or "[]"))
+        except ValueError:
+            excluded = set()
+
+        # ── 实体筛选 ──
+        ent_filtered = entities
+        if ent_q:
+            q = ent_q.lower()
+            ent_filtered = [
+                e
+                for e in ent_filtered
+                if q in e["id"].lower()
+                or q in str(e.get("label") or "").lower()
+                or q in json.dumps(e.get("props") or {}, ensure_ascii=False).lower()
+            ]
+        if ent_type:
+            ent_filtered = [e for e in ent_filtered if e["nodeType"] == ent_type]
+        if ent_only_sel:
+            ent_filtered = [e for e in ent_filtered if e["id"] not in excluded]
+        ent_filtered = _apply_conditions(ent_filtered, entity_conditions)
+
+        # ── 边筛选 ──
+        edge_filtered = edges
+        if edge_q:
+            q = edge_q.lower()
+            edge_filtered = [
+                e
+                for e in edge_filtered
+                if q in e["source"].lower()
+                or q in e["target"].lower()
+                or q in e["linkType"].lower()
+            ]
+        if edge_type:
+            edge_filtered = [e for e in edge_filtered if e["linkType"] == edge_type]
+        if edge_status == "in":
+            edge_filtered = [
+                e
+                for e in edge_filtered
+                if e["source"] not in excluded and e["target"] not in excluded
+            ]
+        elif edge_status == "out":
+            edge_filtered = [
+                e
+                for e in edge_filtered
+                if e["source"] in excluded or e["target"] in excluded
+            ]
+        edge_filtered = _apply_conditions(edge_filtered, edge_conditions)
+
+        # ── 分页 ──
+        p = max(1, page)
+        ps = max(1, min(page_size, 500))
+        start = (p - 1) * ps
+
+        data = {
+            "entityCount": len(entities),
+            "edgeCount": len(edges),
+            "skipped": result.skipped,
+            "entityTotal": len(ent_filtered),
+            "edgeTotal": len(edge_filtered),
+            "page": p,
+            "pageSize": ps,
+            "entities": ent_filtered[start : start + ps],
+            "edges": edge_filtered[start : start + ps],
+            "errors": result.errors[:limit],
+            "warnings": result.warnings[:limit],
+            # 图谱全量（include_graph=1 时返回，供图谱渲染与选择联动）
+            "graph": (
+                {"entities": entities, "edges": edges} if include_graph else None
+            ),
+            # 筛选后实体 id 全集（include_ids=1 时返回，供「全选已筛」）
+            "entityIds": [e["id"] for e in ent_filtered] if include_ids else None,
         }
+        return {"success": True, "data": data}
 
     app.add_api_route("/api/v1/import/preview", preview, methods=["POST"])
 

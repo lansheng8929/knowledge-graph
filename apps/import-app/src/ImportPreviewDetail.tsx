@@ -1,6 +1,18 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import GraphPreview from "./GraphPreview"
-import type { ParsedEdge, ParsedEntity, PreviewData } from "./types"
+import {
+  TypeFilterForm,
+  conditionsFromValues,
+  emptyValues,
+} from "@lansheng/filter-builder"
+import type { FilterFormValues, FilterSchema } from "@lansheng/filter-builder"
+import { filterSchema } from "./api"
+import type {
+  ParsedEdge,
+  ParsedEntity,
+  PreviewData,
+  PreviewQuery,
+} from "./types"
 import { nodeTypeLabel, relationLabel } from "./graph-i18n"
 
 const PAGE_SIZE = 10
@@ -8,100 +20,179 @@ const PAGE_SIZE = 10
 const GRAPH_LIVE_LIMIT = 2000
 
 /**
- * 解析预览的入库选择工作台：左表格（实体可勾选，边自动跟随端点），
- * 右图谱实时反映选中子图。默认全选。
+ * 解析预览的入库选择工作台：左表格（实体可勾选，边自动跟随端点），右图谱实时反映选中子图。
+ * 表格为后端分页/筛选：页与筛选变化时经 onFetchPage 拉取；图谱用全量数据（props.data.graph）。
  */
 export default function ImportPreviewDetail(props: {
   data: PreviewData
+  onFetchPage: (q: PreviewQuery) => Promise<PreviewData>
   onSelectionChange?: (excludeEntityIds: string[]) => void
 }) {
   const { data: d } = props
+  // ── 选择状态（跨页累积；提交时随配置携带） ──
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set())
-  const [entPage, setEntPage] = useState(0)
-  const [edgePage, setEdgePage] = useState(0)
-  const [fitKey, setFitKey] = useState(0)
-  // 表格筛选（仅影响展示与查找，不影响选择与图谱）
+  // ── 表格分页/筛选（后端） ──
+  const [entPage, setEntPage] = useState(1)
+  const [edgePage, setEdgePage] = useState(1)
   const [entQ, setEntQ] = useState("")
   const [entType, setEntType] = useState("")
   const [entOnlySel, setEntOnlySel] = useState(false)
   const [edgeQ, setEdgeQ] = useState("")
   const [edgeType, setEdgeType] = useState("")
   const [edgeStatus, setEdgeStatus] = useState<"all" | "in" | "out">("all")
+  const [tableData, setTableData] = useState<PreviewData>(d)
+  const [loading, setLoading] = useState(false)
+  // 类型驱动的筛选配置（filter-config-service）与表单值
+  const [entSchemas, setEntSchemas] = useState<FilterSchema[]>([])
+  const [edgeSchemas, setEdgeSchemas] = useState<FilterSchema[]>([])
+  const [entFormValues, setEntFormValues] = useState<FilterFormValues>({})
+  const [edgeFormValues, setEdgeFormValues] = useState<FilterFormValues>({})
+  const skipFetchRef = useRef(true)
 
-  // 已选实体 + 将入库边（两端都未被排除）
+  // 拉取类型驱动的筛选配置（全局配置，挂载一次）
+  useEffect(() => {
+    let alive = true
+    Promise.all([filterSchema("node"), filterSchema("edge")])
+      .then(([n, e]) => {
+        if (!alive) return
+        setEntSchemas(n)
+        setEdgeSchemas(e)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // 关键字防抖（输入 300ms 后再请求）
+  const [debEntQ, setDebEntQ] = useState("")
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebEntQ(entQ), 300)
+    return () => window.clearTimeout(t)
+  }, [entQ])
+  const [debEdgeQ, setDebEdgeQ] = useState("")
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebEdgeQ(edgeQ), 300)
+    return () => window.clearTimeout(t)
+  }, [edgeQ])
+
+  // ── 图谱数据（全量） + 选中子图（两端都未被排除的边） ──
+  const graphData = d.graph
+  // 实体 → 关联边统计（全量图谱的边数 + 去重边类型；供实体表格展示）
+  const entityEdgeStats = useMemo(() => {
+    const stats = new Map<string, { count: number; types: Set<string> }>()
+    for (const ed of graphData?.edges ?? []) {
+      for (const id of [ed.source, ed.target]) {
+        let s = stats.get(id)
+        if (!s) {
+          s = { count: 0, types: new Set() }
+          stats.set(id, s)
+        }
+        s.count += 1
+        s.types.add(ed.linkType)
+      }
+    }
+    return stats
+  }, [graphData])
   const selected = useMemo(() => {
-    const entities = d.entities.filter((e) => !excluded.has(e.id))
+    if (!graphData) return { entities: [], edges: [], ids: new Set<string>() }
+    const entities = graphData.entities.filter((e) => !excluded.has(e.id))
     const ids = new Set(entities.map((e) => e.id))
-    const edges = d.edges.filter(
+    const edges = graphData.edges.filter(
       (ed) => ids.has(ed.source) && ids.has(ed.target),
     )
     return { entities, edges, ids }
-  }, [d, excluded])
+  }, [graphData, excluded])
 
-  // 类型/关系类型候选 + 筛选结果
-  const entTypes = useMemo(
-    () => [...new Set(d.entities.map((e) => e.nodeType))].sort(),
-    [d],
-  )
-  const edgeTypes = useMemo(
-    () => [...new Set(d.edges.map((e) => e.linkType))].sort(),
-    [d],
-  )
-  const entFilterActive = entQ !== "" || entType !== "" || entOnlySel
-  const filteredEntities = useMemo(() => {
-    const q = entQ.trim().toLowerCase()
-    return d.entities.filter((e) => {
-      if (entType && e.nodeType !== entType) return false
-      if (entOnlySel && excluded.has(e.id)) return false
-      if (!q) return true
-      return (
-        e.id.toLowerCase().includes(q) ||
-        e.label.toLowerCase().includes(q) ||
-        formatProps(e.props).toLowerCase().includes(q)
-      )
-    })
-  }, [d, entQ, entType, entOnlySel, excluded])
-  const filteredEdges = useMemo(() => {
-    const q = edgeQ.trim().toLowerCase()
-    return d.edges.filter((e) => {
-      if (edgeType && e.linkType !== edgeType) return false
-      const on = selected.ids.has(e.source) && selected.ids.has(e.target)
-      if (edgeStatus === "in" && !on) return false
-      if (edgeStatus === "out" && on) return false
-      if (!q) return true
-      return (
-        e.source.toLowerCase().includes(q) ||
-        e.target.toLowerCase().includes(q) ||
-        e.linkType.toLowerCase().includes(q)
-      )
-    })
-  }, [d, edgeQ, edgeType, edgeStatus, selected.ids])
+  // 上报排除清单（提交时随配置携带）
+  useEffect(() => {
+    props.onSelectionChange?.(Array.from(excluded))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excluded])
 
-  // 新解析结果 → 重置选择、分页与图谱
+  // 新解析结果 → 重置选择、分页、筛选与图谱
   useEffect(() => {
     setExcluded(new Set())
-    setEntPage(0)
-    setEdgePage(0)
-    setPaused(false)
-    setApplied(null)
+    setEntPage(1)
+    setEdgePage(1)
     setEntQ("")
     setEntType("")
     setEntOnlySel(false)
     setEdgeQ("")
     setEdgeType("")
     setEdgeStatus("all")
+    setTableData(d)
+    setPaused(false)
+    setApplied(null)
+    skipFetchRef.current = true
   }, [d])
 
-  useEffect(() => {
-    setEntPage(0)
-  }, [entQ, entType, entOnlySel])
-  useEffect(() => {
-    setEdgePage(0)
-  }, [edgeQ, edgeType, edgeStatus])
+  // 当前类型的可筛属性配置 + 条件 DSL（类型驱动筛选）
+  const entTypeSchemas = entSchemas.filter((s) => s.typeName === entType)
+  const edgeTypeSchemas = edgeSchemas.filter((s) => s.typeName === edgeType)
+  const entityConditions = (() => {
+    if (!entType || entTypeSchemas.length === 0) return ""
+    const conds = conditionsFromValues(entTypeSchemas, entFormValues)
+    return conds.length ? JSON.stringify({ and: conds }) : ""
+  })()
+  const edgeConditions = (() => {
+    if (!edgeType || edgeTypeSchemas.length === 0) return ""
+    const conds = conditionsFromValues(edgeTypeSchemas, edgeFormValues)
+    return conds.length ? JSON.stringify({ and: conds }) : ""
+  })()
 
-  // 上报排除清单（提交时随配置携带）
+  // 拉取表格页（后端分页 + 筛选）
+  const needsExclusion = entOnlySel || edgeStatus !== "all"
+  const loadPage = async (): Promise<void> => {
+    setLoading(true)
+    try {
+      const res = await props.onFetchPage({
+        page: entPage,
+        pageSize: PAGE_SIZE,
+        entQ: entQ || undefined,
+        entType: entType || undefined,
+        entOnlySel,
+        edgeQ: edgeQ || undefined,
+        edgeType: edgeType || undefined,
+        edgeStatus,
+        entityConditions: entityConditions || undefined,
+        edgeConditions: edgeConditions || undefined,
+        excludedIds: needsExclusion ? Array.from(excluded) : [],
+      })
+      setTableData(res)
+    } catch {
+      /* 瞬时错误忽略 */
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 分页/筛选变化 → 拉取（初始页来自 props.data，跳过首次）
   useEffect(() => {
-    props.onSelectionChange?.(Array.from(excluded))
+    if (skipFetchRef.current) {
+      skipFetchRef.current = false
+      return
+    }
+    void loadPage()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    entPage,
+    debEntQ,
+    entType,
+    entOnlySel,
+    edgePage,
+    debEdgeQ,
+    edgeType,
+    edgeStatus,
+    entFormValues,
+    edgeFormValues,
+  ])
+
+  // 选择变化且开了「仅已选/已排除」筛选 → 重拉（服务端按排除清单过滤）
+  useEffect(() => {
+    if (!needsExclusion) return
+    if (skipFetchRef.current) return
+    void loadPage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [excluded])
 
@@ -111,6 +202,7 @@ export default function ImportPreviewDetail(props: {
     edges: ParsedEdge[]
   } | null>(null)
   const [paused, setPaused] = useState(false)
+  const [fitKey, setFitKey] = useState(0)
 
   useEffect(() => {
     setApplied(selected)
@@ -137,26 +229,54 @@ export default function ImportPreviewDetail(props: {
       return next
     })
 
+  // 「全选已筛」：请求筛选后的实体 id 全集（ids-only，轻量）
+  const selectAllFiltered = async (): Promise<void> => {
+    try {
+      const res = await props.onFetchPage({
+        page: 1,
+        pageSize: 1,
+        entQ: entQ || undefined,
+        entType: entType || undefined,
+        entOnlySel,
+        edgeQ: edgeQ || undefined,
+        edgeType: edgeType || undefined,
+        edgeStatus,
+        excludedIds: Array.from(excluded),
+        includeIds: true,
+      })
+      const ids = res.entityIds ?? []
+      setExcluded((prev) => {
+        const next = new Set(prev)
+        ids.forEach((id) => next.delete(id))
+        return next
+      })
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  const entFilterActive = entQ !== "" || entType !== "" || entOnlySel
+
   return (
     <>
       <div className="kg-stat-row">
-        <Stat label="实体" value={d.entityCount} />
-        <Stat label="关系" value={d.edgeCount} />
-        <Stat label="跳过" value={d.skipped} tone="warn" />
+        <Stat label="实体" value={tableData.entityCount} />
+        <Stat label="关系" value={tableData.edgeCount} />
+        <Stat label="跳过" value={tableData.skipped} tone="warn" />
         <Stat
           label="错误"
-          value={d.errors.length}
-          tone={d.errors.length ? "bad" : "ok"}
+          value={tableData.errors.length}
+          tone={tableData.errors.length ? "bad" : "ok"}
         />
       </div>
-      {(d.errors.length > 0 || d.warnings.length > 0) && (
+      {(tableData.errors.length > 0 || tableData.warnings.length > 0) && (
         <div
           className={
-            d.errors.length ? "kg-msg kg-msg-err" : "kg-msg kg-msg-warn"
+            tableData.errors.length ? "kg-msg kg-msg-err" : "kg-msg kg-msg-warn"
           }
         >
           <ul>
-            {(d.errors.length ? d.errors : d.warnings)
+            {(tableData.errors.length ? tableData.errors : tableData.warnings)
               .slice(0, 10)
               .map((m, i) => (
                 <li key={i}>{m}</li>
@@ -168,8 +288,9 @@ export default function ImportPreviewDetail(props: {
         <div className="kg-preview-panel">
           <div className="kg-select-bar">
             <span>
-              已选 <b>{selected.entities.length}</b>/{d.entities.length} 实体 ·
-              将入库 <b>{selected.edges.length}</b>/{d.edges.length} 边
+              已选 <b>{selected.entities.length}</b>/{tableData.entityCount}{" "}
+              实体 · 将入库 <b>{selected.edges.length}</b>/{tableData.edgeCount}{" "}
+              边
             </span>
             <button
               className="kg-btn kg-btn-ghost kg-btn-sm"
@@ -180,7 +301,9 @@ export default function ImportPreviewDetail(props: {
             <button
               className="kg-btn kg-btn-ghost kg-btn-sm"
               onClick={() =>
-                setExcluded(new Set(d.entities.map((e) => e.id)))
+                setExcluded(
+                  new Set((graphData?.entities ?? []).map((e) => e.id)),
+                )
               }
             >
               清空
@@ -188,13 +311,7 @@ export default function ImportPreviewDetail(props: {
             {entFilterActive && (
               <button
                 className="kg-btn kg-btn-ghost kg-btn-sm"
-                onClick={() =>
-                  setExcluded((prev) => {
-                    const next = new Set(prev)
-                    filteredEntities.forEach((e) => next.delete(e.id))
-                    return next
-                  })
-                }
+                onClick={() => void selectAllFiltered()}
               >
                 全选已筛
               </button>
@@ -207,16 +324,32 @@ export default function ImportPreviewDetail(props: {
                 type="search"
                 placeholder="搜索编号/名称/属性"
                 value={entQ}
-                onChange={(e) => setEntQ(e.target.value)}
+                onChange={(e) => {
+                  setEntQ(e.target.value)
+                  setEntPage(1)
+                }}
               />
               <select
                 value={entType}
-                onChange={(e) => setEntType(e.target.value)}
+                onChange={(e) => {
+                  setEntType(e.target.value)
+                  setEntPage(1)
+                  setEntFormValues(
+                    emptyValues(
+                      entSchemas.filter((s) => s.typeName === e.target.value),
+                    ),
+                  )
+                }}
               >
                 <option value="">全部类型</option>
-                {entTypes.map((t) => (
+                {(graphData
+                  ? [
+                      ...new Set(graphData.entities.map((e) => e.nodeType)),
+                    ].sort()
+                  : []
+                ).map((t) => (
                   <option key={t} value={t}>
-                    {t}
+                    {nodeTypeLabel(t)}
                   </option>
                 ))}
               </select>
@@ -224,7 +357,10 @@ export default function ImportPreviewDetail(props: {
                 <input
                   type="checkbox"
                   checked={entOnlySel}
-                  onChange={(e) => setEntOnlySel(e.target.checked)}
+                  onChange={(e) => {
+                    setEntOnlySel(e.target.checked)
+                    setEntPage(1)
+                  }}
                 />
                 仅已选
               </label>
@@ -235,26 +371,45 @@ export default function ImportPreviewDetail(props: {
                     setEntQ("")
                     setEntType("")
                     setEntOnlySel(false)
+                    setEntPage(1)
                   }}
                 >
                   重置
                 </button>
               )}
               <span className="kg-filter-count">
-                {filteredEntities.length}/{d.entities.length} 条
+                {tableData.entityTotal} 条{loading ? "…" : ""}
               </span>
             </div>
-            {filteredEntities.length === 0 ? (
+            {entTypeSchemas.length > 0 ? (
+              <TypeFilterForm
+                schemas={entTypeSchemas}
+                values={entFormValues}
+                onChange={(v) => {
+                  setEntFormValues(v)
+                  setEntPage(1)
+                }}
+              />
+            ) : (
+              <span className="kg-filter-hint">
+                {entType
+                  ? "该类型暂无筛选配置"
+                  : "选择类型后按筛选配置显示筛选项"}
+              </span>
+            )}
+            {tableData.entityTotal === 0 ? (
               <div className="kg-empty">
-                {d.entities.length === 0 ? "无实体数据" : "无匹配数据"}
+                {tableData.entityCount === 0 ? "无实体数据" : "无匹配数据"}
               </div>
             ) : (
               <EntitySelectTable
-                entities={filteredEntities}
+                entities={tableData.entities}
                 excluded={excluded}
                 onToggle={toggleEntity}
                 page={entPage}
+                total={tableData.entityTotal}
                 onPage={setEntPage}
+                edgeStats={entityEdgeStats}
               />
             )}
             <div className="kg-filter-bar">
@@ -263,16 +418,30 @@ export default function ImportPreviewDetail(props: {
                 type="search"
                 placeholder="搜索源/目标/关系"
                 value={edgeQ}
-                onChange={(e) => setEdgeQ(e.target.value)}
+                onChange={(e) => {
+                  setEdgeQ(e.target.value)
+                  setEdgePage(1)
+                }}
               />
               <select
                 value={edgeType}
-                onChange={(e) => setEdgeType(e.target.value)}
+                onChange={(e) => {
+                  setEdgeType(e.target.value)
+                  setEdgePage(1)
+                  setEdgeFormValues(
+                    emptyValues(
+                      edgeSchemas.filter((s) => s.typeName === e.target.value),
+                    ),
+                  )
+                }}
               >
                 <option value="">全部关系</option>
-                {edgeTypes.map((t) => (
+                {(graphData
+                  ? [...new Set(graphData.edges.map((e) => e.linkType))].sort()
+                  : []
+                ).map((t) => (
                   <option key={t} value={t}>
-                    {t}
+                    {relationLabel(t)}
                   </option>
                 ))}
               </select>
@@ -293,24 +462,42 @@ export default function ImportPreviewDetail(props: {
                     setEdgeQ("")
                     setEdgeType("")
                     setEdgeStatus("all")
+                    setEdgePage(1)
                   }}
                 >
                   重置
                 </button>
               )}
               <span className="kg-filter-count">
-                {filteredEdges.length}/{d.edges.length} 条
+                {tableData.edgeTotal} 条{loading ? "…" : ""}
               </span>
             </div>
-            {filteredEdges.length === 0 ? (
+            {edgeTypeSchemas.length > 0 ? (
+              <TypeFilterForm
+                schemas={edgeTypeSchemas}
+                values={edgeFormValues}
+                onChange={(v) => {
+                  setEdgeFormValues(v)
+                  setEdgePage(1)
+                }}
+              />
+            ) : (
+              <span className="kg-filter-hint">
+                {edgeType
+                  ? "该类型暂无筛选配置"
+                  : "选择类型后按筛选配置显示筛选项"}
+              </span>
+            )}
+            {tableData.edgeTotal === 0 ? (
               <div className="kg-empty">
-                {d.edges.length === 0 ? "无关系数据" : "无匹配数据"}
+                {tableData.edgeCount === 0 ? "无关系数据" : "无匹配数据"}
               </div>
             ) : (
               <EdgeStatusTable
-                edges={filteredEdges}
+                edges={tableData.edges}
                 selectedIds={selected.ids}
                 page={edgePage}
+                total={tableData.edgeTotal}
                 onPage={setEdgePage}
               />
             )}
@@ -338,7 +525,8 @@ export default function ImportPreviewDetail(props: {
           </div>
           {paused && (
             <div className="kg-graph-paused-hint">
-              节点较多（{selected.entities.length} &gt; {GRAPH_LIVE_LIMIT}），实时联动已暂停；调整选择后点击「刷新图谱」应用。
+              节点较多（{selected.entities.length} &gt; {GRAPH_LIVE_LIMIT}
+              ），实时联动已暂停；调整选择后点击「刷新图谱」应用。
             </div>
           )}
           <GraphPreview
@@ -357,12 +545,11 @@ function EntitySelectTable(props: {
   excluded: ReadonlySet<string>
   onToggle: (id: string) => void
   page: number
+  total: number
   onPage: (p: number) => void
+  edgeStats: Map<string, { count: number; types: Set<string> }>
 }) {
-  const { entities, page } = props
-  if (entities.length === 0) return <div className="kg-empty">无实体数据</div>
-  const pages = Math.max(1, Math.ceil(entities.length / PAGE_SIZE))
-  const slice = entities.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const pages = Math.max(1, Math.ceil(props.total / PAGE_SIZE))
   return (
     <div className="kg-table-wrap">
       <table className="kg-table">
@@ -371,31 +558,56 @@ function EntitySelectTable(props: {
             <th>入库</th>
             <th>编号</th>
             <th>类型</th>
+            <th>关联边</th>
             <th>名称</th>
             <th>属性</th>
           </tr>
         </thead>
         <tbody>
-          {slice.map((e) => (
-            <tr key={e.id} className={props.excluded.has(e.id) ? "kg-row-off" : ""}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={!props.excluded.has(e.id)}
-                  onChange={() => props.onToggle(e.id)}
-                />
-              </td>
-              <td className="mono">{e.id}</td>
-              <td>
-                <span className="kg-tag">{nodeTypeLabel(e.nodeType)}</span>
-              </td>
-              <td>{e.label || "—"}</td>
-              <td className="dim">{formatProps(e.props)}</td>
-            </tr>
-          ))}
+          {props.entities.map((e) => {
+            const s = props.edgeStats.get(e.id)
+            const types = s ? [...s.types].map(relationLabel).join("、") : ""
+            return (
+              <tr
+                key={e.id}
+                className={props.excluded.has(e.id) ? "kg-row-off" : ""}
+              >
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={!props.excluded.has(e.id)}
+                    onChange={() => props.onToggle(e.id)}
+                  />
+                </td>
+                <td className="mono">{e.id}</td>
+                <td>
+                  <span className="kg-tag">{nodeTypeLabel(e.nodeType)}</span>
+                </td>
+                <td>
+                  {s && s.count > 0 ? (
+                    <div
+                      className="kg-edge-stats"
+                      title={s.count + " 条边：" + types}
+                    >
+                      <b>{s.count}</b> 条<p>{types ? "(" + types + ")" : ""}</p>
+                    </div>
+                  ) : (
+                    <span className="dim">—</span>
+                  )}
+                </td>
+                <td>{e.label || "—"}</td>
+                <td className="dim">{formatProps(e.props)}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
-      <Pager page={page} pages={pages} total={entities.length} onPage={props.onPage} />
+      <Pager
+        page={props.page}
+        pages={pages}
+        total={props.total}
+        onPage={props.onPage}
+      />
     </div>
   )
 }
@@ -404,12 +616,10 @@ function EdgeStatusTable(props: {
   edges: ParsedEdge[]
   selectedIds: ReadonlySet<string>
   page: number
+  total: number
   onPage: (p: number) => void
 }) {
-  const { edges, page } = props
-  if (edges.length === 0) return <div className="kg-empty">无关系数据</div>
-  const pages = Math.max(1, Math.ceil(edges.length / PAGE_SIZE))
-  const slice = edges.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const pages = Math.max(1, Math.ceil(props.total / PAGE_SIZE))
   return (
     <div className="kg-table-wrap">
       <table className="kg-table">
@@ -425,7 +635,7 @@ function EdgeStatusTable(props: {
           </tr>
         </thead>
         <tbody>
-          {slice.map((e) => {
+          {props.edges.map((e) => {
             const on =
               props.selectedIds.has(e.source) && props.selectedIds.has(e.target)
             return (
@@ -437,10 +647,14 @@ function EdgeStatusTable(props: {
                 </td>
                 <td className="mono">{e.source}</td>
                 <td>
-                  <span className="kg-tag kg-tag-blue">{relationLabel(e.linkType)}</span>
+                  <span className="kg-tag kg-tag-blue">
+                    {relationLabel(e.linkType)}
+                  </span>
                 </td>
                 <td className="mono">{e.target}</td>
-                <td className="mono">{String(e.rank ?? e.props.rank ?? "—")}</td>
+                <td className="mono">
+                  {String(e.rank ?? e.props.rank ?? "—")}
+                </td>
                 <td className="dim">{e.time}</td>
                 <td className="dim">{formatProps(e.props)}</td>
               </tr>
@@ -448,7 +662,12 @@ function EdgeStatusTable(props: {
           })}
         </tbody>
       </table>
-      <Pager page={page} pages={pages} total={edges.length} onPage={props.onPage} />
+      <Pager
+        page={props.page}
+        pages={pages}
+        total={props.total}
+        onPage={props.onPage}
+      />
     </div>
   )
 }
@@ -464,17 +683,18 @@ function Pager(props: {
     <div className="kg-pager">
       <button
         className="kg-btn kg-btn-ghost kg-btn-sm"
-        disabled={props.page === 0}
+        disabled={props.page === 1}
         onClick={() => props.onPage(props.page - 1)}
       >
         上一页
       </button>
       <span>
-        每页 {PAGE_SIZE} 条 · 第 {props.page + 1}/{props.pages} 页（共 {props.total} 条）
+        每页 {PAGE_SIZE} 条 · 第 {props.page}/{props.pages} 页（共 {props.total}{" "}
+        条）
       </span>
       <button
         className="kg-btn kg-btn-ghost kg-btn-sm"
-        disabled={props.page >= props.pages - 1}
+        disabled={props.page >= props.pages}
         onClick={() => props.onPage(props.page + 1)}
       >
         下一页

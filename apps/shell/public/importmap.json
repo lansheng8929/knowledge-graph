@@ -3,6 +3,7 @@
     "graph-app": "./subapps/graph-app@0.5.0.js",
     "import-app": "./subapps/import-app@0.3.0.js",
     "user-app": "./subapps/user-app@0.3.0.js",
+    "filter-config-app": "./subapps/filter-config-app@0.1.0.js",
     "react": "./shared/react@18.3.1.js",
     "react/jsx-runtime": "./shared/react@18.3.1-jsx-runtime.js",
     "scheduler": "./shared/scheduler@0.23.2.js",

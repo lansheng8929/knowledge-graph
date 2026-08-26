@@ -67,7 +67,8 @@
       }
       #single-spa-application\:graph-app,
       #single-spa-application\:import-app,
-      #single-spa-application\:user-app {
+      #single-spa-application\:user-app,
+      #single-spa-application\:filter-config-app {
         position: absolute;
         inset: 0;
         /* 空容器不拦截鼠标事件（否则未挂载的空容器叠在上面会吃掉点击）；
@@ -76,7 +77,8 @@
       }
       #single-spa-application\:graph-app:not(:empty),
       #single-spa-application\:import-app:not(:empty),
-      #single-spa-application\:user-app:not(:empty) {
+      #single-spa-application\:user-app:not(:empty),
+      #single-spa-application\:filter-config-app:not(:empty) {
         pointer-events: auto;
         animation: appIn 200ms var(--ease-out) both; /* 挂载后淡入，掩盖切换空窗 */
       }
@@ -164,6 +166,7 @@
       <strong>KG 平台</strong>
       <a href="/graph" data-route="/graph">图谱</a>
       <a href="/import" data-route="/import">数据导入</a>
+      <a href="/filter-config" data-route="/filter-config">筛选配置</a>
       <a href="/" data-route="/">首页</a>
       <a href="/user" data-route="/user" id="shell-user" hidden></a>
       <button id="logout-btn" type="button" title="退出登录">退出</button>
@@ -173,6 +176,7 @@
       <div id="single-spa-application:graph-app"></div>
       <div id="single-spa-application:import-app"></div>
       <div id="single-spa-application:user-app"></div>
+      <div id="single-spa-application:filter-config-app"></div>
       <!-- 壳层页面（首页 / 404）挂载容器 -->
       <view-container></view-container>
     </main>

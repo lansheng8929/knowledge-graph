@@ -46,10 +46,41 @@ export interface PreviewData {
   entityCount: number
   edgeCount: number
   skipped: number
+  /** 筛选后实体总数（后端分页） */
+  entityTotal: number
+  /** 筛选后边总数（后端分页） */
+  edgeTotal: number
+  page: number
+  pageSize: number
+  /** 实体页（当前页） */
   entities: ParsedEntity[]
+  /** 边页（当前页） */
   edges: ParsedEdge[]
   errors: string[]
   warnings: string[]
+  /** 图谱全量（includeGraph=true 时返回，供图谱渲染与选择联动） */
+  graph?: { entities: ParsedEntity[]; edges: ParsedEdge[] }
+  /** 筛选后实体 id 全集（includeIds=true 时返回，供「全选已筛」） */
+  entityIds?: string[]
+}
+
+/** preview 接口的查询参数（表格后端分页 + 筛选） */
+export interface PreviewQuery {
+  page?: number
+  pageSize?: number
+  entQ?: string
+  entType?: string
+  entOnlySel?: boolean
+  edgeQ?: string
+  edgeType?: string
+  edgeStatus?: "all" | "in" | "out"
+  /** 未选中的实体 id（供 仅已选 / 已排除 服务端过滤） */
+  excludedIds?: string[]
+  includeGraph?: boolean
+  includeIds?: boolean
+  /** 类型驱动筛选：条件 DSL JSON（{ and: [{attr,op,value}...] }） */
+  entityConditions?: string
+  edgeConditions?: string
 }
 
 export interface ImportTask {

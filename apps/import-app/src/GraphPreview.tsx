@@ -110,12 +110,14 @@ export default function GraphPreview(props: {
       arrowDisplay: true,
       // 缩放：只调步进（10%/格）；上下限/fit 钳制用库默认值（min 0.03 / max 10 / fitMin=min / fitMax 2）
       zoom: { step: 0.1 },
-      // 模拟时间配置（库不内置默认，全部外部传入）
+      // 模拟时间配置（库不内置默认，全部外部传入）；
+      // seedRadius：初始位置直接计算为 0,0 附近环形散布（替代 d3 随机初始位置）
       forceConfig: {
         velocityDecay: 0.3,
         alphaMin: 0.0002,
         stableVelocity: 0.01,
         stableTicks: 5,
+        seedRadius: 30,
       },
       theme: buildTheme(new Set(props.entities.map((e) => e.nodeType))),
       renderPlugin: (gl, canvas) =>

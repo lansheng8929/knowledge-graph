@@ -145,6 +145,26 @@ services:
       - postgres
     restart: unless-stopped
 
+  # ── 类型驱动的筛选配置（filter_schema CRUD；管理平台后续接入）──
+  filter-config-service:
+    build:
+      context: ../
+      dockerfile: services/filter-config-service/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: kg-filter-config
+    environment:
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      CORS_ALLOW_ORIGINS: ""
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      PG_DSN: postgresql://kg:kg@postgres:5432/kg
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
   # ── 对话 Agent（P0 脚手架；LLM 默认 mock，真实接入见 P1）──
   agent-service:
     build:

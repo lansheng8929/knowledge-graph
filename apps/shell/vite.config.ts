@@ -11,6 +11,7 @@ const watchWorkspaceSources = (): Plugin => ({
     server.watcher.add([
       // 子应用源码（同仓编译，改码即热更）
       path.resolve(__dirname, "../graph-app/src"),
+      path.resolve(__dirname, "../filter-config-app/src"),
       // 渲染引擎源码（alias: @lansheng/knowledge-graph）
       path.resolve(__dirname, "../../graph/src"),
     ])
@@ -79,6 +80,11 @@ export default defineConfig({
       "/api/v1/agent": {
         // 对话 Agent agent-service（容器化 dev 用 VITE_AGENT_PROXY 指向 kg-dev-agent）
         target: process.env.VITE_AGENT_PROXY ?? "http://localhost:8006",
+        changeOrigin: true,
+      },
+      "/api/v1/filter-schema": {
+        // 筛选配置 filter-config-service（容器化 dev 用 VITE_FILTER_CONFIG_PROXY 指向 kg-dev-filter-config）
+        target: process.env.VITE_FILTER_CONFIG_PROXY ?? "http://localhost:8007",
         changeOrigin: true,
       },
       "/api": {

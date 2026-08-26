@@ -6,7 +6,9 @@ import type {
   ImportTask,
   ImportTemplate,
   PreviewData,
+  PreviewQuery,
 } from "./types"
+import type { FilterSchema as FbSchema } from "@lansheng/filter-builder"
 
 let authToken = ""
 
@@ -43,18 +45,49 @@ function formData(
   return fd
 }
 
-/** 单个文件：解析 + 校验（不写库）。 */
+/** 单个文件：解析 + 校验（不写库）；支持表格后端分页/筛选（page/pageSize/ent_q/edge_q 等） */
 export async function preview(
   file: File,
   config: ImportConfig,
   templateId: string | null = null,
+  query: PreviewQuery = {},
 ): Promise<PreviewData> {
+  const fd = formData(file, config, templateId)
+  fd.append("page", String(query.page ?? 1))
+  fd.append("page_size", String(query.pageSize ?? 10))
+  fd.append("ent_q", query.entQ ?? "")
+  fd.append("ent_type", query.entType ?? "")
+  fd.append("ent_only_sel", query.entOnlySel ? "true" : "false")
+  fd.append("edge_q", query.edgeQ ?? "")
+  fd.append("edge_type", query.edgeType ?? "")
+  fd.append("edge_status", query.edgeStatus ?? "all")
+  fd.append("entity_conditions", query.entityConditions ?? "")
+  fd.append("edge_conditions", query.edgeConditions ?? "")
+  fd.append("excluded_ids", JSON.stringify(query.excludedIds ?? []))
+  fd.append("include_graph", query.includeGraph ? "true" : "false")
+  fd.append("include_ids", query.includeIds ? "true" : "false")
   const res = await fetch("/api/v1/import/preview", {
     method: "POST",
     headers: headers(),
-    body: formData(file, config, templateId),
+    body: fd,
   })
   return parseData<PreviewData>(res)
+}
+
+/** 类型驱动的筛选配置（filter-config-service 经网关提供）。 */
+export async function filterSchema(
+  typeKind?: "node" | "edge",
+  typeName?: string,
+): Promise<FbSchema[]> {
+  const params = new URLSearchParams()
+  if (typeKind) params.set("type_kind", typeKind)
+  if (typeName) params.set("type_name", typeName)
+  const qs = params.toString()
+  const res = await fetch(`/api/v1/filter-schema${qs ? `?${qs}` : ""}`, {
+    method: "GET",
+    headers: headers(),
+  })
+  return parseData<FbSchema[]>(res)
 }
 
 /** 单个文件：提交导入任务（一个文件 = 一个任务），返回 taskId。 */

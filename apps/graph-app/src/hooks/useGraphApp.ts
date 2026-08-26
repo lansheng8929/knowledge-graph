@@ -407,7 +407,7 @@ export function useGraphApp(ids?: string[]) {
   useEffect(() => {
     const model = modelRef.current
     ;(async () => {
-      if (ids?.length === 0) return
+      if (!ids?.length) return
 
       try {
         setLoadProgress({ nodes: 0, links: 0 })

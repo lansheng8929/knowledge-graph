@@ -19,6 +19,10 @@ export default defineConfig({
       interval: 100,
     },
     proxy: {
+      "/api/v1/filter-schema": {
+        target: "http://localhost:8007",
+        changeOrigin: true,
+      },
       "/api": {
         target: "http://localhost:8005",
         changeOrigin: true,

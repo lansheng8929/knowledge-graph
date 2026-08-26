@@ -1,0 +1,130 @@
+# 图谱分析算法 + 图内可视化展示计划
+
+> 目标：给现有图谱交互注入**算法分析视角**——用图论算法（中心度/连通分量/路径/社区等）产出结果，
+> 全部**落在图视图本身**（节点大小/颜色映射、边粗细映射、路径/关键节点高亮、布局切换），
+> **不做独立图表/表格分析视图**。分析结果是"可切换的视角"，与现有筛选、选择、时间线共存。
+
+## 1. 设计原则
+
+- **图内可视化**：不引入 echarts/recharts 等图表库；分析表现 = 视觉编码（大小/颜色/粗细/透明度）+ 叠加层（高亮/标注）+ 布局。
+- **算法分层**：
+  - 前端画布级（基于已加载子图计算，零后端改动，交互即时）——本轮全部落地；
+  - 后端 Neo4j 级（全库计算，需新增接口）——后续批次。
+- **复用现有框架**：stateManager 状态视觉（hidden/highlighted/selected）、styleManager 样式回调（已支持按节点数据动态映射）、可插拔 Layout、AnalysisPanel、工具栏/右键菜单；**graph 库本轮需补"边按数据映射"渲染能力**。
+- **与现有体系共存**：分析模式 = 样式覆盖层（不删数据、不改状态集），可随时切回默认；筛选（hidden）与选择（selected）优先级高于分析样式。
+
+## 2. 现状盘点（关键结论）
+
+**已有**：
+- graph-app：力导向/树形布局切换、防抖搜索+增量入画、矩形/多边形框选、hover 详情 tooltip、前端属性过滤（FilterPanel）、时间线回放（TimePanel）、图例、小地图、表格视图（TablePanel，双向联动）、快照/撤销、JSON/CSV 导出、明暗主题；AnalysisPanel 仅有"通话圈 call_circle"一种分析（结果列表 + 画布高亮）。
+- graph 库：WebGL2 批量渲染 + GPU 拾取；节点大小已支持按数据映射（createTypedStyle 按 data.weight→radius）；RenderLink.intimacy 字段已声明但渲染器**未消费**；边粗细/颜色仅按状态切换；forceConfig 可自定义（linkDistanceFn/linkStrengthFn 亲密度→引力已接）。
+- 后端 graph-query-service：仅 init/search/expand/analyze；**无**全局计数、类型分布、度数/中心度、路径、社区接口。
+- 前端无任何图表库；filter-builder 类型驱动筛选 DSL 已在 import-app 落地（graph-app FilterPanel 未接入）。
+
+**缺口（本计划要补）**：边按数据映射粗细/颜色、前端图算法工具、分析模式框架、后端统计/算法接口。
+
+## 3. 总体方案：算法分层 × 图内可视化
+
+| 层 | 算法 | 图内可视化表现 | 成本 |
+|---|---|---|---|
+| **L0 数据映射**（数据现成） | 边粗细/透明度按亲密度；节点大小按属性 | 权重即视觉 | ★ 最低 |
+| **L1 前端算法**（画布子图） | 度中心性、连通分量、最短路径（BFS/Dijkstra）、共同邻居、传导关联、k-core、割点（Tarjan）、接近中心性、离群（z-score）、局部聚类系数、标签传播近似社区 | 大小/颜色/高亮/标注/布局 | ★ 低 |
+| **L2 后端算法**（Neo4j 全库） | PageRank、中介中心性、Louvain 社区、A*/K 最短路径、全库统计 | 跨子图一致的着色/排行 | ★★ 高 |
+
+**交互形态**：
+- **模式化**：工具栏"分析"菜单选模式（度数/分量/核数/社区…）→ 一键应用视觉编码 + 图例切换；
+- **点对点**：选中两节点 → "最短路径"；右键节点 → "关联分析（共同邻居/传导）"。
+
+## 4. 批次与里程碑
+
+| 批次 | 内容 | 依赖 |
+|---|---|---|
+| **P1 前端核心四件套** | ① 边按亲密度映射 ② 度中心性模式 ③ 连通分量着色 ④ 最短路径高亮 | graph 库边映射能力 |
+| **P2 前端进阶** | 共同邻居/传导关联、k-core、割点标注、接近中心性、离群检测、径向布局 | P1 的分析模式框架 |
+| **P3 后端全库** | 统计接口、PageRank/中介中心性、Louvain、A*/K 路径、analyze 扩展 | graph-query-service 扩展 |
+
+## 5. P1 详设
+
+### 5.1 边按亲密度映射（L0）
+
+- **算法/数据**：edge.intimacy（0~1，库里已有）。
+- **可视化**：边粗细 = 0.6 + intimacy × 2.4（1.2~3），透明度 = 0.45 + intimacy × 0.5；无 intimacy 回退默认。
+- **交互**：工具栏开关"边权重"（默认开）；图例显示"粗=强关联"。
+- **实现**：
+  - graph 库：RenderLink.intimacy 已声明 → 渲染器/样式管线消费（link-batch 的 strokeWidth/alpha 从样式按 rl.intimacy 派生；style-manager 或 default-render-plugin 补按数据映射边样式的钩子）。
+  - graph-app：links/default/style.ts 支持 weight 映射（参照节点 createTypedStyle）。
+- **验收**：亲密度高的边明显更粗/更实；hover 仍显示原状态样式。
+
+### 5.2 度中心性分析模式（L1）
+
+- **算法**：前端按画布已加载子图统计每节点度（边数；有向按出+入）。归一化 d/maxDeg。
+- **可视化**：节点半径 = 6 + 归一化度数 × 14（叠加现有 weight 映射时取 max 规则）；颜色可叠加"度数热力"（低度灰蓝 → 高度橙红）。
+- **交互**：工具栏"分析 → 度数"；应用后图例显示分档（1~4 档色标）；切换回默认恢复。
+- **实现**：
+  - 新模块 apps/graph-app/src/analysis/：graph-metrics.ts（纯函数：degreeMap(nodes, links) 等，可单测）+ useAnalysisMode.ts（mode 状态 + 结果缓存 + 样式覆盖下发）。
+  - 样式下发：节点样式回调按 mode 返回 radius/color（复用 styleManager 回调机制），或经 stateManager 无状态覆盖层。
+- **验收**：高连接节点明显更大；切换模式/回默认无数据丢失，图例正确。
+
+### 5.3 连通分量着色（L1）
+
+- **算法**：并查集/BFS 求画布内连通分量，按节点数降序编号。
+- **可视化**：每分量分配一种颜色（复用现有类型色板或独立分量色板）；可选"分块布局"（各分量按网格/径向分开放置）。
+- **交互**：分析模式"连通分量"；hover 分量内任意节点显示"分量 #k（n 节点）"；孤立节点单独成分量（与 seedRadius 环形散布兼容）。
+- **实现**：graph-metrics.ts 的 connectedComponents(nodes, links)；样式按分量 ID 取色。
+- **验收**：孤立群/簇清晰分色；与度中心性模式互斥切换正常。
+
+### 5.4 最短路径高亮（L1）
+
+- **算法**：无权 BFS；权重版 Dijkstra（权重 = 1 - intimacy 或边数/时间差，可切换）。
+- **可视化**：路径上的节点/边置 highlighted 态（高亮描边/加粗变色）；非路径节点/边降透明度（hidden 态或 dim 叠加，保留可读性）。
+- **交互**：框选/点选两个节点 → SelectionBar 出现"最短路径"按钮（或右键菜单）→ 计算并高亮；Esc/切换模式清除；无路径时提示"不连通"。
+- **实现**：graph-metrics.ts 的 shortestPath(nodes, links, from, to, weightFn)；stateManager.setHighlightedNodes/Links 已有，复用。
+- **验收**：两点间路径唯一高亮、其余淡化；路径长度/跳数显示在 SelectionBar 或 tooltip。
+
+## 6. P2 详设（概览）
+
+| 功能 | 算法 | 可视化 | 交互 |
+|---|---|---|---|
+| 共同邻居/传导关联 | commonNeighbors(a,b) + 2 跳中间人集合 | 中间节点橙色高亮 + 计数徽标 | 右键节点 → "关联分析" |
+| k-core 分解 | 迭代剪枝求 k-core | 节点按核数渐层着色（核心暖色） | 分析模式"核数" |
+| 割点标注 | Tarjan 求割点/桥 | 割点加 ⚠ 标记 + tooltip"移除后分裂为 n 个分量" | 分析模式"关键节点" |
+| 接近中心性 | 各节点到其它节点的平均最短距离（小图） | 颜色=接近度 | 分析模式 |
+| 离群检测 | 度数/属性 z-score > 阈值 | 离群节点红框脉冲 | 分析模式/自动标注 |
+| 径向布局 | 按中心度分层（radius=层，角度=类型） | 布局切换"径向" | Layout 接口新增 RadialLayout |
+
+## 7. P3 后端（概要，Neo4j 全库）
+
+graph-query-service 新增（参照现有 {success,data} 信封 + L2/L3 过滤）：
+
+- POST /api/v1/graph/stats：全局节点/边计数、类型分布、度数分布（Cypher 聚合）。
+- POST /api/v1/graph/centrality：{algo: pagerank|betweenness|degree} → 全库 TopN + 每节点分值（GDS 原生）。
+- POST /api/v1/graph/community：Louvain / Label Propagation → nodeId → communityId（社区着色跨子图一致）。
+- POST /api/v1/graph/path：{from, to, weight: intimacy|time|hops, k?} → A*/Dijkstra / K 最短路径（APOC）。
+- 扩展 /analyze：call_circle 推广为"时间窗强连通子图"，analyze 类型注册表化（参照 file-import 的 subtask 注册模式）。
+
+前端接入：结果经 /expand 增量入画后套用 P1/P2 的样式机制；模式化分析（如 Louvain 着色）复用 useAnalysisMode，数据来自后端接口而非画布计算。
+
+## 8. 跨批次基础能力
+
+1. **graph 库：边按数据映射**（P1 前提）：样式管线支持按 link.data/intimacy 派生 strokeWidth/alpha/color（当前仅状态切换）。
+2. **前端分析框架**（P1）：
+   - apps/graph-app/src/analysis/graph-metrics.ts——纯函数算法库（degree/component/shortestPath/kcore/articulation/commonNeighbors…），可单测；
+   - apps/graph-app/src/analysis/useAnalysisMode.ts——模式状态（none|degree|component|kcore|…）+ 结果缓存 + 样式覆盖；
+   - 图例联动：分析模式下 LegendPanel 显示当前模式色标/分档。
+3. **测试**：graph-metrics.ts 单测（小图手工断言）；P1 四件套各一个验收用例。
+
+## 9. 风险与依赖
+
+- **边数据映射**需改 graph 库渲染/样式管线（现状仅状态样式）——P1 前置，改动集中在 link-batch/样式派生。
+- **前端算法只覆盖已加载子图**：画布外节点不在计算范围——文档/UI 注明"基于当前画布"；全库结果走 P3。
+- **性能**：k-core/路径迭代在数千节点内 OK；超大数据用 Web Worker（graph-metrics.ts 纯函数便于移植）或 P3 后端。
+- **P3 依赖 Neo4j GDS/APOC** 插件可用性（需确认部署环境）；不可用时退化为 Cypher 实现（度数/统计/朴素路径可行，Louvain/Betweenness 大图退化）。
+- **与现有状态冲突**：分析样式与 hidden/selected 的优先级需明确（selected > highlighted > 分析覆盖 > 默认）。
+
+## 10. 验收标准（P1）
+
+1. 亲密度高的边在画布上明显更粗，开关可关；
+2. "分析→度数"后节点大小反映连接数，图例分档正确，切回默认恢复；
+3. "分析→连通分量"后孤立群分色，悬停显示分量信息；
+4. 选中两节点执行最短路径：路径高亮、其余淡化、跳数可见；不连通有提示；
+5. 以上均不破坏现有筛选/选择/时间线/导出；无新增依赖；构建通过。

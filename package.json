@@ -17,6 +17,6 @@
     "check:contract": "bash scripts/check-api-contract.sh"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.25.12"
   }
 }

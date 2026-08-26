@@ -185,6 +185,27 @@ services:
       - "8005:8005"
     restart: unless-stopped
 
+  filter-config:
+    build:
+      context: ../
+      dockerfile: services/filter-config-service/Dockerfile
+    container_name: kg-dev-filter-config
+    volumes:
+      - ../services/filter-config-service/app:/app/app
+    command: uvicorn app.main:app --reload --host 0.0.0.0 --port 8007
+    environment:
+      # 与 auth-service 同一密钥（dev 直连 JWT 校验用）
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-change-me}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      # filter_schema 落 Postgres
+      PG_DSN: postgresql://kg:kg@kg-dev-postgres:5432/kg
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8007:8007"
+    restart: unless-stopped
+
   agent:
     build:
       # context 为仓库根：Dockerfile 需 COPY shared/service-common（JWT 统一实现）
@@ -227,6 +248,9 @@ services:
       - ..:/repo
       # 遮蔽 host 的 node_modules（macOS 原生二进制）→ 容器内装 Linux 版
       - web_node_modules:/repo/node_modules
+      # 同理：apps/shell/node_modules 也是 bind mount（host macOS 版 esbuild 等），
+      # 必须遮蔽成容器内独立 Linux 版，否则 vite 报 esbuild host/binary 版本不匹配
+      - web_shell_node_modules:/repo/apps/shell/node_modules
     command: sh -c "bun install --frozen-lockfile 2>/dev/null || bun install; cd apps/shell && bun dev --host 0.0.0.0"
     environment:
       # 容器内 proxy 目标（指向服务名）
@@ -235,6 +259,7 @@ services:
       VITE_INGEST_PROXY: http://kg-dev-ingestion:8003
       VITE_IMPORT_PROXY: http://kg-dev-import:8005
       VITE_AGENT_PROXY: http://kg-dev-agent:8006
+      VITE_FILTER_CONFIG_PROXY: http://kg-dev-filter-config:8007
     ports:
       - "3001:3001"
     depends_on:
@@ -245,6 +270,7 @@ services:
       - ingestion
       - import
       - agent
+      - filter-config
     restart: unless-stopped
 
 # 复用现有 Neo4j 数据卷（与生产共用，勿同时跑 dev/prod）
@@ -263,3 +289,4 @@ volumes:
     external: true
   pg_data:
   web_node_modules:
+  web_shell_node_modules:
