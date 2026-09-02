@@ -21,6 +21,7 @@ import {
   GitBranch,
   ArrowBigLeft,
   Magnet,
+  SlidersHorizontal,
 } from "lucide-react"
 import SearchBox from "./SearchBox"
 import type { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
@@ -136,6 +137,7 @@ interface ToolbarProps {
   onExportCSV: () => void
   treeMode: boolean
   onToggleTreeLayout: () => void
+  onOpenAnalysisSettings: () => void
 }
 
 export default function Toolbar({
@@ -161,6 +163,7 @@ export default function Toolbar({
   onExportCSV,
   treeMode,
   onToggleTreeLayout,
+  onOpenAnalysisSettings,
 }: ToolbarProps) {
   const { zIndex } = usePanel({ id: "toolbar", layer: PanelLayer.Toolbar })
   const {
@@ -262,6 +265,12 @@ export default function Toolbar({
         activeColor="#e94560"
       >
         <Magnet size={14} />
+      </ToolbarButton>
+      <ToolbarButton
+        title="分析设置（画布分析模式 / 边节点权重显示）"
+        onClick={onOpenAnalysisSettings}
+      >
+        <SlidersHorizontal size={14} />
       </ToolbarButton>
 
       <span

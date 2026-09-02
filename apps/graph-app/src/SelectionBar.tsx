@@ -1,8 +1,10 @@
 import { useState } from "react"
-import { BarChart3, ScanSearch, X } from "lucide-react"
+import { BarChart3, GitBranch, ScanSearch, X } from "lucide-react"
 import type { GraphModel } from "@lansheng/knowledge-graph"
 import type { MyGraphView } from "./graph-types"
 import { useAppCtx } from "./AppContext"
+import { shortestPath } from "./analysis/graph-metrics"
+import { rgbToHex } from "./analysis/mode-store"
 
 /** 平滑平移相机（easeOutCubic 缓动），duration 毫秒 */
 function animatePan(
@@ -34,16 +36,67 @@ export default function SelectionBar({
   modelRef,
   viewRef,
   onAnalyze,
+  onClearPath,
 }: {
   modelRef: { current: GraphModel }
   viewRef: { current: MyGraphView | null }
   onAnalyze?: () => void
+  onClearPath?: () => void
 }) {
   const { selectedNodeIds } = useAppCtx()
   // 毛玻璃按钮 hover 状态（hooks 需在条件 return 前无条件调用）
   const [hoverBtn, setHoverBtn] = useState<string | null>(null)
+  // 最短路径结果提示（路径跳数 / 不连通）
+  const [pathInfo, setPathInfo] = useState<string | null>(null)
 
   if (selectedNodeIds.size === 0) return null
+
+  const canPath = selectedNodeIds.size === 2
+  const showShortestPath = () => {
+    const model = modelRef.current
+    const view = viewRef.current
+    if (!model || !view) return
+    const [a, b] = [...selectedNodeIds]
+    const { graphData } = model.getGraphModelData()
+    const sm = model.styleManager
+    // 清除旧的路径淡化（instance 覆盖）
+    for (const n of graphData.nodes) sm.cleanNodeStyle(n.id)
+    const path = shortestPath(
+      graphData.nodes as never[],
+      graphData.links as never[],
+      a,
+      b,
+      "hops",
+    )
+    if (!path) {
+      view.setHighlightNodes([])
+      setPathInfo("两点不连通")
+      return
+    }
+    view.setHighlightNodes(path.nodeIds, path.linkIds)
+    // 其余节点淡化（保留可读性），路径节点/端点保持高亮。
+    // 补 bgColor（从 renderer 取当前色），否则 instance 合并后缺色字段。
+    const onPath = new Set(path.nodeIds)
+    const rnMap = new Map(
+      view.renderer.nodes.map((x) => [x.id, x]),
+    )
+    for (const n of graphData.nodes as { id: string }[]) {
+      if (!onPath.has(n.id)) {
+        const bg = rgbToHex(rnMap.get(n.id)?.color)
+        sm.setNodeStyle(n.id, {
+          regular: { opacity: 0.18, bgColor: bg },
+          hidden: { opacity: 0.06, bgColor: bg },
+        })
+      }
+    }
+    setPathInfo(`最短路径 ${path.nodeIds.length - 1} 跳`)
+  }
+
+  const clearPath = (): void => {
+    // 恢复主题样式并清高亮（refreshTheme 重建完整 instance，同时清除淡化覆盖）
+    onClearPath?.()
+    setPathInfo(null)
+  }
 
   const fitSelected = () => {
     const view = viewRef.current
@@ -142,6 +195,40 @@ export default function SelectionBar({
       >
         <ScanSearch size={13} /> 聚焦
       </button>
+      {canPath && (
+        <>
+          <button
+            onClick={showShortestPath}
+            style={btnStyle("path")}
+            {...hoverProps("path")}
+            title="计算两节点间最短路径（基于当前画布，BFS 跳数）"
+          >
+            <GitBranch size={13} /> 最短路径
+          </button>
+          {pathInfo && (
+            <>
+              <span
+                style={{
+                  color:
+                    pathInfo === "两点不连通"
+                      ? "rgb(var(--danger))"
+                      : "rgb(var(--success))",
+                }}
+              >
+                {pathInfo}
+              </span>
+              <button
+                onClick={clearPath}
+                style={btnStyle("clearPath")}
+                {...hoverProps("clearPath")}
+                title="清除路径高亮与淡化"
+              >
+                <X size={13} /> 清除
+              </button>
+            </>
+          )}
+        </>
+      )}
       <span
         style={{
           width: 1,

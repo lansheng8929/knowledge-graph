@@ -339,7 +339,9 @@ export class GraphView<G extends GraphDataGenerics = DefaultGraphDataGenerics> {
       const style = this.styleManager.getNodeStyle(rn.id)
       const s = getNodeStyleByStateType(style, stateType)
       const alpha = s.opacity ?? 1
-      const c = parseHexColor(s.bgColor!)
+      // 颜色兜底：回调式主题在静态合并时被排除，instance 清空后 base 可能为空，
+      // 缺色字段统一回退默认色，避免 parseHexColor(undefined) 崩溃
+      const c = parseHexColor(s.bgColor ?? "#888")
       const sc = parseHexColor(s.strokeColor ?? "#666")
       const tc = parseHexColor(s.textColor ?? "#2c2c2c")
       rn.color = [c[0], c[1], c[2], alpha]

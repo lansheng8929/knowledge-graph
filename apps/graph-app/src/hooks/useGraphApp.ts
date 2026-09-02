@@ -23,6 +23,8 @@ import {
   createPersonStyle,
 } from "../nodes"
 import { createDefaultLinkStyle } from "../links/default/style"
+import { nodeRadiusByWeight } from "../nodes/default/style"
+import { analysisOverrides, weightScale } from "../analysis/mode-store"
 import { MetadataManager } from "@lansheng/knowledge-graph/meta-manager"
 import { HistoryManager } from "@lansheng/knowledge-graph/history-manager"
 
@@ -76,6 +78,42 @@ interface RenderTask {
   links: GraphLink[]
 }
 
+/** 节点样式包装：权重开关按 data.weight 覆盖半径；分析模式（度数/连通分量）再叠加覆盖。
+ *  分析模式优先于权重开关（模式是"视角"，权重是"显示选项"）。 */
+function withNodeWeight(
+  fn: (node: unknown, theme: Theme) => ReturnType<typeof createDefaultNodeStyle>,
+  node: unknown,
+  theme: Theme,
+): ReturnType<typeof createDefaultNodeStyle> {
+  const s = fn(node, theme)
+  const id = (node as { id?: string } | null)?.id ?? ""
+  if (nodeWeightRefHolder.current) {
+    const w = (node as { data?: { weight?: number } } | null)?.data?.weight
+    if (typeof w === "number" && isFinite(w) && w > 0) {
+      // 归一化：weight≤1 视为 0~1 权重；>1（老数据大整数）按画布最大 weight 归一化
+      const w01 = Math.min(1, w / weightScale.max)
+      const r = nodeRadiusByWeight(w01)
+      s.regular.radius = r
+      s.hovered.radius = r
+      s.selected.radius = r
+    }
+  }
+  // 分析模式覆盖（degree→radius，component→bgColor），作用于所有状态
+  const ov = analysisOverrides(id)
+  if (ov.radius !== undefined || ov.bgColor !== undefined) {
+    for (const st of ["regular", "hovered", "selected", "highlighted", "hidden", "root"]) {
+      const cur = s[st as keyof typeof s]
+      if (!cur) continue
+      if (ov.radius !== undefined) cur.radius = ov.radius
+      if (ov.bgColor !== undefined) cur.bgColor = ov.bgColor
+    }
+  }
+  return s
+}
+
+/** 节点权重开关的模块级 ref（theme 回调在 useEffect 内闭包创建，需读最新开关值） */
+const nodeWeightRefHolder = { current: false }
+
 export function useGraphApp(ids?: string[]) {
   // 画布内直接通过 useTheme 读取当前主题
   const { theme } = useTheme()
@@ -107,6 +145,43 @@ export function useGraphApp(ids?: string[]) {
   const [intimacyInfluence, setIntimacyInfluence] = useState(
     INTIMACY_INFLUENCE_DEFAULT,
   )
+  // 边按亲密度映射（粗细/透明度）：默认关闭，工具栏"边权重"开关启用
+  const [edgeWeight, setEdgeWeight] = useState(false)
+  const edgeWeightRef = useRef(false)
+  useEffect(() => {
+    edgeWeightRef.current = edgeWeight
+  }, [edgeWeight])
+  const toggleEdgeWeight = useCallback(() => {
+    setEdgeWeight((v) => {
+      const next = !v
+      edgeWeightRef.current = next
+      // 触发边样式重算（theme link 回调按 edgeWeightRef 决定是否按 intimacy 映射）
+      modelRef.current?.events.publish("selectionChange", {
+        nodeIds: [],
+        linkIds: [],
+      } as never)
+      return next
+    })
+  }, [])
+  // 节点按 data.weight（0~1）映射大小：默认关闭，工具栏"节点权重"开关启用。
+  // radius = NODE_WEIGHT_MIN + w × (MAX - MIN)，见 nodes/default/style.ts 边界常量
+  const [nodeWeight, setNodeWeight] = useState(false)
+  const nodeWeightRef = useRef(false)
+  useEffect(() => {
+    nodeWeightRef.current = nodeWeight
+  }, [nodeWeight])
+  const toggleNodeWeight = useCallback(() => {
+    setNodeWeight((v) => {
+      const next = !v
+      nodeWeightRef.current = next
+      nodeWeightRefHolder.current = next
+      modelRef.current?.events.publish("selectionChange", {
+        nodeIds: [],
+        linkIds: [],
+      } as never)
+      return next
+    })
+  }, [])
   const [physicsPanelOpen, setPhysicsPanelOpen] = useState(false)
   // init 流式加载进度（loading overlay 显示）
   const [loadProgress, setLoadProgress] = useState<{
@@ -333,19 +408,34 @@ export function useGraphApp(ids?: string[]) {
       },
       theme: {
         node: {
-          default: (node, t) => createDefaultNodeStyle(node, t as Theme),
-          person: (node, t) => createPersonStyle(node, t as Theme),
-          phone: (node, t) => createPhoneStyle(node, t as Theme),
-          address: (node, t) => createAddressStyle(node, t as Theme),
-          account: (node, t) => createAccountStyle(node, t as Theme),
-          company: (node, t) => createCompanyStyle(node, t as Theme),
-          ip: (node, t) => createIpStyle(node, t as Theme),
-          device: (node, t) => createDeviceStyle(node, t as Theme),
+          // 统一包装：节点权重开关开启时按 data.weight(0~1) 插值覆盖 radius，
+          // 关闭时用各类型默认半径
+          default: (node, t) => withNodeWeight(createDefaultNodeStyle, node, t as Theme),
+          person: (node, t) => withNodeWeight(createPersonStyle, node, t as Theme),
+          phone: (node, t) => withNodeWeight(createPhoneStyle, node, t as Theme),
+          address: (node, t) => withNodeWeight(createAddressStyle, node, t as Theme),
+          account: (node, t) => withNodeWeight(createAccountStyle, node, t as Theme),
+          company: (node, t) => withNodeWeight(createCompanyStyle, node, t as Theme),
+          ip: (node, t) => withNodeWeight(createIpStyle, node, t as Theme),
+          device: (node, t) => withNodeWeight(createDeviceStyle, node, t as Theme),
         },
         link: new Proxy(
           {
-            default: (_link: unknown, t: unknown) =>
-              createDefaultLinkStyle(t as Theme),
+            // 边按亲密度映射粗细/透明度（docs/graph-analysis-plan.md P1 ①）：
+            // 默认关闭（edgeWeightRef=false）；工具栏"边权重"开关开启后才映射，
+            // intimacy 越高边越粗越实；无 intimacy 用默认样式
+            default: (link: unknown, t: unknown) => {
+              const s = createDefaultLinkStyle(t as Theme)
+              if (edgeWeightRef.current) {
+                const i = (link as { data?: { intimacy?: number } } | null)
+                  ?.data?.intimacy
+                if (typeof i === "number" && i > 0) {
+                  s.regular.strokeWidth = 0.6 + i * 2.4
+                  s.regular.opacity = 0.45 + i * 0.5
+                }
+              }
+              return s
+            },
           },
           {
             get: (target, key) =>
@@ -402,6 +492,25 @@ export function useGraphApp(ids?: string[]) {
     view.setRuntimeTheme(theme)
     view.renderer.setBackgroundColor?.(getPalette(theme).canvas)
   }, [theme])
+
+  // 数据变化：刷新画布内最大 weight（节点权重映射的归一化基准）
+  useEffect(() => {
+    const model = modelRef.current
+    if (!model) return
+    const updateMax = (): void => {
+      let max = 1
+      for (const n of model.getGraphModelData().graphData.nodes) {
+        const w = (n.data as { weight?: number } | undefined)?.weight
+        if (typeof w === "number" && isFinite(w) && w > max) max = w
+      }
+      weightScale.max = max
+    }
+    updateMax()
+    const unsub = model.events.subscribe("dataChange", updateMax)
+    return () => {
+      unsub()
+    }
+  }, [])
 
   // ids 变化
   useEffect(() => {
@@ -592,6 +701,12 @@ export function useGraphApp(ids?: string[]) {
       intimacyInfluence,
       applyIntimacyInfluence,
       intimacyForceFns,
+      // 边按亲密度映射开关（默认关）
+      edgeWeight,
+      toggleEdgeWeight,
+      // 节点按 weight 映射大小开关（默认关）
+      nodeWeight,
+      toggleNodeWeight,
       // init 流式进度
       loadProgress,
     },

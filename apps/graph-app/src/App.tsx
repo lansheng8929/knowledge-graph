@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import type {
   GraphViewModel,
   DefaultGraphDataGenerics,
@@ -10,6 +10,7 @@ import { LinkTooltip } from "./LinkTooltip"
 import { RuleMenu } from "./RuleMenu"
 import SnapshotPanel from "./SnapshotPanel"
 import AnalysisPanel from "./AnalysisPanel"
+import AnalysisSettingsPanel from "./AnalysisSettingsPanel"
 import { ForceSimulation, TreeLayout } from "@lansheng/knowledge-graph"
 import { exportSelection } from "./export-utils"
 import Toolbar from "./Toolbar"
@@ -21,11 +22,12 @@ import { PanelProvider } from "./panel"
 import { useGraphHover } from "./hooks/useGraphHover"
 import { useRuleMenu } from "./hooks/useRuleMenu"
 import { useGraphApp } from "./hooks/useGraphApp"
+import { useAnalysisMode } from "./analysis/useAnalysisMode"
 import { useGraphSelection } from "./hooks/useGraphSelection"
 import { applyIcons } from "./icon-map"
 import { linkEndpoints } from "./link-utils"
 import { BASE_FORCE_CONFIG } from "./physics-config"
-import { graphApi } from "./api/client"
+import { fetchTaskEntityIds, graphApi } from "./api/client"
 import TimePanel from "./TimePanel"
 import FilterPanel from "./FilterPanel"
 import TablePanel from "./TablePanel"
@@ -60,12 +62,33 @@ function getLoadedNeighbors(
 }
 
 export default function App() {
-  const [initialIds] = useState<string[] | undefined>(() => {
+  // 定位方式（优先级）：URL ?task=<任务id> → 按任务从后端查其导入的节点；
+  //                      URL ?ids= 兼容旧链接（小批量直传）。
+  const [focusIds, setFocusIds] = useState<string[] | undefined>(() => {
     const params = new URLSearchParams(window.location.search)
     const ids = params.get("ids")
     return ids ? ids.split(",").filter(Boolean) : undefined
   })
-  const graphApp = useGraphApp(initialIds)
+  const [taskId] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get("task")
+  })
+  // 按任务 id 拉取其节点（任务可导入数千实体，不在 URL 传 ids）
+  useEffect(() => {
+    if (!taskId) return
+    let alive = true
+    fetchTaskEntityIds(taskId)
+      .then((ids) => {
+        if (alive && ids.length > 0) setFocusIds(ids)
+      })
+      .catch(() => {
+        /* 任务查询失败：留空图，用户可自行搜索 */
+      })
+    return () => {
+      alive = false
+    }
+  }, [taskId])
+  const graphApp = useGraphApp(focusIds)
   const {
     containerRef,
     modelRef,
@@ -95,6 +118,10 @@ export default function App() {
       physicsPanelOpen,
       setPhysicsPanelOpen,
       intimacyForceFns,
+      edgeWeight,
+      toggleEdgeWeight,
+      nodeWeight,
+      toggleNodeWeight,
       loadProgress,
     },
   } = graphApp
@@ -102,8 +129,25 @@ export default function App() {
   const [timePanelOpen, setTimePanelOpen] = useState(false)
   const [filterPanelOpen, setFilterPanelOpen] = useState(false)
   const [tablePanelOpen, setTablePanelOpen] = useState(false)
+  const [analysisSettingsOpen, setAnalysisSettingsOpen] = useState(false)
   const [treeMode, setTreeMode] = useState(false)
   const graphFilters = useGraphFilters(modelRef)
+  const analysisMode = useAnalysisMode(modelRef, viewRef)
+
+  // 权重开关变化：theme 回调需重新解析（refreshTheme 重跑 defaultMapNode/defaultMapLink
+  // 读最新开关 ref），随后重应用当前分析模式（refreshTheme 会冲掉 instance 覆盖）
+  const refreshVisual = useCallback(() => {
+    viewRef.current?.refreshTheme()
+    if (analysisMode.mode !== "none") analysisMode.applyMode(analysisMode.mode)
+  }, [viewRef, analysisMode])
+  const handleToggleEdgeWeight = useCallback(() => {
+    toggleEdgeWeight()
+    refreshVisual()
+  }, [toggleEdgeWeight, refreshVisual])
+  const handleToggleNodeWeight = useCallback(() => {
+    toggleNodeWeight()
+    refreshVisual()
+  }, [toggleNodeWeight, refreshVisual])
 
   const graphHover = useGraphHover(modelRef, {
     onPlusToolClick: (node) => {
@@ -285,6 +329,7 @@ export default function App() {
             onExportCSV={() => handleExportSelection("csv")}
             treeMode={treeMode}
             onToggleTreeLayout={toggleTreeLayout}
+            onOpenAnalysisSettings={() => setAnalysisSettingsOpen(true)}
           />
 
           {/* Loading overlay (shown on top of the graph container) */}
@@ -421,6 +466,19 @@ export default function App() {
               />
             )}
 
+            {/* ─── 分析设置面板（模式 + 权重显示） ─── */}
+            {analysisSettingsOpen && (
+              <AnalysisSettingsPanel
+                mode={analysisMode.mode}
+                onApplyMode={analysisMode.applyMode}
+                edgeWeight={edgeWeight}
+                onToggleEdgeWeight={handleToggleEdgeWeight}
+                nodeWeight={nodeWeight}
+                onToggleNodeWeight={handleToggleNodeWeight}
+                onClose={() => setAnalysisSettingsOpen(false)}
+              />
+            )}
+
             {/* ─── 图例面板 ─── */}
             {legendPanelOpen && !loading && (
               <LegendPanel onClose={() => setLegendPanelOpen(false)} />
@@ -455,6 +513,7 @@ export default function App() {
               modelRef={modelRef}
               viewRef={viewRef}
               onAnalyze={handleAnalyze}
+              onClearPath={refreshVisual}
             />
 
             {/* 规则选择菜单 */}

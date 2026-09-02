@@ -152,3 +152,19 @@ export const graphApi = {
     return request<ApiAnalyzeData>("/graph/analyze", body, signal)
   },
 }
+
+/** 按导入任务 id 查询其导入的实体 id 列表（任务详情跳图谱定位用）。
+ *  走 file-import-service（经 shell/网关代理），避免 URL 携带数千 ids。 */
+export async function fetchTaskEntityIds(taskId: string): Promise<string[]> {
+  const res = await fetch(
+    `${API_BASE}/import/tasks/${encodeURIComponent(taskId)}`,
+  )
+  const body = await res.json().catch(() => null)
+  if (!res.ok) {
+    throw new Error(
+      (body as { detail?: string } | null)?.detail || `HTTP ${res.status}`,
+    )
+  }
+  const data = (body as { data?: { entity_ids?: string[] } } | null)?.data
+  return Array.isArray(data?.entity_ids) ? data.entity_ids : []
+}

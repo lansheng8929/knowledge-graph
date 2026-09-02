@@ -500,12 +500,12 @@ function FilePreview(props: {
 
 /* ── 结果 tab：本次任务 + 历史任务 ─────────────────── */
 
-/** 跳转到图谱并定位到导入的实体（single-spa 路由切换，不整页刷新）。 */
-function openGraph(entityIds: string[]): void {
-  const ids = entityIds.filter(Boolean)
-  if (ids.length === 0) return
-  const url = `/graph?ids=${encodeURIComponent(ids.join(","))}`
-  window.history.pushState({}, "", url)
+/** 跳转到图谱并按任务定位（single-spa 路由切换，不整页刷新）。
+ *  URL 只传任务 id（?task=），graph 页据此向后端查询该任务的节点——
+ *  任务可导入数千实体，不把 ids 塞进 URL/存储。 */
+function openGraph(taskId: string): void {
+  if (!taskId) return
+  window.history.pushState({}, "", `/graph?task=${encodeURIComponent(taskId)}`)
   window.dispatchEvent(new PopStateEvent("popstate"))
 }
 
@@ -605,7 +605,7 @@ function TasksView(props: { taskIds: string[] }) {
                 {t && t.status === "success" && t.entity_ids?.length ? (
                   <button
                     className="kg-btn kg-btn-ghost kg-btn-sm"
-                    onClick={() => openGraph(t.entity_ids)}
+                    onClick={() => openGraph(t.id)}
                   >
                     查看
                   </button>
@@ -678,7 +678,7 @@ function TasksView(props: { taskIds: string[] }) {
                           disabled={
                             t.status !== "success" || !t.entity_ids?.length
                           }
-                          onClick={() => openGraph(t.entity_ids)}
+                          onClick={() => openGraph(t.id)}
                         >
                           查看
                         </button>

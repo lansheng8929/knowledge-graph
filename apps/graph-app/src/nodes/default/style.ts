@@ -83,6 +83,23 @@ export type NodeTypeName =
  * 依据外部传入的主题调色板 + 节点数据生成节点样式。
  * 主题切换后调用 GraphView.refreshTheme() 会重新走这里，实现动态换肤。
  */
+/**
+ * 节点权重→大小映射的边界配置（docs/graph-analysis-plan.md P1 ① 扩展）：
+ * weight 为 0~1，节点半径 = MIN + weight × (MAX - MIN)；
+ * MIN=变小边界、MAX=变大边界，默认半径 8 对应 weight=0.5。
+ */
+export const NODE_WEIGHT_MIN_RADIUS = 4
+export const NODE_WEIGHT_MAX_RADIUS = 12
+
+/** weight → 节点半径（默认边界插值；weight 自动钳制到 0~1） */
+export function nodeRadiusByWeight(weight: number): number {
+  const w = Math.min(1, Math.max(0, weight))
+  return (
+    NODE_WEIGHT_MIN_RADIUS +
+    w * (NODE_WEIGHT_MAX_RADIUS - NODE_WEIGHT_MIN_RADIUS)
+  )
+}
+
 export function createTypedStyle(
   type: NodeTypeName,
   node: any,
@@ -90,14 +107,8 @@ export function createTypedStyle(
 ): NodeStyle<any> {
   const p = getPalette(theme)
   const c = p.node[type] ?? p.node.default
-  const style = themed(c.bg, c.stroke, p.text)
-  const weight = (node.data as any)?.weight ?? 1
-  return {
-    ...style,
-    regular: { ...style.regular, radius: weight * 8 },
-    selected: { ...style.selected, radius: weight * 8 },
-    hovered: { ...style.hovered, radius: weight * 8 },
-  }
+  // 默认统一半径（8）；按权重放大/缩小由 useGraphApp 的"节点权重"开关控制
+  return themed(c.bg, c.stroke, p.text)
 }
 
 /** 动态创建默认节点样式 */
