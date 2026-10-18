@@ -7,6 +7,7 @@
 #   bash scripts/up.sh status  # 查看状态
 #
 # dev 与 prod 共用 Neo4j 数据卷（vite-test_neo4j_data），勿同时运行；up.sh 已自动切换。
+# 共用卷/网络归属 infra/neo4j：全新环境（或卷被清理后）首次运行会自动创建，无需手动初始化。
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -20,6 +21,8 @@ case "$cmd" in
     echo "== 开发模式（全容器 + 热更新）=="
     # 切换：停生产 neo4j，避免与 dev neo4j 共用同一数据卷
     (cd infra/neo4j && docker compose stop 2>/dev/null) || true
+    # 共用卷是 external，先由归属方创建（--no-start 只建卷/网络，不启动容器抢同一数据卷）
+    (cd infra/neo4j && docker compose up -d --no-start >/dev/null)
     docker compose -f "$DEV" up -d --build
     echo
     echo "✅ dev 全容器已启动（后端挂载源码 --reload、前端 vite HMR）"
@@ -31,6 +34,8 @@ case "$cmd" in
     echo "== 生产模式（全容器）=="
     # 切换：停 dev 套件（其 neo4j 亦用同一数据卷）
     docker compose -f "$DEV" down 2>/dev/null || true
+    # 共用网络/卷是 external，先由归属方创建（--no-start 只建资源，随后统一启动）
+    (cd infra/neo4j && docker compose up -d --no-start >/dev/null)
     docker compose -f "$PROD" up -d --build
     (cd infra/neo4j && docker compose up -d)
     echo

@@ -6,6 +6,8 @@
 #   - 数据源复用现有卷（vite-test_neo4j_data），与生产共用一套数据
 #
 # 启动：docker compose -f infra/docker-compose.dev.yml up -d --build
+# 前置：共用卷（vite-test_neo4j_*）为 external，须先存在——`bash scripts/up.sh dev` 会自动创建，
+#       手动路径先执行 `docker compose -f infra/neo4j/docker-compose.yml up -d --no-start`
 # 入口：http://localhost:3001/graph?user=analyst
 # 注意：dev 与 prod 的 neo4j 共用数据卷，勿同时运行（up.sh 已自动切换）
 
